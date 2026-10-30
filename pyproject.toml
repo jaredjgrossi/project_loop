@@ -17,5 +17,5 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["api", "etl"]
+testpaths = ["api", "etl", "routing"]
 pythonpath = ["."]

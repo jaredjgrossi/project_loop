@@ -1,0 +1,16 @@
+// Loop's foot model: GraphHopper 11.1's built-in foot.json (Apache-2.0) plus the changes marked LOOP.
+// GraphHopper reserves the name foot.json for the built-in model, so this copy has its own name.
+{
+  "priority": [
+    { "if": "!foot_access || hike_rating >= 2", "multiply_by": "0" },
+    { "else": "", "multiply_by": "foot_priority"},
+    { "if": "country == DEU && road_class == BRIDLEWAY && foot_road_access != YES", "multiply_by": "0" },
+    { "if": "mtb_rating > 3", "multiply_by": "0.7" },
+    { "if": "foot_road_access == PRIVATE", "multiply_by": "0.1" },
+    // LOOP: the foot profile happily "walks" the Staten Island Ferry. A run can't include a ferry.
+    { "if": "road_environment == FERRY", "multiply_by": "0" }
+  ],
+  "speed": [
+    { "if": "true", "limit_to": "foot_average_speed" }
+  ]
+}

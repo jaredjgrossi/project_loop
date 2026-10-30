@@ -1,0 +1,37 @@
+# GraphHopper 11.1: foot routing on the NYC extract.
+# Round-trip routes only work without contraction hierarchies, so profiles_ch is empty.
+graphhopper:
+  custom_models.directory: /config/custom_models
+  datareader.file: /data/nyc.osm.pbf
+  graph.location: /graph-cache/foot-v2 # to force a re-import, delete routing/graph-cache/foot-v2 (or bump the suffix)
+  profiles:
+    - name: foot
+      custom_model_files: [loop_foot.json]
+  profiles_ch: []
+  profiles_lm: []
+  graph.encoded_values: foot_access, foot_priority, foot_average_speed, foot_road_access, hike_rating, mtb_rating, country, road_class, road_environment
+  import.osm.ignored_highways: "" # required key; keep every highway type, the foot model already excludes the unwalkable ones
+  prepare.min_network_size: 200
+  prepare.subnetworks.threads: 1
+  routing.snap_preventions_default: tunnel, bridge, ferry # don't start a run on a bridge deck
+  routing.non_ch.max_waypoint_distance: 1000000
+  graph.dataaccess.default_type: RAM_STORE
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: 0.0.0.0 # inside the container; compose publishes it on localhost only
+      max_request_header_size: 50k
+  request_log:
+    appenders: []
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: 0.0.0.0
+
+logging:
+  appenders:
+    - type: console
+      time_zone: UTC
+      log_format: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

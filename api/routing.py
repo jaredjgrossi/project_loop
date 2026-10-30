@@ -1,0 +1,110 @@
+"""GraphHopper client: ask for a round-trip foot route and shape it as GeoJSON."""
+
+import os
+from dataclasses import dataclass
+
+import httpx
+
+from api.units import meters_to_miles, percent_off
+
+DEFAULT_GRAPHHOPPER_URL = "http://localhost:8989"
+
+
+class RoutingError(Exception):
+    """GraphHopper rejected the request (e.g. start point outside the map)."""
+
+
+class RoutingUnavailableError(RoutingError):
+    """GraphHopper could not be reached."""
+
+
+@dataclass(frozen=True)
+class Route:
+    distance_m: float
+    time_s: float
+    coordinates: list[list[float]]  # [lon, lat]
+    seed: int
+
+
+def graphhopper_url() -> str:
+    return os.environ.get("GRAPHHOPPER_URL", DEFAULT_GRAPHHOPPER_URL)
+
+
+def build_round_trip_request(lat: float, lon: float, distance_m: float, seed: int = 0) -> dict:
+    return {
+        "points": [[lon, lat]],  # GraphHopper takes lon, lat
+        "profile": "foot",
+        "algorithm": "round_trip",
+        "round_trip.distance": distance_m,
+        "round_trip.seed": seed,
+        "points_encoded": False,  # plain GeoJSON coordinates instead of an encoded polyline
+        "instructions": False,
+    }
+
+
+def parse_route(response: dict, seed: int) -> Route:
+    paths = response.get("paths")
+    if not paths:
+        raise RoutingError(response.get("message") or "GraphHopper returned no route")
+    path = paths[0]
+    return Route(
+        distance_m=path["distance"],
+        time_s=path["time"] / 1000,
+        coordinates=[c[:2] for c in path["points"]["coordinates"]],
+        seed=seed,
+    )
+
+
+def request_round_trip(
+    lat: float,
+    lon: float,
+    distance_m: float,
+    seed: int = 0,
+    client: httpx.Client | None = None,
+    base_url: str | None = None,
+) -> Route:
+    owns_client = client is None
+    client = client or httpx.Client(timeout=60)
+    try:
+        resp = client.post(f"{base_url or graphhopper_url()}/route", json=build_round_trip_request(lat, lon, distance_m, seed))
+    except httpx.HTTPError as exc:
+        raise RoutingUnavailableError(
+            f"Could not reach GraphHopper ({exc}). Is it running? Try: docker compose up -d graphhopper"
+        ) from exc
+    finally:
+        if owns_client:
+            client.close()
+    try:
+        payload = resp.json()
+    except ValueError:
+        raise RoutingError(f"GraphHopper returned HTTP {resp.status_code} with a non-JSON body") from None
+    return parse_route(payload, seed)
+
+
+def route_to_geojson(route: Route, start_lat: float, start_lon: float, start_label: str, requested_miles: float) -> dict:
+    actual_miles = meters_to_miles(route.distance_m)
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": route.coordinates},
+                "properties": {
+                    "name": "Loop route",
+                    "requested_miles": requested_miles,
+                    "actual_miles": round(actual_miles, 3),
+                    "percent_off": round(percent_off(requested_miles, actual_miles), 1),
+                    "estimated_minutes_walking_pace": round(route.time_s / 60),
+                    "seed": route.seed,
+                    "profile": "foot",
+                    "stroke": "#e8590c",
+                    "stroke-width": 4,
+                },
+            },
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [start_lon, start_lat]},
+                "properties": {"name": "Start / finish", "label": start_label, "marker-color": "#2b8a3e"},
+            },
+        ],
+    }
