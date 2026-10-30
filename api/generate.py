@@ -26,6 +26,7 @@ TOLERANCE_PCT = 5.0
 RESCALE_STOP_PCT = 2.5  # stop rescaling once this close, leaving margin inside the tolerance
 MAX_RESCALES = 3
 MAX_RETRACED_PCT = 15.0  # more retracing than this is an out-and-back, not a loop
+MIN_COMPACTNESS = 0.15  # thinner than this is a ribbon: out along one street, back along the next
 DUPLICATE_SIMILARITY = 0.8
 ASPECTS = (1.0, 1.5, 2.5)  # long side : short side
 FALLBACK_SEEDS = range(8)
@@ -190,6 +191,9 @@ def _evaluate(method: str, label: str, route: Route, miles: float, rejected: Cou
     if shape.retraced_pct > MAX_RETRACED_PCT:
         rejected["retraced"] += 1
         return None
+    if shape.compactness < MIN_COMPACTNESS:
+        rejected["too_thin"] += 1
+        return None
     miss = percent_off(miles, meters_to_miles(route.distance_m))
     return Candidate(method, label, route, shape, shape_score(shape), miss, abs(miss) <= TOLERANCE_PCT)
 
@@ -257,17 +261,18 @@ def generate_loops(
 
         return job
 
-    grid_is_usable = grid.strength >= MIN_GRID_STRENGTH
-    if grid_is_usable:
-        run_all([rectangle_job(s) for s in _rectangle_specs()])
-    else:
+    # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good
+    # loop. Where the grid is weak neither method wins everywhere (measured in decision 008), so round
+    # trips are generated too and the shape score decides.
+    run_all([rectangle_job(s) for s in _rectangle_specs()])
+    grid_is_weak = grid.strength < MIN_GRID_STRENGTH
+    if grid_is_weak:
         notes.append(
-            f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles don't fit; "
-            "used GraphHopper round trips instead."
+            f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable; "
+            "also tried GraphHopper round trips and kept whichever scored best."
         )
-
-    if not grid_is_usable or not any(c.within_tolerance for c in candidates):
-        if grid_is_usable:
+    if grid_is_weak or not any(c.within_tolerance for c in candidates):
+        if not grid_is_weak:
             notes.append("No rectangle reached the distance target; added GraphHopper round trips.")
         run_all([round_trip_job(seed) for seed in FALLBACK_SEEDS])
 

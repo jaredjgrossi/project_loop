@@ -5,6 +5,7 @@ import pytest
 from api.generate import (
     MAX_RESCALES,
     MAX_RETRACED_PCT,
+    MIN_COMPACTNESS,
     Candidate,
     generate_loops,
     rectangle_corners,
@@ -207,23 +208,63 @@ def test_routing_errors_drop_that_candidate_but_not_the_run():
     assert result.candidates
 
 
-def test_weak_grid_skips_rectangles_and_uses_round_trips():
-    def must_not_run(points):
-        raise AssertionError("rectangles need a street grid")
-
+def diamond_round_trip(calls=None):
     def round_trip(lat, lon, distance_m, seed=0):
+        if calls is not None:
+            calls.append(seed)
         # A diamond: not a grid shape, just a valid loop of about the requested length.
-        side = distance_m / 4 / 1.0
-        d = side / 1.4142 / M_LAT
+        d = distance_m / 4 / 1.4142 / M_LAT
         pts = [(lat, lon), (lat + d, lon + d / 2), (lat, lon + d), (lat - d, lon + d / 2), (lat, lon)]
         dense = densify(pts)
         length = sum(meters(a, b) for a, b in zip(dense, dense[1:]))
         return Route(distance_m=length, time_s=1, coordinates=line(dense), seed=seed)
 
-    result = generate_loops(*START, miles=2.0, grid=WEAK, route_fn=must_not_run, round_trip_fn=round_trip)
-    assert result.candidates
-    assert {c.method for c in result.candidates} == {"round_trip"}
-    assert "grid" in result.note.lower()
+    return round_trip
+
+
+def test_weak_grid_tries_both_methods_and_says_so():
+    # Neither method wins everywhere on weak grids, so both are generated and the shape score decides.
+    rt_calls, rect_calls = [], []
+    result = generate_loops(
+        *START, miles=2.0, grid=WEAK, route_fn=make_router(calls=rect_calls), round_trip_fn=diamond_round_trip(rt_calls), top_n=40
+    )
+    assert rect_calls and rt_calls
+    assert {c.method for c in result.candidates} == {"rectangle", "round_trip"}
+    assert "weak" in result.note.lower()
+
+
+def test_strong_grid_does_not_bother_with_round_trips_when_rectangles_hit_the_target():
+    generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips)
+
+
+def test_round_trips_are_added_when_no_rectangle_reaches_the_target():
+    rt_calls = []
+    ok_round_trip = diamond_round_trip(rt_calls)
+
+    def short_rectangles(points):
+        r = make_router()(points)
+        return Route(distance_m=miles_to_meters(2.0) * 0.5, time_s=r.time_s, coordinates=r.coordinates)  # always 50% short
+
+    result = generate_loops(*START, miles=2.0, grid=STRONG, route_fn=short_rectangles, round_trip_fn=ok_round_trip)
+    assert rt_calls
+    assert any(c.method == "round_trip" and c.within_tolerance for c in result.candidates)
+    assert "added" in result.note.lower()
+
+
+def test_thin_ribbon_loops_are_rejected():
+    def ribbon_router(points):
+        # Out along one street and back along another 100 m away: nothing retraced, but a ribbon.
+        a = points[0]
+        far = (a[0] + 2000 / M_LAT, a[1])
+        side = (a[0] + 2000 / M_LAT, a[1] + 100 / kx(a[0]))
+        back = (a[0], a[1] + 100 / kx(a[0]))
+        dense = densify([a, far, side, back, a])
+        length = sum(meters(p, q) for p, q in zip(dense, dense[1:]))
+        return Route(distance_m=length, time_s=1, coordinates=line(dense))
+
+    result = generate_loops(*START, miles=2.6, grid=STRONG, route_fn=ribbon_router, round_trip_fn=lambda *a, **k: ribbon_router([(a[0], a[1])]))
+    assert result.rejected["too_thin"] > 0
+    assert all(c.shape.compactness >= MIN_COMPACTNESS for c in result.candidates)
 
 
 def test_when_nothing_meets_the_tolerance_the_nearest_is_returned_and_flagged():

@@ -111,6 +111,7 @@ def route_to_geojson(
     start_label: str,
     requested_miles: float,
     shape: dict | None = None,
+    extra_properties: dict | None = None,
 ) -> dict:
     """`shape` is ShapeMetrics.as_dict(); its fields are added to the route's properties."""
     actual_miles = meters_to_miles(route.distance_m)
@@ -129,6 +130,7 @@ def route_to_geojson(
                     "seed": route.seed,
                     "profile": "foot",
                     **{k: v for k, v in (shape or {}).items() if k != "distance_miles"},
+                    **(extra_properties or {}),
                     "stroke": "#e8590c",
                     "stroke-width": 4,
                 },

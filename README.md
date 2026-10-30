@@ -10,17 +10,21 @@ uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4
 
 ```
 Start:     11 MADISON AVENUE, New York, NY, USA  [40.74152, -73.98649]
-Requested: 4.00 mi
-Actual:    3.03 mi  (-24%)
-           That is outside the +/-5% target. ...
-Turns:     11  (3.6 per mile)
-Straight:  longest run 1123 m; 76% of the route is on runs of 500 m or more
-Shape:     26% retraced, 256 m wide on average, compactness 0.33 (square = 0.79)
-Saved:     out/loop-11-madison-ave-manhattan-4mi-seed0.geojson
-View it:   drag that file onto https://geojson.io
+Requested: 4.00 mi (target +/-5%)
+Grid:      street grid at 28.7 degrees, strength 0.97
+Tried:     20 candidates (rejected: 1 retraced)
+
+#1  rectangle 1:1, +-   shape score 94/100
+    Distance:  4.10 mi  (+2% from the request)
+    Turns:     8  (2.0 per mile)
+    Straight:  longest run 1614 m; 95% of the route is on runs of 500 m or more
+    Shape:     0% retraced, 748 m wide on average, compactness 0.71 (square = 0.79)
+
+Saved:     out/loop-11-madison-ave-manhattan-4mi.geojson
+View it:   drag the file(s) onto https://geojson.io
 ```
 
-Turns per mile and the other shape numbers are defined in [decision 008](docs/decisions/008-loop-shape-metrics-and-rectangle-generation.md). The distance miss is real: GraphHopper's round trips are approximate. See [decision 007](docs/decisions/007-round-trip-distance-needs-a-retry-loop.md).
+Loops are grid-aligned rectangles routed along real streets, rescaled to the distance you ask for, then ranked by shape (turns per mile, straight runs, compactness, retracing). Add `--top 3` to save the three best. Where nothing lands within the target, the nearest loop is returned and the miss is stated. Details: [decision 008](docs/decisions/008-loop-shape-metrics-and-rectangle-generation.md).
 
 ---
 
@@ -74,7 +78,7 @@ This takes a few minutes and downloads about 600 MB (the New York State map, the
 1. installs Python 3.12 and the packages (`uv sync`),
 2. downloads the state map from Geofabrik and cuts it to the five boroughs (`routing/data/nyc.osm.pbf`),
 3. builds and starts the database and GraphHopper, waiting until both are healthy,
-4. loads the NYC datasets into the database.
+4. loads the NYC datasets and the street network (about 414,000 OSM ways) into the database.
 
 When it finishes you will see row counts for `parks`, `drinking_fountains` and `public_restrooms`, and a warning that the fountain dataset is old. That warning is expected (see [decision 004](docs/decisions/004-amenity-data-trust.md)).
 
@@ -84,7 +88,7 @@ When it finishes you will see row counts for `parks`, `drinking_fountains` and `
 uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4
 ```
 
-Use a street address **with a number**; include the borough when the same address exists in more than one (the script tells you if it does). Then drag the saved `.geojson` file onto <https://geojson.io> to see it. Try `--seed 1`, `--seed 2`, ... for different loops.
+Use a street address **with a number**; include the borough when the same address exists in more than one (the script tells you if it does). Then drag the saved `.geojson` file onto <https://geojson.io> to see it. Add `--top 3` for three different loops.
 
 Your own address works the same way. Output goes to `out/`, which is not tracked by git.
 
@@ -123,7 +127,7 @@ Covers the geocoding wrapper (against recorded real responses), distance convers
 ## What's here
 
 ```
-api/       geocoding, GraphHopper client, scripts/make_loop
+api/       geocoding, street-grid estimate, loop generator and shape metrics, GraphHopper client, scripts/make_loop
 etl/       download + parse + load NYC Open Data into PostGIS
 routing/   GraphHopper Dockerfile, config, custom foot model, map-extract script
 docs/      project plan and decisions/ (why each choice was made)
