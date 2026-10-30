@@ -1,0 +1,200 @@
+{
+ "bottle_filler": {
+  ":@computed_region_92fq_4b7q": "4",
+  ":@computed_region_f5dn_yrer": "39",
+  ":@computed_region_sbqj_enih": "72",
+  ":@computed_region_yeji_bk3q": "3",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-kg73.7yea.5rsj",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-v6n4_mxsf.n2wi",
+  "borough": "Q",
+  "decription": "Bottle Filler-Astoria Heights Playground",
+  "department": "Q-01",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "Bottle Filler",
+  "gispropnum": "Q014",
+  "painted": "YES",
+  "parentid": "Q014",
+  "position": "Just Outside Playground",
+  "propertyna": "Astoria Heights Playground",
+  "system": "Q014-DF0801",
+  "the_geom": {
+   "coordinates": [
+    -73.911556,
+    40.760158
+   ],
+   "type": "Point"
+  }
+ },
+ "dog": {
+  ":@computed_region_92fq_4b7q": "14",
+  ":@computed_region_f5dn_yrer": "30",
+  ":@computed_region_sbqj_enih": "75",
+  ":@computed_region_yeji_bk3q": "1",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-ufze_zeti.q5wj",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-pq4z.q88b.f6fu",
+  "borough": "R",
+  "decription": "Dog Fountain-Schmul Park-Schmul Park",
+  "department": "R-02",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "Dog Fountain",
+  "gispropnum": "R045",
+  "painted": "NO",
+  "parentid": "R045-01",
+  "position": "In Shade",
+  "propertyna": "Schmul Park",
+  "system": "R045-DF0025",
+  "the_geom": {
+   "coordinates": [
+    -74.187811,
+    40.590114
+   ],
+   "type": "Point"
+  }
+ },
+ "food_prep_sink": {
+  ":@computed_region_92fq_4b7q": "38",
+  ":@computed_region_f5dn_yrer": "68",
+  ":@computed_region_sbqj_enih": "54",
+  ":@computed_region_yeji_bk3q": "2",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-nfma_7b96_qbdf",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-ycse_vqdt-2ayi",
+  "borough": "B",
+  "decription": "Food Prep Sink-Cadman Plaza Park-BROOKLYN WAR",
+  "department": "B-02",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "Food Prep Sink",
+  "gispropnum": "B113A",
+  "parentid": "B113A-BLG1006",
+  "position": "Indoor",
+  "propertyna": "Cadman Plaza Park",
+  "system": "B113A-DF1127",
+  "the_geom": {
+   "coordinates": [
+    -73.990626,
+    40.698443
+   ],
+   "type": "Point"
+  }
+ },
+ "indoor": {
+  ":@computed_region_92fq_4b7q": "8",
+  ":@computed_region_f5dn_yrer": "5",
+  ":@computed_region_sbqj_enih": "42",
+  ":@computed_region_yeji_bk3q": "2",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-8vj7_yhhg.mk5y",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-qesp_vfqu_i83r",
+  "borough": "B",
+  "decription": "Indoor Drinking Fountain-Canarsie Park-Comfort Station",
+  "department": "B-18",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "Indoor Drinking Fountain",
+  "gispropnum": "B018",
+  "parentid": "B018-BLG1203",
+  "position": "Indoor",
+  "propertyna": "Canarsie Park",
+  "system": "B018-DF1058",
+  "the_geom": {
+   "coordinates": [
+    -73.895972,
+    40.628961
+   ],
+   "type": "Point"
+  }
+ },
+ "indoor_position_outdoor_type": {
+  ":@computed_region_92fq_4b7q": "27",
+  ":@computed_region_f5dn_yrer": "13",
+  ":@computed_region_sbqj_enih": "50",
+  ":@computed_region_yeji_bk3q": "2",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-dqqn-ekcn~8rcd",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-3zuy.hkk3.ejhd",
+  "borough": "B",
+  "decription": "Bottle Filler Fountain-Prospect Park-LITCHFIELD VILLA",
+  "department": "B-19",
+  "featuresta": "Active",
+  "fountainco": "2",
+  "fountainty": "Bottle Filler Fountain",
+  "gispropnum": "B073",
+  "parentid": "B073-ZN03-BLG1243",
+  "position": "Indoor",
+  "propertyna": "Prospect Park",
+  "system": "B073-DF1042",
+  "the_geom": {
+   "coordinates": [
+    -73.973706,
+    40.666899
+   ],
+   "type": "Point"
+  }
+ },
+ "null_position": {
+  ":@computed_region_92fq_4b7q": "49",
+  ":@computed_region_f5dn_yrer": "69",
+  ":@computed_region_sbqj_enih": "52",
+  ":@computed_region_yeji_bk3q": "2",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-4k5b-xy4z.44ud",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-z75e_j5pp-dc4z",
+  "borough": "B",
+  "decription": "D-Lafayette Playground",
+  "department": "B-03",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "D",
+  "gispropnum": "B023",
+  "parentid": "B023",
+  "propertyna": "Lafayette Playground",
+  "system": "B023-DF0979",
+  "the_geom": {
+   "coordinates": [
+    -73.930048,
+    40.692481
+   ],
+   "type": "Point"
+  }
+ },
+ "outdoor_open": {
+  ":@computed_region_92fq_4b7q": "38",
+  ":@computed_region_f5dn_yrer": "68",
+  ":@computed_region_sbqj_enih": "54",
+  ":@computed_region_yeji_bk3q": "2",
+  ":created_at": "2024-07-15T14:41:57.987Z",
+  ":id": "row-46xh_eweh_4qhr",
+  ":updated_at": "2024-07-15T14:42:04.763Z",
+  ":version": "rv-t3bq.9u5e~ifgd",
+  "borough": "B",
+  "decription": "A-Cadman Plaza Park",
+  "department": "B-02",
+  "featuresta": "Active",
+  "fountainco": "1",
+  "fountainty": "A",
+  "gispropnum": "B113A",
+  "painted": "YES",
+  "parentid": "B113A",
+  "position": "Out in Open",
+  "propertyna": "Cadman Plaza Park",
+  "system": "B113A-DF0003",
+  "the_geom": {
+   "coordinates": [
+    -73.990771,
+    40.698639
+   ],
+   "type": "Point"
+  }
+ }
+}

@@ -1,0 +1,195 @@
+{
+ "inland": {
+  ":created_at": "2026-10-16T13:05:07.827Z",
+  ":id": "row-9qgz-i5za.728w",
+  ":updated_at": "2026-10-16T13:05:07.827Z",
+  ":version": "rv-ahdh.2eew_32pj",
+  "acquisitiondate": "1922-06-01T00:00:00.000",
+  "acres": "0.1",
+  "borough": "Q",
+  "class": "PARK",
+  "communityboard": "404",
+  "councildistrict": "21",
+  "department": "Q-04",
+  "gisobjid": "100000462",
+  "gispropnum": "Q055",
+  "globalid": "920C4D73-E256-45A9-955E-01208BE8C58C",
+  "jurisdiction": "DPR",
+  "location": "National St., 42 Ave., 102 St.",
+  "mapped": "True",
+  "multipolygon": {
+   "coordinates": [
+    [
+     [
+      [
+       -73.86333322632865,
+       40.747645132528
+      ],
+      [
+       -73.86323509855126,
+       40.7476755162375
+      ],
+      [
+       -73.86329057307616,
+       40.74778404370304
+      ],
+      [
+       -73.86333322632865,
+       40.747645132528
+      ]
+     ]
+    ]
+   ],
+   "type": "MultiPolygon"
+  },
+  "name311": "Veteran's Square",
+  "nys_assembly": "39",
+  "nys_senate": "13",
+  "objectid": "169894",
+  "omppropid": "Q055",
+  "parentid": "Q-04",
+  "permit": true,
+  "permitdistrict": "Q-04",
+  "permitparent": "Q-04",
+  "pip_ratable": true,
+  "precinct": "110",
+  "retired": false,
+  "signname": "Veteran's Square",
+  "subcategory": "Sitting Area/Triangle/Mall",
+  "typecategory": "Triangle/Plaza",
+  "us_congress": "14",
+  "waterfront": false,
+  "zipcode": "11368"
+ },
+ "waterfront": {
+  ":created_at": "2026-10-16T13:05:07.827Z",
+  ":id": "row-yxxh~kmza-hbhe",
+  ":updated_at": "2026-10-16T13:05:07.827Z",
+  ":version": "rv-sfrh-evva-wzjg",
+  "acquisitiondate": "1930-07-01T00:00:00.000",
+  "acres": "0.83",
+  "borough": "Q",
+  "class": "PARK",
+  "communityboard": "414",
+  "councildistrict": "32",
+  "department": "Q-14",
+  "gisobjid": "100000401",
+  "gispropnum": "Q028A",
+  "globalid": "AA8C9D5A-4003-4A10-BF37-7D9E268D1F17",
+  "jurisdiction": "DPR",
+  "location": "Beach Channel Dr. bet. B. 116 St. and B. 117 St.",
+  "mapped": "True",
+  "multipolygon": {
+   "coordinates": [
+    [
+     [
+      [
+       -73.83864193945465,
+       40.58182732889638
+      ],
+      [
+       -73.8391326129929,
+       40.582673255428126
+      ],
+      [
+       -73.8394657500142,
+       40.58178975853818
+      ],
+      [
+       -73.83864193945465,
+       40.58182732889638
+      ]
+     ]
+    ]
+   ],
+   "type": "MultiPolygon"
+  },
+  "name311": "Tribute Park",
+  "nys_assembly": "23",
+  "nys_senate": "10",
+  "objectid": "169186",
+  "omppropid": "Q028A",
+  "parentid": "Q-14",
+  "permit": true,
+  "permitdistrict": "Q-14",
+  "permitparent": "Q-14",
+  "pip_ratable": true,
+  "precinct": "100",
+  "retired": false,
+  "signname": "Tribute Park",
+  "subcategory": "Neighborhood Park",
+  "typecategory": "Triangle/Plaza",
+  "us_congress": "5",
+  "waterfront": true,
+  "zipcode": "11694"
+ },
+ "waterfront_null": {
+  ":created_at": "2026-10-16T13:05:07.827Z",
+  ":id": "row-88bh-emt8-xiqy",
+  ":updated_at": "2026-10-16T13:05:07.827Z",
+  ":version": "rv-b9y5.6rmt.4597",
+  "acres": "0.032",
+  "borough": "B",
+  "class": "PARK",
+  "communityboard": "306",
+  "councildistrict": "39",
+  "department": "B-06",
+  "gispropnum": "B610",
+  "globalid": "F2A9E26E-3765-44FD-A537-160281B4AD30",
+  "jurisdiction": "CDOT",
+  "location": "Bond St. bet. 4 St. and Gowanus Canal",
+  "mapped": "False",
+  "multipolygon": {
+   "coordinates": [
+    [
+     [
+      [
+       -73.99246562195171,
+       40.6762460276224
+      ],
+      [
+       -73.99249319379807,
+       40.67625916973596
+      ],
+      [
+       -73.99253280232604,
+       40.67627804980413
+      ],
+      [
+       -73.99257289744148,
+       40.676229291326415
+      ],
+      [
+       -73.99267030535458,
+       40.67611083755733
+      ],
+      [
+       -73.99259544781914,
+       40.676097942795714
+      ],
+      [
+       -73.99246562195171,
+       40.6762460276224
+      ]
+     ]
+    ]
+   ],
+   "type": "MultiPolygon"
+  },
+  "name311": "Park",
+  "nys_assembly": "52",
+  "nys_senate": "26",
+  "objectid": "195088",
+  "omppropid": "B610",
+  "parentid": "B-06",
+  "permitdistrict": "B-06",
+  "permitparent": "B-06",
+  "pip_ratable": false,
+  "precinct": "76",
+  "retired": false,
+  "signname": "Park",
+  "typecategory": "Triangle/Plaza",
+  "us_congress": "10",
+  "zipcode": "11231"
+ }
+}

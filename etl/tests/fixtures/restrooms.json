@@ -1,0 +1,167 @@
+{
+ "closed_construction_future": {
+  ":@computed_region_92fq_4b7q": "14",
+  ":@computed_region_f5dn_yrer": "30",
+  ":@computed_region_sbqj_enih": "76",
+  ":@computed_region_yeji_bk3q": "1",
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-syua-cdin-u7kh",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-jgiq_u9vh-99je",
+  "accessibility": "Fully Accessible",
+  "changing_stations": "Yes",
+  "facility_name": "New Dorp Library, NYPL",
+  "hours_of_operation": "Sunday: Closed \nMonday: 10:00 am - 7:00 pm \nTuesday: 10:00 am - 7:00 pm  \nWednesday: 10:00 am - 7:00 pm  \nThursday: 10:00 am - 7:00 pm   \nFriday: 10:00 am - 5:00 pm \nSaturday: 10:00 am - 5:00 pm",
+  "latitude": "40.57194",
+  "location_1": {
+   "coordinates": [
+    -74.11196,
+    40.57194
+   ],
+   "type": "Point"
+  },
+  "location_type": "Library",
+  "longitude": "-74.11196",
+  "open": "Future",
+  "operator": "NYPL",
+  "restroom_type": "Single-Stall All Gender Restroom(s)",
+  "status": "Closed for Construction",
+  "website": {
+   "url": "https://www.nypl.org/locations/new-dorp"
+  }
+ },
+ "multiline_hours": {
+  ":@computed_region_92fq_4b7q": "32",
+  ":@computed_region_f5dn_yrer": "70",
+  ":@computed_region_sbqj_enih": "2",
+  ":@computed_region_yeji_bk3q": "4",
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-7fvn-n2hb-x4tm",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-ngt5.thw8_2evz",
+  "accessibility": "Fully Accessible",
+  "changing_stations": "Yes",
+  "facility_name": "Chatham Square Library, NYPL",
+  "hours_of_operation": "Sunday: Closed \nMonday: 9:00 am - 7:00 pm \nTuesday: 9:00 am - 7:00 pm \nWednesday: 9:00 am - 7:00 pm \nThursday: 9:00 am - 7:00 pm \nFriday: 10:00 am - 6:00 pm \nSaturday: 10:00 am - 5:00 pm",
+  "latitude": "40.713341",
+  "location_1": {
+   "coordinates": [
+    -73.996491,
+    40.713341
+   ],
+   "type": "Point"
+  },
+  "location_type": "Library",
+  "longitude": "-73.996491",
+  "open": "Year Round",
+  "operator": "NYPL",
+  "restroom_type": "Single-Stall All Gender Restroom(s)",
+  "status": "Operational",
+  "website": {
+   "url": "https://www.nypl.org/locations/chatham-square"
+  }
+ },
+ "no_hours": {
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-yys8_ey54.6iev",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-2sek_8w9f_nri8",
+  "facility_name": "Ferry Terminal",
+  "latitude": "40.71498",
+  "location_1": {
+   "coordinates": [
+    -74.01753,
+    40.71498
+   ],
+   "type": "Point"
+  },
+  "location_type": "Park",
+  "longitude": "-74.01753",
+  "menstrual_friendly": "No",
+  "open": "Year Round",
+  "operator": "Battery Park City Authority",
+  "status": "Operational"
+ },
+ "not_operational": {
+  ":@computed_region_92fq_4b7q": "29",
+  ":@computed_region_f5dn_yrer": "6",
+  ":@computed_region_sbqj_enih": "29",
+  ":@computed_region_yeji_bk3q": "5",
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-3qzz_pwfr~yza6",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-2inc_gbi4.atn8",
+  "facility_name": "Aqueduct Walk Zone 2",
+  "latitude": "40.85841",
+  "location_1": {
+   "coordinates": [
+    -73.908,
+    40.85841
+   ],
+   "type": "Point"
+  },
+  "location_type": "Park",
+  "longitude": "-73.908",
+  "menstrual_friendly": "No",
+  "operator": "NYC Parks",
+  "status": "Not Operational"
+ },
+ "operational_park": {
+  ":@computed_region_92fq_4b7q": "22",
+  ":@computed_region_f5dn_yrer": "28",
+  ":@computed_region_sbqj_enih": "32",
+  ":@computed_region_yeji_bk3q": "5",
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-kap4.ysej_uzdg",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-ghnv.scrs_zfvv",
+  "accessibility": "Fully Accessible",
+  "changing_stations": "Yes",
+  "facility_name": "Ben Abrams Playground",
+  "hours_of_operation": "8am-4pm, Open later seasonally",
+  "latitude": "40.85438",
+  "location_1": {
+   "coordinates": [
+    -73.8697,
+    40.85438
+   ],
+   "type": "Point"
+  },
+  "location_type": "Park",
+  "longitude": "-73.8697",
+  "menstrual_friendly": "No",
+  "open": "Year Round",
+  "operator": "NYC Parks",
+  "restroom_type": "Multi-Stall W/M Restrooms",
+  "status": "Operational"
+ },
+ "seasonal": {
+  ":@computed_region_92fq_4b7q": "22",
+  ":@computed_region_f5dn_yrer": "35",
+  ":@computed_region_sbqj_enih": "31",
+  ":@computed_region_yeji_bk3q": "5",
+  ":created_at": "2026-10-30T13:24:20.390Z",
+  ":id": "row-jre4.rjsc~4ky2",
+  ":updated_at": "2026-10-30T13:24:25.183Z",
+  ":version": "rv-6ggv~wg5g_e9mx",
+  "accessibility": "Fully Accessible",
+  "changing_stations": "Yes",
+  "facility_name": "175th Street Playground",
+  "hours_of_operation": "8am-4pm, Open later seasonally",
+  "latitude": "40.84456",
+  "location_1": {
+   "coordinates": [
+    -73.8947,
+    40.84456
+   ],
+   "type": "Point"
+  },
+  "location_type": "Park",
+  "longitude": "-73.8947",
+  "menstrual_friendly": "No",
+  "open": "Seasonal",
+  "operator": "NYC Parks",
+  "restroom_type": "Multi-Stall W/M Restrooms",
+  "status": "Operational"
+ }
+}
