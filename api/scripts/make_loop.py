@@ -15,6 +15,7 @@ from pathlib import Path
 
 from api.geocoding import GeocodeError, GeocodeResult, geocode
 from api.routing import Route, RoutingError, request_round_trip, route_to_geojson
+from api.shape import ShapeMetrics, shape_metrics
 from api.units import meters_to_miles, miles_to_meters, percent_off
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "out"
@@ -25,6 +26,17 @@ MIN_MILES, MAX_MILES = 0.5, 30.0
 def output_path_for(address: str, miles: float, seed: int) -> Path:
     slug = re.sub(r"[^a-z0-9]+", "-", address.lower()).strip("-")
     return OUT_DIR / f"loop-{slug}-{miles:g}mi-seed{seed}.geojson"
+
+
+def print_shape(m: ShapeMetrics) -> None:
+    d = m.as_dict()
+    print(f"Turns:     {d['turns']}  ({d['turns_per_mile']} per mile)")
+    print(f"Straight:  longest run {d['longest_straight_m']} m; {d['pct_in_long_runs']}% of the route is on runs of 500 m or more")
+    print(f"Shape:     {d['retraced_pct']}% retraced", end="")
+    if d["mean_width_m"] is not None:
+        print(f", {d['mean_width_m']} m wide on average, compactness {d['compactness']} (square = 0.79)")
+    else:
+        print("; not a closed loop, so no width or compactness")
 
 
 def run(
@@ -62,9 +74,12 @@ def run(
             f"approximate; try --seed 1, 2, ... for a different loop. Automatic tuning is planned for Phase 2."
         )
 
+    shape = shape_metrics(route.coordinates)
+    print_shape(shape)
+
     out = out or output_path_for(address, miles, seed)
     out.parent.mkdir(parents=True, exist_ok=True)
-    geojson = route_to_geojson(route, place.lat, place.lon, place.label, miles)
+    geojson = route_to_geojson(route, place.lat, place.lon, place.label, miles, shape.as_dict())
     out.write_text(json.dumps(geojson))
     print(f"Saved:     {out}")
     print("View it:   drag that file onto https://geojson.io")

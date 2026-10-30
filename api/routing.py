@@ -81,7 +81,15 @@ def request_round_trip(
     return parse_route(payload, seed)
 
 
-def route_to_geojson(route: Route, start_lat: float, start_lon: float, start_label: str, requested_miles: float) -> dict:
+def route_to_geojson(
+    route: Route,
+    start_lat: float,
+    start_lon: float,
+    start_label: str,
+    requested_miles: float,
+    shape: dict | None = None,
+) -> dict:
+    """`shape` is ShapeMetrics.as_dict(); its fields are added to the route's properties."""
     actual_miles = meters_to_miles(route.distance_m)
     return {
         "type": "FeatureCollection",
@@ -97,6 +105,7 @@ def route_to_geojson(route: Route, start_lat: float, start_lon: float, start_lab
                     "estimated_minutes_walking_pace": round(route.time_s / 60),
                     "seed": route.seed,
                     "profile": "foot",
+                    **{k: v for k, v in (shape or {}).items() if k != "distance_miles"},
                     "stroke": "#e8590c",
                     "stroke-width": 4,
                 },

@@ -31,6 +31,16 @@ def test_writes_geojson_and_reports_actual_distance(tmp_path, capsys):
     assert "11 MADISON AVENUE" in text and "4.00 mi" in text and "geojson.io" in text
 
 
+def test_reports_shape_and_stores_it_in_the_geojson(tmp_path, capsys):
+    out = tmp_path / "loop.geojson"
+    run("11 Madison Ave, Manhattan", 4.0, out=out, geocode_fn=lambda q: RESULT, route_fn=fake_route(6437.376))
+    text = capsys.readouterr().out
+    assert "Turns:" in text and "per mile" in text and "retraced" in text
+    props = json.loads(out.read_text())["features"][0]["properties"]
+    for key in ("turns", "turns_per_mile", "longest_straight_m", "pct_in_long_runs", "retraced_pct"):
+        assert key in props
+
+
 def test_says_so_when_the_distance_misses_the_target(tmp_path, capsys):
     run("11 Madison Ave, Manhattan", 4.0, out=tmp_path / "l.geojson", geocode_fn=lambda q: RESULT, route_fn=fake_route(4881.76))
     text = capsys.readouterr().out

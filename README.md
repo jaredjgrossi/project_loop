@@ -13,11 +13,14 @@ Start:     11 MADISON AVENUE, New York, NY, USA  [40.74152, -73.98649]
 Requested: 4.00 mi
 Actual:    3.03 mi  (-24%)
            That is outside the +/-5% target. ...
+Turns:     11  (3.6 per mile)
+Straight:  longest run 1123 m; 76% of the route is on runs of 500 m or more
+Shape:     26% retraced, 256 m wide on average, compactness 0.33 (square = 0.79)
 Saved:     out/loop-11-madison-ave-manhattan-4mi-seed0.geojson
 View it:   drag that file onto https://geojson.io
 ```
 
-The distance miss is real: GraphHopper's round trips are approximate. See [decision 007](docs/decisions/007-round-trip-distance-needs-a-retry-loop.md).
+Turns per mile and the other shape numbers are defined in [decision 008](docs/decisions/008-loop-shape-metrics-and-rectangle-generation.md). The distance miss is real: GraphHopper's round trips are approximate. See [decision 007](docs/decisions/007-round-trip-distance-needs-a-retry-loop.md).
 
 ---
 

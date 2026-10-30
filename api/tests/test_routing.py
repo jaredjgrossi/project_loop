@@ -87,3 +87,12 @@ def test_graphhopper_down_says_how_to_start_it():
 
     with pytest.raises(RoutingUnavailableError, match="docker compose up"):
         request_round_trip(*START, distance_m=6437, client=httpx.Client(transport=httpx.MockTransport(boom)))
+
+
+def test_shape_fields_are_added_to_the_route_properties():
+    route = parse_route(load("graphhopper_round_trip.json"), seed=0)
+    shape = {"distance_miles": 3.03, "turns": 11, "turns_per_mile": 3.6}
+    fc = route_to_geojson(route, START[0], START[1], "11 MADISON AVENUE", 4.0, shape)
+    props = fc["features"][0]["properties"]
+    assert props["turns"] == 11 and props["turns_per_mile"] == 3.6
+    assert "distance_miles" not in props  # actual_miles already carries the routed distance
