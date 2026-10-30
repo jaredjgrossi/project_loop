@@ -68,6 +68,10 @@ def main(argv: list[str] | None = None) -> int:
         print("osmium not found. Install it with:  brew install osmium-tool", file=sys.stderr)
         return 1
 
+    if NYC_PBF.exists() and not args.refresh:
+        print(f"{NYC_PBF} already exists (use --refresh to rebuild).")
+        return 0
+
     if args.refresh or not STATE_PBF.exists():
         print(f"Downloading New York State extract from Geofabrik -> {STATE_PBF}")
         download(STATE_PBF_URL, STATE_PBF)
