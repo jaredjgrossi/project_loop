@@ -1,0 +1,20 @@
+services:
+  db:
+    # Community ARM build of PostGIS: the official postgis/postgis image is Intel-only.
+    image: imresamu/postgis:16-3.5-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-loop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-loop}
+      POSTGRES_DB: ${POSTGRES_DB:-loop}
+    ports:
+      - "127.0.0.1:5432:5432" # localhost only
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loop} -d ${POSTGRES_DB:-loop}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
