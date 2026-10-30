@@ -1,0 +1,519 @@
+{
+ "bbox": [
+  -74.153644,
+  40.616969,
+  -73.894879,
+  40.743449
+ ],
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     -74.153644,
+     40.616969
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "5014970066",
+      "bin": "5029939",
+      "version": "26c"
+     }
+    },
+    "borough": "Staten Island",
+    "borough_gid": "whosonfirst:borough:421205775",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Richmond County",
+    "county_gid": "whosonfirst:county:102081779",
+    "gid": "nycpad:venue:4358250",
+    "housenumber": "11",
+    "id": "4358250",
+    "label": "11 MADISON AVENUE, Staten Island, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "11 MADISON AVENUE",
+    "neighbourhood": "Graniteville",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85822545",
+    "postalcode": "10314",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "4358250",
+    "street": "MADISON AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.986485,
+     40.741518
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008547501",
+      "bin": "1088910",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:91345",
+    "housenumber": "11",
+    "id": "91345",
+    "label": "11 MADISON AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "11 MADISON AVENUE",
+    "neighbourhood": "Flatiron District",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869245",
+    "postalcode": "10010",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "91345",
+    "street": "MADISON AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -74.000206,
+     40.711953
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1001170001",
+      "bin": "1086087",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:8715",
+    "housenumber": "11",
+    "id": "8715",
+    "label": "11 MADISON STREET, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "11 MADISON STREET",
+    "neighbourhood": "City Hall Area",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85865569",
+    "postalcode": "10038",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "8715",
+    "street": "MADISON STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.90209,
+     40.706146
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4035000070",
+      "bin": "4083871",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2495104",
+    "housenumber": "59-11",
+    "id": "2495104",
+    "label": "59-11 MADISON STREET, Ridgewood, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "59-11 MADISON STREET",
+    "neighbourhood": "Ridgewood",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85844581",
+    "postalcode": "11385",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2495104",
+    "street": "MADISON STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.894879,
+     40.707883
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4036180080",
+      "bin": "4087873",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2511927",
+    "housenumber": "64-11",
+    "id": "2511927",
+    "label": "64-11 MADISON STREET, Ridgewood, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "64-11 MADISON STREET",
+    "neighbourhood": "Ridgewood",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85844581",
+    "postalcode": "11385",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2511927",
+    "street": "MADISON STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.899861,
+     40.706648
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4035290128",
+      "bin": "4084951",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2500223",
+    "housenumber": "60-11",
+    "id": "2500223",
+    "label": "60-11 MADISON STREET, Ridgewood, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "60-11 MADISON STREET",
+    "neighbourhood": "Ridgewood",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85844581",
+    "postalcode": "11385",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2500223",
+    "street": "MADISON STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.987225,
+     40.743449
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008560009",
+      "bin": "1016876",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:91400",
+    "housenumber": "11",
+    "id": "91400",
+    "label": "11 MADISON SQUARE NORTH, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "11 MADISON SQUARE NORTH",
+    "neighbourhood": "Midtown East",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:907215785",
+    "postalcode": "10010",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "91400",
+    "street": "MADISON SQUARE NORTH"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.988175,
+     40.741519
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008520001",
+      "bin": "1016740",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:91267",
+    "housenumber": "26",
+    "id": "91267",
+    "label": "26 MADISON AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "26 MADISON AVENUE",
+    "neighbourhood": "Flatiron District",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869245",
+    "postalcode": "10010",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "91267",
+    "street": "MADISON AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.988175,
+     40.741519
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008520001",
+      "bin": "1016740",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:91269",
+    "housenumber": "30",
+    "id": "91269",
+    "label": "30 MADISON AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "30 MADISON AVENUE",
+    "neighbourhood": "Flatiron District",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869245",
+    "postalcode": "10010",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "91269",
+    "street": "MADISON AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.986485,
+     40.741518
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008547501",
+      "bin": "1088910",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:91349",
+    "housenumber": "19",
+    "id": "91349",
+    "label": "19 MADISON AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "19 MADISON AVENUE",
+    "neighbourhood": "Flatiron District",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869245",
+    "postalcode": "10010",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "91349",
+    "street": "MADISON AVENUE"
+   },
+   "type": "Feature"
+  }
+ ],
+ "geocoding": {
+  "attribution": "http://geosearch.planninglabs.nyc/attribution",
+  "engine": {
+   "author": "Mapzen",
+   "name": "Pelias",
+   "version": "1.0"
+  },
+  "query": {
+   "lang": {
+    "defaulted": true,
+    "iso6391": "en",
+    "iso6393": "eng",
+    "name": "English",
+    "via": "default"
+   },
+   "parsed_text": {
+    "housenumber": "11",
+    "street": "Madison Ave",
+    "subject": "11 Madison Ave"
+   },
+   "parser": "pelias",
+   "private": false,
+   "querySize": 20,
+   "size": 10,
+   "text": "11 Madison Ave"
+  },
+  "version": "0.2"
+ },
+ "type": "FeatureCollection"
+}

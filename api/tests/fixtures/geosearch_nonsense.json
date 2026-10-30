@@ -1,0 +1,55 @@
+{
+ "features": [],
+ "geocoding": {
+  "attribution": "http://geosearch.planninglabs.nyc/attribution",
+  "engine": {
+   "author": "Mapzen",
+   "name": "Pelias",
+   "version": "1.0"
+  },
+  "query": {
+   "lang": {
+    "defaulted": true,
+    "iso6391": "en",
+    "iso6393": "eng",
+    "name": "English",
+    "via": "default"
+   },
+   "layers": [
+    "venue",
+    "street",
+    "country",
+    "macroregion",
+    "region",
+    "county",
+    "localadmin",
+    "locality",
+    "borough",
+    "neighbourhood",
+    "continent",
+    "empire",
+    "dependency",
+    "macrocounty",
+    "macrohood",
+    "microhood",
+    "disputed",
+    "postalcode",
+    "ocean",
+    "marinearea"
+   ],
+   "parsed_text": {
+    "subject": "ASDFGHJKL zzz"
+   },
+   "parser": "pelias",
+   "private": false,
+   "querySize": 20,
+   "size": 10,
+   "text": "ASDFGHJKL zzz"
+  },
+  "version": "0.2",
+  "warnings": [
+   "performance optimization: excluding 'address' layer"
+  ]
+ },
+ "type": "FeatureCollection"
+}

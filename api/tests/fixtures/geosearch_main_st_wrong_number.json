@@ -1,0 +1,529 @@
+{
+ "bbox": [
+  -73.991651,
+  40.702803,
+  -73.809338,
+  40.824217
+ ],
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     -73.809338,
+     40.824217
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "2055160101",
+      "bin": "2095635",
+      "version": "26c"
+     }
+    },
+    "borough": "Bronx",
+    "borough_gid": "whosonfirst:borough:421205773",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Bronx County",
+    "county_a": "BX",
+    "county_gid": "whosonfirst:county:102083063",
+    "gid": "nycpad:venue:680722",
+    "housenumber": "190C",
+    "id": "680722",
+    "label": "190C MAIN STREET, Bronx, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "190C MAIN STREET",
+    "neighbourhood": "Throgs Neck",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85852219",
+    "postalcode": "10465",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "680722",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.809578,
+     40.823992
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "2055160101",
+      "bin": "2124243",
+      "version": "26c"
+     }
+    },
+    "borough": "Bronx",
+    "borough_gid": "whosonfirst:borough:421205773",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Bronx County",
+    "county_a": "BX",
+    "county_gid": "whosonfirst:county:102083063",
+    "gid": "nycpad:venue:680816",
+    "housenumber": "1B",
+    "id": "680816",
+    "label": "1B MAIN STREET, Bronx, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "1B MAIN STREET",
+    "neighbourhood": "Throgs Neck",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85852219",
+    "postalcode": "10465",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "680816",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.991651,
+     40.703638
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000260050",
+      "bin": "3000019",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:711857",
+    "housenumber": "4",
+    "id": "711857",
+    "label": "4 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "4 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "711857",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.990211,
+     40.703564
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000277501",
+      "bin": "3346104",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:711890",
+    "housenumber": "1",
+    "id": "711890",
+    "label": "1 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "1 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "711890",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.990211,
+     40.703564
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000277501",
+      "bin": "3346104",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:711899",
+    "housenumber": "31",
+    "id": "711899",
+    "label": "31 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "31 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "711899",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.990864,
+     40.702803
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000360033",
+      "bin": "3000084",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:712282",
+    "housenumber": "38",
+    "id": "712282",
+    "label": "38 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "38 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "712282",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.991004,
+     40.703039
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000367501",
+      "bin": "3335867",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:712284",
+    "housenumber": "24",
+    "id": "712284",
+    "label": "24 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "24 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "712284",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.991004,
+     40.703039
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000367501",
+      "bin": "3335867",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:712286",
+    "housenumber": "28",
+    "id": "712286",
+    "label": "28 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "28 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "712286",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.991004,
+     40.703039
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000367501",
+      "bin": "3335867",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:712289",
+    "housenumber": "34",
+    "id": "712289",
+    "label": "34 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "34 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "712289",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.991004,
+     40.703039
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3000367501",
+      "bin": "3335867",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:712295",
+    "housenumber": "32",
+    "id": "712295",
+    "label": "32 MAIN STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "32 MAIN STREET",
+    "neighbourhood": "DUMBO",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85869197",
+    "postalcode": "11201",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "712295",
+    "street": "MAIN STREET"
+   },
+   "type": "Feature"
+  }
+ ],
+ "geocoding": {
+  "attribution": "http://geosearch.planninglabs.nyc/attribution",
+  "engine": {
+   "author": "Mapzen",
+   "name": "Pelias",
+   "version": "1.0"
+  },
+  "query": {
+   "lang": {
+    "defaulted": true,
+    "iso6391": "en",
+    "iso6393": "eng",
+    "name": "English",
+    "via": "default"
+   },
+   "parsed_text": {
+    "housenumber": "100",
+    "street": "Main St",
+    "subject": "100 Main St"
+   },
+   "parser": "pelias",
+   "private": false,
+   "querySize": 20,
+   "size": 10,
+   "text": "100 Main St"
+  },
+  "version": "0.2"
+ },
+ "type": "FeatureCollection"
+}

@@ -1,0 +1,523 @@
+{
+ "bbox": [
+  -73.985656,
+  40.643793,
+  -73.818835,
+  40.795914
+ ],
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     -73.985656,
+     40.748441
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008350041",
+      "bin": "1015862",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:88717",
+    "housenumber": "350",
+    "id": "88717",
+    "label": "350 5 AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350 5 AVENUE",
+    "neighbourhood": "Midtown West",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85882233",
+    "postalcode": "10118",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "88717",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.984456,
+     40.672191
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3009810111",
+      "bin": "3021057",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:791063",
+    "housenumber": "350",
+    "id": "791063",
+    "label": "350 5 AVENUE, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350 5 AVENUE",
+    "neighbourhood": "Park Slope",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85840609",
+    "postalcode": "11215",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "791063",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.985656,
+     40.748441
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008350041",
+      "bin": "1015862",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:88719",
+    "housenumber": "350A",
+    "id": "88719",
+    "label": "350A 5 AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350A 5 AVENUE",
+    "neighbourhood": "Midtown West",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85882233",
+    "postalcode": "10118",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "88719",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.985656,
+     40.748441
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "1008350041",
+      "bin": "1015862",
+      "version": "26c"
+     }
+    },
+    "borough": "Manhattan",
+    "borough_gid": "whosonfirst:borough:421205771",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "New York County",
+    "county_gid": "whosonfirst:county:102081863",
+    "gid": "nycpad:venue:88721",
+    "housenumber": "350B",
+    "id": "88721",
+    "label": "350B 5 AVENUE, New York, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350B 5 AVENUE",
+    "neighbourhood": "Midtown West",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85882233",
+    "postalcode": "10118",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "88721",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.98397,
+     40.671218
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3009880011",
+      "bin": "3021392",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:792147",
+    "housenumber": "350",
+    "id": "792147",
+    "label": "350 5 STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350 5 STREET",
+    "neighbourhood": "Park Slope",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85840609",
+    "postalcode": "11215",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "792147",
+    "street": "5 STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.975876,
+     40.643793
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3053370069",
+      "bin": "3124668",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:1317174",
+    "housenumber": "350",
+    "id": "1317174",
+    "label": "350 EAST 5 STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350 EAST 5 STREET",
+    "neighbourhood": "Kensington",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85828101",
+    "postalcode": "11218",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "1317174",
+    "street": "EAST 5 STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.955073,
+     40.708099
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "3024630003",
+      "bin": "3063600",
+      "version": "26c"
+     }
+    },
+    "borough": "Brooklyn",
+    "borough_gid": "whosonfirst:borough:421205765",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Kings County",
+    "county_a": "BK",
+    "county_gid": "whosonfirst:county:102082361",
+    "gid": "nycpad:venue:1030400",
+    "housenumber": "350",
+    "id": "1030400",
+    "label": "350 SOUTH 5 STREET, Brooklyn, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "350 SOUTH 5 STREET",
+    "neighbourhood": "Williamsburg",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85857853",
+    "postalcode": "11211",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "1030400",
+    "street": "SOUTH 5 STREET"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.844238,
+     40.792783
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4039210017",
+      "bin": "4095837",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2558692",
+    "housenumber": "123-05",
+    "id": "2558692",
+    "label": "123-05 5 AVENUE, College Point, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "123-05 5 AVENUE",
+    "neighbourhood": "College Point",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85811813",
+    "postalcode": "11356",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2558692",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.839597,
+     40.792637
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4039307501",
+      "bin": "4447553",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2559261",
+    "housenumber": "128-05",
+    "id": "2559261",
+    "label": "128-05 5 AVENUE, College Point, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "128-05 5 AVENUE",
+    "neighbourhood": "College Point",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85811813",
+    "postalcode": "11356",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2559261",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     -73.818835,
+     40.795914
+    ],
+    "type": "Point"
+   },
+   "properties": {
+    "accuracy": "point",
+    "addendum": {
+     "pad": {
+      "bbl": "4044940060",
+      "bin": "4102246",
+      "version": "26c"
+     }
+    },
+    "borough": "Queens",
+    "borough_gid": "whosonfirst:borough:421205767",
+    "confidence": 0.8,
+    "country": "United States",
+    "country_a": "USA",
+    "country_code": "US",
+    "country_gid": "whosonfirst:country:85633793",
+    "county": "Queens County",
+    "county_gid": "whosonfirst:county:102082377",
+    "gid": "nycpad:venue:2599852",
+    "housenumber": "149-05",
+    "id": "2599852",
+    "label": "149-05 5 AVENUE, Whitestone, NY, USA",
+    "layer": "venue",
+    "locality": "New York",
+    "locality_a": "NYC",
+    "locality_gid": "whosonfirst:locality:85977539",
+    "match_type": "fallback",
+    "name": "149-05 5 AVENUE",
+    "neighbourhood": "Whitestone",
+    "neighbourhood_gid": "whosonfirst:neighbourhood:85857567",
+    "postalcode": "11357",
+    "region": "New York",
+    "region_a": "NY",
+    "region_gid": "whosonfirst:region:85688543",
+    "source": "nycpad",
+    "source_id": "2599852",
+    "street": "5 AVENUE"
+   },
+   "type": "Feature"
+  }
+ ],
+ "geocoding": {
+  "attribution": "http://geosearch.planninglabs.nyc/attribution",
+  "engine": {
+   "author": "Mapzen",
+   "name": "Pelias",
+   "version": "1.0"
+  },
+  "query": {
+   "lang": {
+    "defaulted": true,
+    "iso6391": "en",
+    "iso6393": "eng",
+    "name": "English",
+    "via": "default"
+   },
+   "parsed_text": {
+    "housenumber": "350",
+    "street": "5th Ave",
+    "subject": "350 5th Ave"
+   },
+   "parser": "pelias",
+   "private": false,
+   "querySize": 20,
+   "size": 10,
+   "text": "350 5th Ave"
+  },
+  "version": "0.2"
+ },
+ "type": "FeatureCollection"
+}
