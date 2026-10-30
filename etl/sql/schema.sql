@@ -73,3 +73,19 @@ CREATE TABLE IF NOT EXISTS public_restrooms (
     geom               geometry(Point, 4326) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS public_restrooms_geom_idx ON public_restrooms USING gist (geom);
+
+-- Street and path geometry from the NYC OpenStreetMap extract (one row per OSM way).
+-- Used for grid-angle estimation now, and for corridors, greenways and crossings later.
+CREATE TABLE IF NOT EXISTS osm_ways (
+    way_id             bigint      PRIMARY KEY,
+    source_dataset_id  text        NOT NULL,
+    source_row_id      text        NOT NULL,
+    source_updated_at  timestamptz,           -- when Geofabrik's snapshot was taken
+    loaded_at          timestamptz NOT NULL,
+    highway            text        NOT NULL,
+    name               text,
+    tags               jsonb       NOT NULL,
+    geom               geometry(LineString, 4326) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS osm_ways_geom_idx ON osm_ways USING gist (geom);
+CREATE INDEX IF NOT EXISTS osm_ways_highway_idx ON osm_ways (highway);

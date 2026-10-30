@@ -2,7 +2,7 @@
 .PHONY: help setup up down data test
 
 help:
-	@echo "make setup   first-time setup: Python deps, NYC map, services, data load (a few minutes, ~600 MB download)"
+	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
 	@echo "make up      start Postgres + GraphHopper"
 	@echo "make down    stop them (data is kept)"
 	@echo "make data    reload parks, fountains, restrooms into Postgres"
@@ -13,6 +13,7 @@ setup:
 	uv run python -m routing.prepare_osm
 	docker compose up -d --build --wait
 	uv run python -m etl.load_all
+	uv run python -m etl.load_osm
 
 up:
 	docker compose up -d --wait
