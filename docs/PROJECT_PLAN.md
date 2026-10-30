@@ -32,7 +32,7 @@ This is the part that makes the project read as product work. Talk to **5–8 NY
 ## 3. v1 scope
 **In:**
 - Start point by address or "use my location"
-- Loop or out-and-back, with a target distance (within ±5%)
+- Loop or out-and-back, with a target distance (within ±5%). *GraphHopper's round trips only approximate the distance, so this needs a retry-and-pick loop (Phase 2; see §12).*
 - Preferences: park or waterfront share, fewer street crossings, bathroom or water near mile X
 - 3 route options, each with a score card: distance, % park/waterfront, estimated crossings and amenity stops (with trust labels)
 - Map view and GPX export (so routes load into a watch or Strava)
@@ -72,7 +72,7 @@ FastAPI ─────────────── Claude API (tool use)
 
 **How a request flows:**
 1. **Parse:** Claude turns the text into a strict constraints object (`distance_mi`, `shape`, `prefer_green`, `max_crossings`, `amenity_at_mile`, …). Validate it with Pydantic. If validation fails, ask the user to clarify; never guess.
-2. **Generate:** call GraphHopper about 10–20 times with different seeds and headings, plus a custom model that weights park and waterfront paths more heavily.
+2. **Generate:** call GraphHopper about 10–20 times with different seeds and headings, plus a custom model that weights park and waterfront paths more heavily. Rescale the requested distance by requested/actual and retry, keep the candidate closest to the target, and report the miss if none lands within ±5% (a single `round_trip` call can be 24% short or 2.5× long; see §12). The custom model must keep ferries excluded (the stock `foot` profile routes the Staten Island Ferry).
 3. **Score:** use PostGIS to measure how much of each route is park or waterfront, count crossings (OSM traffic signals and crossing points), and find amenities near the target mile with their trust labels.
 4. **Rank and explain:** return the top 3. Claude writes the summary using only the scored numbers, never its own.
 
@@ -89,10 +89,10 @@ FastAPI ─────────────── Claude API (tool use)
 | Data | Source | Notes |
 |---|---|---|
 | Streets, paths, crossings, signals | OpenStreetMap (Geofabrik NY extract) | Routing graph and crossing counts |
-| Parks | NYC Open Data: Parks Properties | Polygons for scoring park share |
-| Waterfront | OSM coastline and greenways; NYC waterfront access datasets | Hudson River Greenway, East River Esplanade, etc. |
-| Drinking fountains | NYC Open Data: NYC Parks Drinking Fountains (`qnv7-p7a2`) | Outdoor park fountains with GPS. **Seasonal:** label off-season fountains |
-| Restrooms | NYC Open Data: Public Restrooms (`i7jb-7jku`) | Citywide (Parks, DOT, libraries, POPS) with an operational status field. **Most park restrooms are open about 8am–4pm**, so a 6:30am run needs this flagged |
+| Parks | NYC Open Data: Parks Properties (`enfh-gkve`) | Polygons for scoring park share. Its `waterfront` flag is a scoring input, but **Hudson River Park and Governors Island are not in it**, so waterfront share also needs OSM. Includes plazas and gardens, so weight by `typecategory` |
+| Waterfront | OSM coastline and greenways; NYC waterfront access datasets | Hudson River Greenway, East River Esplanade, etc. Required, not optional: Parks Properties misses the Hudson |
+| Drinking fountains | NYC Open Data: NYC Parks Drinking Fountains (`qnv7-p7a2`) | Outdoor park fountains with GPS. **The data is stale (last updated 2024-07-15), every row says "Active", and there is no seasonal field.** Fountains can be `listed` at best, never `verified`; any seasonal label comes from a rule we write, not from the data |
+| Restrooms | NYC Open Data: Public Restrooms (`i7jb-7jku`) | Citywide (Parks, DOT, libraries, POPS). **Labels come from `status` + `open`** (Year Round / Seasonal / Future), with free-text `hours_of_operation` checked against the run time. **Most park restrooms are open about 8am–4pm**, so a 6:30am run needs this flagged. Mapping in decisions/004 |
 | *(v2)* Landmarks | NYC Open Data: LPC Individual Landmarks and Historic Districts | Tour layer |
 | *(v2)* Building facts | NYC PLUTO | Year built, etc. |
 
@@ -142,10 +142,26 @@ Fill in the X's with real numbers. That's the point.
 
 ---
 
-## 11. Risks
+## 11. Risks (see §12 for what Phase 1 changed)
 | Risk | Mitigation |
 |---|---|
 | Route quality is mediocre, so nobody comes back | Phase 2 is the core work; test-run your own routes weekly. Ratings drive custom-model tuning |
 | Amenity data is stale or seasonal | Trust labels and "report a problem" button; this becomes a crowdsourced data loop later |
 | Scope creep into v2 too early | v2 is locked until 10+ weekly returning users |
 | Conflict with day job | Personal time and personal equipment only; no Lemonade data, code or branding. Check the outside-work policy |
+
+---
+
+## 12. Phase 1 findings (what the real data and tools changed)
+Checked 2026-10-30. Details and reasoning are in `docs/decisions/`.
+
+| Finding | Effect on the plan |
+|---|---|
+| Fountain data is stale (2024-07-15), all rows "Active", no season field | Fountains are `listed` at best; never `verified`. Seasonal labels need a rule we define (004) |
+| Restroom `status` + `open` + `hours_of_operation` are usable and current | Restroom labels derive from those fields (004) |
+| Parks `waterfront` flag exists but is inconsistent, and Hudson River Park / Governors Island are missing | Flag is a scoring input only; waterfront share must also use OSM geometry (004) |
+| `round_trip` distance is approximate (4 mi request: 3.0 to 10.7 mi across seeds; seed 0 was -24%) | Hitting ±5% needs a retry-and-pick loop in Phase 2 (007) |
+| Stock `foot` profile routes ferries | Custom model excludes them; keep that in every Loop model (003) |
+| GeoSearch has no address layer and its confidence is uninformative | Geocoder verifies number/street, refuses ambiguity and place names (005) |
+| 14 park polygons are self-intersecting | Repaired and flagged at load (006) |
+| Official PostGIS image is Intel-only | Use the community multi-arch image on Apple Silicon (001) |
