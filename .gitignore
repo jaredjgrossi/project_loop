@@ -4,3 +4,9 @@ __pycache__/
 .venv/
 *.pbf
 routing/graph-cache/
+# Raw dataset downloads and generated data (re-fetchable by the ETL / prepare scripts)
+etl/data/
+routing/data/
+out/
+.pytest_cache/
+.DS_Store
