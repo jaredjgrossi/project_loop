@@ -96,3 +96,41 @@ def test_shape_fields_are_added_to_the_route_properties():
     props = fc["features"][0]["properties"]
     assert props["turns"] == 11 and props["turns_per_mile"] == 3.6
     assert "distance_miles" not in props  # actual_miles already carries the routed distance
+
+
+# --- routing through chosen waypoints (used by the rectangle generator) ------------
+
+from api.routing import build_waypoint_request, request_route  # noqa: E402
+
+
+def test_waypoint_request_lists_points_in_order_as_lon_lat():
+    body = build_waypoint_request([(40.74, -73.98), (40.75, -73.97), (40.74, -73.98)])
+    assert body["points"] == [[-73.98, 40.74], [-73.97, 40.75], [-73.98, 40.74]]
+    assert body["profile"] == "foot"
+    assert "algorithm" not in body  # a plain multi-point route, not a round trip
+    assert body["points_encoded"] is False
+
+
+def test_request_route_returns_the_routed_path():
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=load("graphhopper_round_trip.json"))
+
+    route = request_route([START, (40.75, -73.97), START], client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert route.distance_m == pytest.approx(4881.76)
+    assert len(json.loads(seen[0].content)["points"]) == 3
+
+
+def test_request_route_needs_at_least_two_points():
+    with pytest.raises(ValueError):
+        request_route([START])
+
+
+def test_request_route_reports_graphhopper_errors():
+    def handler(request):
+        return httpx.Response(400, json=load("graphhopper_error_point_not_found.json"))
+
+    with pytest.raises(RoutingError, match="out of bounds"):
+        request_route([START, (0, 0)], client=httpx.Client(transport=httpx.MockTransport(handler)))

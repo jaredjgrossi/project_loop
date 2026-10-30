@@ -23,7 +23,7 @@ class Route:
     distance_m: float
     time_s: float
     coordinates: list[list[float]]  # [lon, lat]
-    seed: int
+    seed: int = 0  # round-trip seed; 0 for routes through chosen waypoints
 
 
 def graphhopper_url() -> str:
@@ -42,6 +42,16 @@ def build_round_trip_request(lat: float, lon: float, distance_m: float, seed: in
     }
 
 
+def build_waypoint_request(points: list[tuple[float, float]]) -> dict:
+    """Route through (lat, lon) points in order."""
+    return {
+        "points": [[lon, lat] for lat, lon in points],
+        "profile": "foot",
+        "points_encoded": False,
+        "instructions": False,
+    }
+
+
 def parse_route(response: dict, seed: int) -> Route:
     paths = response.get("paths")
     if not paths:
@@ -55,18 +65,11 @@ def parse_route(response: dict, seed: int) -> Route:
     )
 
 
-def request_round_trip(
-    lat: float,
-    lon: float,
-    distance_m: float,
-    seed: int = 0,
-    client: httpx.Client | None = None,
-    base_url: str | None = None,
-) -> Route:
+def _post_route(body: dict, seed: int, client: httpx.Client | None, base_url: str | None) -> Route:
     owns_client = client is None
     client = client or httpx.Client(timeout=60)
     try:
-        resp = client.post(f"{base_url or graphhopper_url()}/route", json=build_round_trip_request(lat, lon, distance_m, seed))
+        resp = client.post(f"{base_url or graphhopper_url()}/route", json=body)
     except httpx.HTTPError as exc:
         raise RoutingUnavailableError(
             f"Could not reach GraphHopper ({exc}). Is it running? Try: docker compose up -d graphhopper"
@@ -79,6 +82,26 @@ def request_round_trip(
     except ValueError:
         raise RoutingError(f"GraphHopper returned HTTP {resp.status_code} with a non-JSON body") from None
     return parse_route(payload, seed)
+
+
+def request_round_trip(
+    lat: float,
+    lon: float,
+    distance_m: float,
+    seed: int = 0,
+    client: httpx.Client | None = None,
+    base_url: str | None = None,
+) -> Route:
+    return _post_route(build_round_trip_request(lat, lon, distance_m, seed), seed, client, base_url)
+
+
+def request_route(
+    points: list[tuple[float, float]], client: httpx.Client | None = None, base_url: str | None = None
+) -> Route:
+    """A foot route through (lat, lon) points in order."""
+    if len(points) < 2:
+        raise ValueError("a route needs at least two points")
+    return _post_route(build_waypoint_request(points), 0, client, base_url)
 
 
 def route_to_geojson(
