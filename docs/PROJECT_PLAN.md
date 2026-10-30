@@ -114,7 +114,7 @@ This is the section product and AI interviewers will ask about.
 |---|---|---|
 | 0. Discovery | 1 | 5–8 runner interviews, pain-point summary, final v1 scope |
 | 1. Data foundation | 2 | Docker Compose: Postgres+PostGIS and GraphHopper on the NYC extract. Load parks, fountains and restrooms. A script returns one loop from an address |
-| 2. Scoring | 3 | Park/waterfront share, crossing count, amenities near mile X with trust labels. Generate candidates and return the top 3 from a CLI |
+| 2. Scoring | 3 | **Loop shape first** (turns per mile, straight-run share, retraced share, width, compactness; reported for every loop), then grid-aligned rectangle candidates with a distance rescale loop (decision 008). Then park/waterfront share, crossing count, amenities near mile X with trust labels. Return the top 3 from a CLI. Corridor anchoring (avenues, East River path) comes after plain rectangles are measured |
 | 3. API + Claude | 4–5 | FastAPI endpoints, Claude parse step (tool use with strict schema), explain step, parse eval set and cost logging |
 | 4. Frontend | 6–7 | Phone-first PWA: request box, map with 3 options, score cards, GPX export, "I ran it" and rating |
 | 5. Ship | 8 | Deploy, auth, PostHog, README with architecture and eval results, 90-second demo video |
@@ -165,3 +165,4 @@ Checked 2026-10-30. Details and reasoning are in `docs/decisions/`.
 | GeoSearch has no address layer and its confidence is uninformative | Geocoder verifies number/street, refuses ambiguity and place names (005) |
 | 14 park polygons are self-intersecting | Repaired and flagged at load (006) |
 | Official PostGIS image is Intel-only | Use the community multi-arch image on Apple Silicon (001) |
+| `round_trip` loops zigzag, ribbon, or retrace (median compactness 0.15, 5.5 turns per mile); grid rectangles did far better in a prototype | Shape metrics are scored for every loop; candidates are generated as grid-aligned rectangles (008) |
