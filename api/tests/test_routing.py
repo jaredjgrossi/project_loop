@@ -134,3 +134,10 @@ def test_request_route_reports_graphhopper_errors():
 
     with pytest.raises(RoutingError, match="out of bounds"):
         request_route([START, (0, 0)], client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_custom_model_is_sent_only_when_given():
+    model = {"priority": [{"if": "in_x", "multiply_by": "0"}], "areas": {"type": "FeatureCollection", "features": []}}
+    assert "custom_model" not in build_waypoint_request([(40.7, -73.9), (40.71, -73.9)])
+    assert build_waypoint_request([(40.7, -73.9), (40.71, -73.9)], custom_model=model)["custom_model"] == model
+    assert build_round_trip_request(40.7, -73.9, 5000, custom_model=model)["custom_model"] == model

@@ -1,0 +1,19 @@
+{
+  "type": "FeatureCollection",
+  "_about": "Places no runner should be routed through (decision 010). Hard rule: GraphHopper avoids them (priority 0 in the per-request custom model) and any route that still touches one is rejected. default=true zones apply to every request; the others only when a runner names them (RunConstraints.avoid_places, matched against name and aliases). Each zone carries its source.",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "times_square",
+      "properties": {
+        "name": "Times Square",
+        "aliases": ["times sq", "duffy square"],
+        "default": true,
+        "reason": "Dense pedestrian crowds at all hours; no runner would choose it",
+        "source": "reviewer rejection 2026-10-30 (evals/routes/rejected_routes.json: kips-bay-through-times-square)",
+        "trust": "listed"
+      },
+      "geometry": {"type": "Polygon", "coordinates": [[[-73.98599, 40.75569], [-73.98627, 40.75548], [-73.98665, 40.75551], [-73.98717, 40.75572], [-73.98739, 40.75592], [-73.98738, 40.75617], [-73.98557, 40.75957], [-73.98529, 40.75977], [-73.98491, 40.75975], [-73.98439, 40.75954], [-73.98418, 40.75934], [-73.98418, 40.75909], [-73.98599, 40.75569]]]}
+    }
+  ]
+}
