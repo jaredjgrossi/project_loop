@@ -120,7 +120,8 @@ This is the section product and AI interviewers will ask about.
 - Done: the combined ranking with no-go zones, out-and-back as a route type (010), and calibration against the reviewer's map-matched real runs with one set of definitions, which added park/water, signals and the runner prior (011).
 - Done: park, waterfront and corridor generators from OSM for every runner, a verified corridor catalog, lollipop as a route type, and round trips everywhere (012).
 - Done: UI-ready outputs (streaming with timing, the candidate pool, per-segment GeoJSON with stretch names, elevation, start hour, the feedback schema), turnarounds by walking distance, and cleaned corridor names (014).
-- Next, one at a time: the lights preference on the router side, roadway share and the bike-lane rule, crowds (estimate, using the start hour), a closures layer.
+- Done: the lights preference on the router side (signal penalty for runners who wait; expected-wait estimate with zig-zag credit) (015).
+- Next, one at a time: roadway share and the bike-lane rule, crowds (estimate, using the start hour; decision 013's recommendation), a closures layer.
 - Every value is labeled measured, estimate or not scored, and weights stay provisional until calibrated. Amenities near mile X annotate the top 3 after ranking.
 - Every change is checked on the fixed review starts and against real runs. Every rejected route becomes a failing eval |
 | 3. API + Claude | 4–5 | FastAPI endpoints, Claude parse step into `RunConstraints` (tool use with strict schema; the parsed request is shown to the runner before routing), explain step, parse eval set and cost logging |

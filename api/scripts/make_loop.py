@@ -19,7 +19,7 @@ import psycopg
 
 from etl.load import database_url
 
-from api.constraints import RunConstraints, describe, resolve_preferences
+from api.constraints import Lights, RunConstraints, describe, resolve_preferences
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -27,6 +27,7 @@ from api.grid import GridEstimate
 from api.nogo import NoGoZone, custom_model
 from api.nogo import resolve as resolve_zones
 from api.elevation import elevation_profile
+from api.lights import signal_penalty_model
 from api.route_context import ContextScores, score_context
 from api.segments import route_stretches
 from api.routing import RoutingError, request_round_trip, request_route, route_to_geojson
@@ -45,19 +46,6 @@ def output_path_for(address: str, miles: float) -> Path:
 def current_grid(lat: float, lon: float) -> GridEstimate:
     with psycopg.connect(database_url()) as conn:
         return grid_at(conn, lat, lon)
-
-
-def db_context(coords: list[list[float]]) -> ContextScores:
-    """Park/water share, signals and familiarity for a route, from PostGIS. One connection per call: the generator
-    scores candidates on several threads."""
-    with psycopg.connect(database_url()) as conn:
-        return score_context(conn, coords)
-
-
-def db_context_without_prior(coords: list[list[float]]) -> ContextScores:
-    """As db_context, but ignoring the runner's own runs."""
-    with psycopg.connect(database_url()) as conn:
-        return score_context(conn, coords, use_prior=False)
 
 
 ANCHOR_SQL = """
@@ -118,10 +106,39 @@ def db_stretches(coords: list[list[float]], elevation: list[float] | None) -> li
         return route_stretches(conn, coords, elevation)
 
 
-def routers(zones: list[NoGoZone]) -> tuple[Callable, Callable]:
-    """GraphHopper route and round-trip functions that route around the given no-go zones."""
-    model = custom_model(zones)
+def _merged(*models: dict | None) -> dict | None:
+    """One GraphHopper custom model from several: priority rules concatenated, areas combined."""
+    models = [m for m in models if m]
+    if not models:
+        return None
+    out = {"priority": [r for m in models for r in m.get("priority", [])]}
+    areas = [f for m in models for f in m.get("areas", {}).get("features", [])]
+    if areas:
+        out["areas"] = {"type": "FeatureCollection", "features": areas}
+    return out
+
+
+def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable, Callable]:
+    """GraphHopper route and round-trip functions that route around the given no-go zones (plus any extra rules)."""
+    model = _merged(custom_model(zones), extra)
     return partial(request_route, custom_model=model), partial(request_round_trip, custom_model=model)
+
+
+def routers_for(zones: list[NoGoZone], lights: Lights) -> tuple[Callable, Callable, Callable]:
+    """Route, round-trip and feature-area route functions for a runner: a signal penalty in every request when they
+    wait at lights, none when they zig-zag (decision 015)."""
+    extra = signal_penalty_model() if lights == Lights.WAITS else None
+    route_fn, round_trip_fn = routers(zones, extra)
+    return route_fn, round_trip_fn, area_router(zones, extra)
+
+
+def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True) -> Callable:
+    """A context scorer that also estimates the wait at lights for this runner and street grid (decision 015)."""
+    def score(coords: list[list[float]]) -> ContextScores:
+        with psycopg.connect(database_url()) as conn:
+            return score_context(conn, coords, use_prior=use_prior, lights=lights, grid=grid)
+
+    return score
 
 
 # Provisional (decision 012): off-feature edges cost twice as much, so an anchored route stays on the park, waterfront
@@ -130,9 +147,10 @@ OFF_FEATURE_PRIORITY = 0.5
 MAX_FEATURE_PARTS = 25
 
 
-def area_router(zones: list[NoGoZone]) -> Callable:
+def area_router(zones: list[NoGoZone], extra: dict | None = None) -> Callable:
     """A GraphHopper route function for anchored routes: around the no-go zones, preferring the feature's area."""
-    base = custom_model(zones) or {"priority": [], "areas": {"type": "FeatureCollection", "features": []}}
+    base = _merged(custom_model(zones), extra) or {"priority": []}
+    base.setdefault("areas", {"type": "FeatureCollection", "features": []})
 
     def route(points: list[tuple[float, float]], area: dict):
         # GraphHopper areas must be single polygons, so a multipolygon becomes one area per part (largest first).
@@ -160,6 +178,10 @@ def print_candidate(rank: int, c: Candidate) -> None:
     print(f"    Turns:     {d['turns']}  ({d['turns_per_mile']} per mile)")
     print(f"    Straight:  longest run {d['longest_straight_m']} m; {d['pct_in_long_runs']}% of the route is on runs of 500 m or more")
     print(f"    Shape:     {d['retraced_pct']}% retraced, {d['mean_width_m']} m wide on average, compactness {d['compactness']} (square = 0.79)")
+    if c.context is not None and c.context.wait_s is not None:
+        credit = f"; zig-zag alternative at {c.context.wait_credited}" if c.context.wait_credited else ""
+        print(f"    {'Wait at lights:':<23}{c.context.wait_s / 60:.1f} min at {c.context.wait_signals} signals{credit} "
+              f"[estimate, not scored]")
     if c.ranking is not None:
         for dim in c.ranking.scored():
             if dim.key not in ("turns", "straight", "loop_shape", "retrace"):  # shown above
@@ -183,6 +205,8 @@ def run(
     feature_anchor_fn: Callable | None = None,
     area_route_fn: Callable | None = None,
     start_time: str | None = None,
+    context_factory: Callable | None = None,  # (lights, grid) -> context_fn; used when context_fn is not given
+    lights: str | None = None,
     stretch_fn: Callable | None = None,  # (coords, elevation) -> stretch features (api/segments.py)
     pool_out: Path | None = None,
 ) -> int:
@@ -190,12 +214,13 @@ def run(
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
         return 4
     constraints = RunConstraints(start_address=address, distance_mi=miles, shape=shape, mode=mode,
-                                 avoid_places=avoid or [], start_time=start_time)
+                                 avoid_places=avoid or [], start_time=start_time, lights=lights)
+    prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)
     for name in unknown:
         print(f"Avoid:     '{name}' isn't in the no-go list, so it was NOT applied.")
-    route_fn, round_trip_fn = routers(zones)
+    route_fn, round_trip_fn, lights_area_router = routers_for(zones, prefs["lights"])
 
     try:
         place = geocode_fn(address)
@@ -215,9 +240,10 @@ def run(
     try:
         result = generate_fn(
             place.lat, place.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
-            shape=constraints.shape, prefs=resolve_preferences(constraints).values, avoid=zones,
-            context_fn=context_fn, anchor_fn=anchor_fn, feature_anchor_fn=feature_anchor_fn,
-            area_route_fn=area_route_fn or (area_router(zones) if feature_anchor_fn else None),
+            shape=constraints.shape, prefs=prefs, avoid=zones,
+            context_fn=context_fn or (context_factory(prefs["lights"], grid) if context_factory else None),
+            anchor_fn=anchor_fn, feature_anchor_fn=feature_anchor_fn,
+            area_route_fn=area_route_fn or (lights_area_router if feature_anchor_fn else None),
         )
     except RoutingError as exc:
         print(f"Routing failed: {exc}", file=sys.stderr)
@@ -273,12 +299,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--mode", choices=["training", "exploring"], help="preference preset")
     ap.add_argument("--avoid", action="append", default=[], help="a named no-go place (repeatable)")
     ap.add_argument("--start-time", help="departure time, HH:MM (carried and shown; nothing hour-dependent is scored yet)")
+    ap.add_argument("--lights", choices=["waits", "zigzags"], help="at a red light: wait, or zig-zag with the green")
     ap.add_argument("--pool", type=Path, help="also write every candidate with its metric vector to this JSON file")
     args = ap.parse_args(argv)
     return run(args.address, args.miles, out=args.out, top=args.top, geocode_fn=geocode, grid_fn=current_grid,
                generate_fn=generate_loops, shape=args.shape, mode=args.mode, avoid=args.avoid,
-               context_fn=db_context, anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,
-               start_time=args.start_time, stretch_fn=db_stretches, pool_out=args.pool)
+               anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES, start_time=args.start_time,
+               stretch_fn=db_stretches, pool_out=args.pool, lights=args.lights,
+               context_factory=lambda lights, grid: context_for(lights, grid, use_prior=True))
 
 
 if __name__ == "__main__":

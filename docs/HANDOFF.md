@@ -1,6 +1,6 @@
 # Loop: handoff (Phase 2 in progress)
 
-As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`014`. Branch `phase2-ranking-generators`: decisions 009–012 and 014 are committed. Decision 013 is another session's crowd-signal research spike (`013-crowd-signal-options.md`), not this work.
+As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`015`. Decisions 009–014 are merged into main (PR #1); 013 is a crowd-signal research spike (nothing built). Decision 015 (lights) is on branch `phase2-lights`.
 
 **Where it stands:**
 - Routes are ranked against the runner's preferences, with every dimension labeled `measured`, `estimate` or `not_scored` (decisions 009 and 010).
@@ -19,6 +19,10 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - cleaned corridor names and a catalog regression check.
 
   All 15 review rows now have a park, waterfront or corridor route at #1.
+- **Decision 015, lights:**
+  - runners who wait get a signal penalty in every GraphHopper request;
+  - both kinds of runner get an expected wait at lights (estimate, not scored), with zig-zag credit where a same-length staircase exists;
+  - the penalty lowers the share of the route on road centerlines; it doesn't raise it.
 - **All weights are provisional.** Turns and retracing in particular are not to be tuned before more calibration.
 
 ## What's built
@@ -64,7 +68,7 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
 ## Run it
 ```bash
 make setup        # first time: ~600 MB download, a few minutes
-uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4 --top 3 [--shape loop|out_and_back|any] [--mode training] [--avoid "Times Square"] [--start-time 06:45] [--pool out/pool.json]
+uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4 --top 3 [--shape loop|out_and_back|any] [--mode training] [--avoid "Times Square"] [--start-time 06:45] [--lights waits|zigzags] [--pool out/pool.json]
 ```
 Drag the files in `out/` onto geojson.io: each holds the route, its start, and its stretch features. Day to day: `make up`, `make down`, `make test`, and `make corridors` after an OSM reload. Setup details and troubleshooting: `README.md`.
 
@@ -138,14 +142,14 @@ Decision 014 changed the 4 mi rows:
 - **Crosswalk gaps:** crosswalks are missed wherever a route runs on a road centerline (decision 009).
 - **Park share** uses Parks Properties only. Waterfront share covers Hudson River Park.
 - **Start addresses:** the start must be a street address with a number; place names are refused on purpose.
-- **Graph cache:** the graph is `routing/graph-cache/foot-v3`, with elevation (the old `foot-v2` was deleted 2026-11-01). After changing the map or `routing/config.yml`, delete it or bump the suffix.
+- **Graph cache:** the graph is `routing/graph-cache/foot-v4`, with elevation and crossing types (`foot-v2` and `foot-v3` were deleted 2026-11-01). After changing the map or `routing/config.yml`, delete it or bump the suffix.
 - **Config module:** `make_loop.py` imports `database_url` from `etl.load`; move it to a shared config module.
 
 ## Left for Phase 2
 Order after decision 011. Each step ends with the review page and `pytest evals/`.
 1. ~~Combined ranking with no-go zones~~ (decision 010). ~~Park and waterfront share~~ and ~~signal counts~~ (decision 011). ~~Park, water and corridor generators; round trips everywhere~~ (decision 012).
 2. ~~Turnarounds by walking distance~~ (decision 014). Next: gaps checked with GraphHopper so walking distance can cross them, and caching for speed.
-3. **Lights preference, router side.** A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
+3. ~~Lights preference, router side~~ (decision 015). Was: A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
 4. **Roadway share and the bike-lane rule.** Measure the share of a route on a road centerline where a separate sidewalk exists. The bike-lane rule has lower priority, and its purpose is narrow: never send a runner down an on-street lane such as 3rd Ave's because it is emptier. It needs NYC DOT bike-route data.
 5. **Crowds** (estimate): named zones today; a data source once one is checked (NYC DOT pedestrian counts are a candidate).
 6. **Closures layer**: known East River gaps first, user reports later.

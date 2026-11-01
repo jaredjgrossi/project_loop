@@ -85,6 +85,8 @@ class Candidate:
         vec = {"distance_m": round(self.route.distance_m), "miss_pct": round(self.miss_pct, 1), **self.shape.as_dict()}
         if self.context is not None:
             vec.update({k: (None if v is None else round(v, 1)) for k, v in asdict(self.context).items()})
+            if self.context.wait_s is not None:
+                vec["wait_status"] = "estimate"  # expected wait at lights (decision 015)
         return vec
 
 
