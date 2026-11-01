@@ -6,13 +6,16 @@ from api.generate import (
     MAX_RESCALES,
     MAX_RETRACED_PCT,
     MIN_COMPACTNESS,
+    OUT_AND_BACK_MIN_RETRACED_PCT,
+    Anchors,
     Candidate,
     generate_loops,
     rectangle_corners,
     route_similarity,
-    shape_score,
 )
 from api.grid import GridEstimate
+from api.nogo import NoGoZone, touched
+from api.route_context import ContextScores
 from api.routing import Route, RoutingError
 from api.shape import ShapeMetrics, shape_metrics
 from api.units import miles_to_meters
@@ -69,39 +72,7 @@ def test_four_sign_combinations_give_four_different_rectangles():
     assert len(corners) == 4
 
 
-# --- scoring -------------------------------------------------------------------------
-
-
-def metrics(**kw):
-    base = dict(
-        distance_miles=4.0, turns=8, turns_per_mile=2.0, longest_straight_m=1500, pct_in_long_runs=90.0,
-        retraced_pct=0.0, mean_width_m=500.0, compactness=0.6,
-    )
-    return ShapeMetrics(**{**base, **kw})
-
-
-def test_score_is_bounded():
-    assert 0 <= shape_score(metrics()) <= 100
-    worst = metrics(turns_per_mile=40, pct_in_long_runs=0, retraced_pct=60, compactness=0.0)
-    assert shape_score(worst) == pytest.approx(0, abs=1)
-    best = metrics(turns_per_mile=1, pct_in_long_runs=100, retraced_pct=0, compactness=0.8)
-    assert shape_score(best) == pytest.approx(100, abs=1)
-
-
-def test_fewer_turns_scores_higher():
-    assert shape_score(metrics(turns_per_mile=2)) > shape_score(metrics(turns_per_mile=6)) > shape_score(metrics(turns_per_mile=13))
-
-
-def test_a_ribbon_scores_below_a_compact_loop_with_the_same_turns():
-    assert shape_score(metrics(compactness=0.2)) < shape_score(metrics(compactness=0.65))
-
-
-def test_retracing_lowers_the_score():
-    assert shape_score(metrics(retraced_pct=20)) < shape_score(metrics(retraced_pct=0))
-
-
-def test_open_route_without_compactness_still_scores():
-    assert 0 <= shape_score(metrics(compactness=None, mean_width_m=None)) <= 100
+# Scoring moved to api/ranking.py (decision 010); its tests are in test_ranking.py.
 
 
 # --- similarity ----------------------------------------------------------------------
@@ -109,6 +80,12 @@ def test_open_route_without_compactness_still_scores():
 
 def line(points_latlon):
     return [[lon, lat] for lat, lon in points_latlon]
+
+
+def test_a_route_that_shares_only_its_way_out_is_not_a_duplicate():
+    out_back = line([START, (START[0] + 0.01, START[1]), START])
+    loop = line([START, (START[0] + 0.01, START[1]), (START[0] + 0.01, START[1] + 0.01), START])
+    assert route_similarity(out_back, loop) < 0.8
 
 
 def test_identical_routes_are_fully_similar_and_distant_ones_are_not():
@@ -141,7 +118,8 @@ def make_router(detour=1.0, calls=None):
 
 
 def no_round_trips(*a, **k):
-    raise AssertionError("round_trip should not be needed here")
+    # Round trips are tried everywhere (decision 012); in tests about other generators they just fail to route.
+    raise RoutingError("no round trips in this test")
 
 
 # --- generation ----------------------------------------------------------------------
@@ -233,11 +211,13 @@ def test_weak_grid_tries_both_methods_and_says_so():
     assert "weak" in result.note.lower()
 
 
-def test_strong_grid_does_not_bother_with_round_trips_when_rectangles_hit_the_target():
-    generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips)
+def test_round_trips_are_tried_on_a_strong_grid_too():
+    rt_calls = []
+    generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=diamond_round_trip(rt_calls))
+    assert rt_calls
 
 
-def test_round_trips_are_added_when_no_rectangle_reaches_the_target():
+def test_round_trips_win_when_no_rectangle_reaches_the_target():
     rt_calls = []
     ok_round_trip = diamond_round_trip(rt_calls)
 
@@ -248,7 +228,6 @@ def test_round_trips_are_added_when_no_rectangle_reaches_the_target():
     result = generate_loops(*START, miles=2.0, grid=STRONG, route_fn=short_rectangles, round_trip_fn=ok_round_trip)
     assert rt_calls
     assert any(c.method == "round_trip" and c.within_tolerance for c in result.candidates)
-    assert "added" in result.note.lower()
 
 
 def test_thin_ribbon_loops_are_rejected():
@@ -282,9 +261,241 @@ def test_when_nothing_meets_the_tolerance_the_nearest_is_returned_and_flagged():
     assert "nearest" in result.note.lower()
 
 
+def test_out_and_backs_are_generated_when_the_shape_allows_them():
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="out_and_back", top_n=3)
+    assert result.candidates
+    for c in result.candidates:
+        assert c.kind == "out_and_back" and c.method == "out_and_back"
+        assert c.shape.retraced_pct >= OUT_AND_BACK_MIN_RETRACED_PCT
+        assert abs(c.miss_pct) <= 5
+
+
+def test_out_and_back_turnaround_is_half_the_distance_out():
+    calls = []
+    generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(calls=calls), round_trip_fn=no_round_trips,
+                   shape="out_and_back")
+    first = calls[0]
+    assert len(first) == 3 and first[0] == first[2] == START
+    assert meters(first[0], first[1]) == pytest.approx(miles_to_meters(2.0), rel=0.01)
+
+
+def test_any_shape_offers_both_kinds_in_the_top_three():
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=3)
+    assert {c.kind for c in result.candidates} == {"loop", "out_and_back"}
+
+
+def test_loop_only_requests_never_get_an_out_and_back():
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            top_n=10)
+    assert {c.kind for c in result.candidates} == {"loop"}
+
+
+def test_a_route_out_and_back_must_actually_come_back_the_same_way():
+    def loop_router(points):
+        # Asked for start -> turnaround -> start, returns a triangle instead.
+        a, t = points[0], points[1]
+        side = (t[0], a[1])
+        dense = densify([a, t, side, a])
+        length = sum(meters(p, q) for p, q in zip(dense, dense[1:]))
+        return Route(distance_m=length, time_s=1, coordinates=line(dense))
+
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=loop_router, round_trip_fn=no_round_trips,
+                            shape="out_and_back")
+    assert result.rejected["not_out_and_back"] > 0
+    assert not result.candidates or all(c.kind == "out_and_back" for c in result.candidates)
+
+
+def test_routes_through_a_no_go_zone_are_rejected():
+    # A zone covering the whole area north-east of the start: every rectangle with a + side enters it.
+    lat, lon = START
+    rings = [[[lon + 0.0005, lat + 0.0005], [lon + 0.1, lat + 0.0005], [lon + 0.1, lat + 0.1], [lon + 0.0005, lat + 0.1],
+              [lon + 0.0005, lat + 0.0005]]]
+    zone = NoGoZone(id="test_zone", name="Test", aliases=(), default=True, reason="", source="", rings=rings)
+    result = generate_loops(*START, miles=4.0, grid=GridEstimate(angle_deg=0.0, strength=0.95), route_fn=make_router(),
+                            round_trip_fn=no_round_trips, avoid=[zone], top_n=10)
+    assert result.rejected["no_go_zone"] > 0
+    assert all(not touched(c.route.coordinates, [zone]) for c in result.candidates)
+
+
+def test_candidates_carry_a_labeled_ranking():
+    c = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips).candidates[0]
+    assert c.ranking is not None
+    assert c.score == c.ranking.score
+    assert {d.status for d in c.ranking.dimensions} <= {"measured", "estimate", "not_scored"}
+
+
 def test_result_records_what_was_tried():
     result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips)
     assert result.generated >= 12
     assert result.grid == STRONG
     assert isinstance(result.candidates[0], Candidate)
     assert isinstance(shape_metrics(result.candidates[0].route.coordinates), ShapeMetrics)
+
+
+def test_context_is_scored_for_every_candidate_when_provided():
+    seen = []
+
+    def context_fn(coords):
+        seen.append(len(coords))
+        return ContextScores(park_pct=0, waterfront_pct=0, park_or_water_pct=40, crossings_per_mile=5,
+                             signals_per_mile=3, familiar_pct=None)
+
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            context_fn=context_fn)
+    assert seen
+    by = {d.key: d for d in result.candidates[0].ranking.dimensions}
+    assert by["park_water"].status == "measured" and by["signals"].status == "measured"
+
+
+def corridor_north(entry_m=300, step_m=100, n=40):
+    """A familiar corridor running north from a point 300 m east of the start."""
+    lat, lon = START
+    entry = (lat, lon + entry_m / kx(lat))
+    pts = [(lat + k * step_m / M_LAT, entry[1], math.hypot(entry_m, k * step_m)) for k in range(1, n)]
+    return Anchors(entry=entry, directions=[pts])
+
+
+def test_familiar_out_and_backs_go_through_the_corridor_entry_and_turn_on_the_corridor():
+    anchors = corridor_north()
+    calls = []
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(calls=calls),
+                            round_trip_fn=no_round_trips, shape="out_and_back", anchor_fn=lambda *a: [anchors], top_n=40)
+    familiar = [c for c in calls if len(c) == 5]  # plain out-and-backs send 3 points
+    assert familiar
+    corridor_points = {p[:2] for p in anchors.directions[0]}
+    for c in familiar:
+        assert c[0] == c[4] == START and c[1] == c[3] == anchors.entry
+        assert c[2] in corridor_points  # rescaling picks another corridor point, never one off the corridor
+    best = next(c for c in result.candidates if c.method == "familiar_out_and_back")
+    assert abs(best.miss_pct) <= 5
+
+
+def test_no_corridors_means_no_familiar_candidates():
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", anchor_fn=lambda *a: [Anchors(entry=None, directions=[])], top_n=40)
+    assert all(c.method != "familiar_out_and_back" for c in result.candidates)
+
+
+# --- anchored routes from OSM features (decision 012) -------------------------------------------
+
+
+def park_east(source="park", name="Test Park"):
+    """A park 400 m east of the start, with path points spread north and south of its entry."""
+    lat, lon = START
+    entry = (lat, lon + 400 / kx(lat))
+    pts = [(lat + k * 100 / M_LAT, entry[1] + 150 / kx(lat), math.hypot(550, k * 100)) for k in range(1, 30)]
+    return Anchors(entry=entry, directions=[pts], source=source, name=name)
+
+
+def test_feature_anchors_give_out_and_backs_and_loops_through_the_feature():
+    anchors = park_east()
+    calls = []
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(calls=calls),
+                            round_trip_fn=no_round_trips, shape="any", feature_anchor_fn=lambda *a: [anchors], top_n=60)
+    out_back = [c for c in calls if len(c) == 5 and c[1] == c[3] == anchors.entry]
+    loops = [c for c in calls if len(c) == 4 and c[1] == anchors.entry]
+    assert out_back and loops
+    methods = {c.method for c in result.candidates}
+    assert "park_out_and_back" in methods
+    assert any(m == "park_loop" for m in methods)
+    assert any("through Test Park" in c.label for c in result.candidates)
+
+
+def lollipop_router(points):
+    """Goes out along the anchor's access path and loops back through it: out 500 m, around a 600 m loop, back."""
+    a = points[0]
+    stick = (a[0], a[1] + 500 / kx(a[0]))
+    corner1 = (a[0] + 300 / M_LAT, stick[1])
+    corner2 = (a[0] + 300 / M_LAT, stick[1] + 300 / kx(a[0]))
+    corner3 = (a[0], stick[1] + 300 / kx(a[0]))
+    dense = densify([a, stick, corner1, corner2, corner3, stick, a])
+    length = sum(meters(p, q) for p, q in zip(dense, dense[1:]))
+    return Route(distance_m=length, time_s=1, coordinates=line(dense))
+
+
+def test_an_anchored_loop_that_comes_back_partly_the_same_way_is_a_lollipop():
+    miles = lollipop_router([START]).distance_m / 1609.344
+    result = generate_loops(*START, miles=miles, grid=STRONG, route_fn=lollipop_router, round_trip_fn=no_round_trips,
+                            shape="any", feature_anchor_fn=lambda *a: [park_east()], top_n=60)
+    lollipops = [c for c in result.candidates if c.kind == "lollipop"]
+    assert lollipops
+    keys = {d.key for d in lollipops[0].ranking.dimensions}
+    assert "retrace" not in keys and "loop_shape" not in keys  # ranked like an out-and-back
+
+
+def test_shape_filters_apply_to_anchored_routes():
+    as_loop = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                             shape="loop", feature_anchor_fn=lambda *a: [park_east()], top_n=60)
+    assert all(c.kind in ("loop", "lollipop") for c in as_loop.candidates)
+    as_oab = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="out_and_back", feature_anchor_fn=lambda *a: [park_east()], top_n=60)
+    assert {c.kind for c in as_oab.candidates} == {"out_and_back"}
+
+
+def test_feature_anchors_are_used_without_the_runners_own_routes():
+    # The OSM generators never need anchor_fn (the runner prior); they run on their own.
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", feature_anchor_fn=lambda *a: [park_east(source="water", name="waterfront")],
+                            anchor_fn=None, top_n=60)
+    assert any(c.method.startswith("water_") for c in result.candidates)
+    assert all(not c.method.startswith("familiar") for c in result.candidates)
+
+
+def test_a_feature_too_small_for_the_distance_is_run_through_and_past():
+    # A short corridor: points only up to ~600 m from the start. A 3 mi out-and-back must keep going past its end.
+    lat, lon = START
+    entry = (lat, lon + 300 / kx(lat))
+    pts = [(lat + k * 100 / M_LAT, entry[1], math.hypot(300, k * 100)) for k in range(1, 6)]
+    short = Anchors(entry=entry, directions=[pts], source="corridor", name="Short Path")
+    calls = []
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(calls=calls),
+                            round_trip_fn=no_round_trips, shape="out_and_back", feature_anchor_fn=lambda *a: [short], top_n=60)
+    through = [c for c in calls if pts[-1][:2] in c and len(c) == 7]  # start, entry, far, beyond, far, entry, start
+    assert through
+    best = next(c for c in result.candidates if c.method == "corridor_out_and_back")
+    assert abs(best.miss_pct) <= 5
+    assert "and beyond" in best.label
+
+
+def test_anchored_routes_are_routed_with_a_preference_for_the_feature_area():
+    area = {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}
+    anchors = Anchors(entry=park_east().entry, directions=park_east().directions, source="park", name="Test Park", area=area)
+    seen = []
+
+    def area_route_fn(points, feature_area):
+        seen.append(feature_area)
+        return make_router()(points)
+
+    generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips, shape="any",
+                   feature_anchor_fn=lambda *a: [anchors], area_route_fn=area_route_fn, top_n=60)
+    assert seen and all(a == area for a in seen)
+
+
+def test_without_an_area_router_anchored_routes_use_the_plain_router():
+    calls = []
+    generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(calls=calls), round_trip_fn=no_round_trips,
+                   shape="any", feature_anchor_fn=lambda *a: [park_east()], top_n=60)
+    assert any(len(c) == 5 and c[1] == park_east().entry for c in calls)
+
+
+def test_a_turnaround_past_the_feature_that_is_off_the_map_falls_back_to_the_far_end():
+    lat, lon = START
+    entry = (lat, lon + 300 / kx(lat))
+    pts = [(lat + k * 100 / M_LAT, entry[1], math.hypot(300, k * 100)) for k in range(1, 6)]
+    short = Anchors(entry=entry, directions=[pts], source="water", name="waterfront")
+    plain = make_router()
+    calls = []
+
+    def no_points_in_the_river(points):
+        calls.append(points)
+        if len(points) == 7:  # the "and beyond" request: start, entry, far end, beyond, far end, entry, start
+            raise RoutingError("Cannot find point 3")
+        return plain(points)
+
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=no_points_in_the_river, round_trip_fn=no_round_trips,
+                            shape="out_and_back", feature_anchor_fn=lambda *a: [short], top_n=60)
+    fallback = [c for i, c in enumerate(calls) if len(c) == 5 and i > 0 and len(calls[i - 1]) == 7]
+    assert fallback and all(c[2] == pts[-1][:2] for c in fallback)  # turned at the far end instead
+    assert result.rejected["routing_failed"] == 0  # the candidate was kept, with its miss, not dropped

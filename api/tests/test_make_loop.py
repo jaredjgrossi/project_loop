@@ -31,7 +31,7 @@ def candidate(miles_actual=4.0, requested=4.0, label="rectangle 1:1, ++", score=
 
 
 def fake_generate(candidates, note=None, within=True):
-    def generate_fn(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3):
+    def generate_fn(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
         return GenerationResult(
             candidates=candidates[:top_n], within_tolerance=within, grid=grid, generated=20,
             rejected=Counter({"retraced": 2}), note=note,
@@ -56,7 +56,7 @@ def test_writes_geojson_with_shape_and_reports_it(tmp_path, capsys):
     assert "geojson.io" in text
     fc = json.loads((tmp_path / "loop.geojson").read_text())
     props = fc["features"][0]["properties"]
-    for key in ("turns", "turns_per_mile", "longest_straight_m", "retraced_pct", "shape_score", "method", "rank"):
+    for key in ("turns", "turns_per_mile", "longest_straight_m", "retraced_pct", "score", "kind", "method", "rank"):
         assert key in props
     assert props["rank"] == 1
 
@@ -138,3 +138,23 @@ def test_main_parses_arguments(tmp_path, monkeypatch):
     out = tmp_path / "x.geojson"
     assert main(["11 Madison Ave, Manhattan", "4", "--out", str(out)]) == 0
     assert out.exists()
+
+
+def test_parsed_request_is_shown_and_passed_to_the_generator(tmp_path, capsys):
+    seen = {}
+
+    def spy(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        seen.update(kw)
+        return fake_generate([candidate()])(lat, lon, miles, grid, route_fn, round_trip_fn, top_n)
+
+    assert go(tmp_path, spy, shape="out_and_back", mode="training") == 0
+    text = capsys.readouterr().out
+    assert "Request:" in text and "Shape: out and back" in text and "Training preset" in text
+    assert seen["shape"] == "out_and_back"
+    assert seen["prefs"]["crowds"] == "avoid"
+    assert any(z.id == "times_square" for z in seen["avoid"])  # default no-go zones always apply
+
+
+def test_an_unknown_place_to_avoid_is_reported_not_silently_dropped(tmp_path, capsys):
+    assert go(tmp_path, fake_generate([candidate()]), avoid=["Nowhere Plaza"]) == 0
+    assert "'Nowhere Plaza' isn't in the no-go list, so it was NOT applied" in capsys.readouterr().out

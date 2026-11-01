@@ -1,11 +1,17 @@
-"""Generate running-loop candidates and pick the best (decision 008).
+"""Generate route candidates and rank them (decisions 008 to 012).
 
-Candidates are grid-aligned rectangles routed through their four corners, because
-a loop whose sides follow the street grid has long straight runs and few turns.
-Each rectangle is rescaled until its routed distance is close to the request. Where
-there is no street grid, GraphHopper round trips are used instead, with the same
-rescaling and the same filtering. Every candidate is scored on its shape; if none
-reaches the distance tolerance, the nearest ones are returned and the miss is stated
+Candidate generators, none of which decides the answer on its own:
+- grid-aligned rectangles routed through their four corners (long straight runs, few turns);
+- GraphHopper round trips, everywhere (decision 012; they used to be added only where the grid was weak);
+- out-and-backs: out along a heading to a turnaround at half the distance and back the same way. A first-class
+  type, not a penalized loop: most of the reviewer's real runs are out-and-backs;
+- anchored routes (decision 012): out to a park, the waterfront or a catalog corridor (api/anchors.py, from OSM, for
+  every runner), through its nearest point, to a turnaround on it picked to fit the distance, and back the same way
+  (out-and-back) or by the shortest way (loop, or lollipop: out, around and back, which is how most real runs look);
+- the same, along ways the runner already runs (decision 011), only when that optional source is given.
+Each is rescaled until its routed distance is close to the request. Hard rules reject candidates (no-go zones,
+ribbons, an out-and-back that doesn't come back the same way); the rest are ranked against the runner's preferences
+by api/ranking.py. If none reaches the distance tolerance, the nearest ones are returned and the miss is stated
 (product rule 3).
 
 Pure orchestration: routing is injected, so this module needs no network or database.
@@ -17,7 +23,12 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from api.anchors import Anchors
+from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
+from api.nogo import NoGoZone, touched
+from api.ranking import Kind, Ranking, rank
+from api.route_context import ContextScores
 from api.routing import Route, RoutingError
 from api.shape import ShapeMetrics, shape_metrics
 from api.units import meters_to_miles, miles_to_meters, percent_off
@@ -30,22 +41,38 @@ MIN_COMPACTNESS = 0.15  # thinner than this is a ribbon: out along one street, b
 DUPLICATE_SIMILARITY = 0.8
 ASPECTS = (1.0, 1.5, 2.5)  # long side : short side
 FALLBACK_SEEDS = range(8)
+OUT_AND_BACK_HEADINGS = (0, 90, 180, 270, 45, 135, 225, 315)  # degrees from the grid angle; along the grid first
+OUT_AND_BACK_MIN_RETRACED_PCT = 70.0  # less than this and the way back isn't the way out
 
 RouteFn = Callable[[list[tuple[float, float]]], Route]  # (lat, lon) points -> route
 RoundTripFn = Callable[..., Route]  # (lat, lon, distance_m, seed) -> route
+ContextFn = Callable[[list[list[float]]], ContextScores]  # [lon, lat] route -> park, signals, familiarity
+AnchorFn = Callable[[float, float, float], list[Anchors]]  # (lat, lon, radius_m) -> anchor sets
+AreaRouteFn = Callable[[list[tuple[float, float]], dict], Route]  # (lat, lon) points, GeoJSON area -> route
+# Per anchor set; other sources get DEFAULT_ANCHOR_DIRECTIONS. The waterfront set spans the whole shore within reach,
+# so every direction is tried: ranked by point count, the top two can both be across the river.
+MAX_ANCHOR_DIRECTIONS = {"familiar": 4, "water": 8}
+DEFAULT_ANCHOR_DIRECTIONS = 2
+SHAPE_KINDS = {  # which route kinds each RunConstraints.shape accepts; a lollipop starts and ends as a loop does
+    "loop": ("loop", "lollipop"),
+    "out_and_back": ("out_and_back",),
+    "any": ("loop", "lollipop", "out_and_back"),
+}
 
 M_PER_DEG_LAT = 110_574
 
 
 @dataclass(frozen=True)
 class Candidate:
-    method: str  # "rectangle" or "round_trip"
+    method: str  # "rectangle", "round_trip" or "out_and_back"
     label: str
     route: Route
     shape: ShapeMetrics
-    score: float  # shape score, 0 to 100
+    score: float  # combined ranking score, 0 to 100 (provisional weights)
     miss_pct: float  # signed distance miss against the request
     within_tolerance: bool
+    kind: Kind = "loop"
+    ranking: Ranking | None = None
 
 
 @dataclass
@@ -82,7 +109,9 @@ def rectangle_corners(
 
 
 def route_similarity(a: list[list[float]], b: list[list[float]], near_m: float = 40.0) -> float:
-    """0 to 1: the larger share of either route that lies within near_m of the other."""
+    """0 to 1: the smaller share of either route that lies within near_m of the other, so two routes are
+    duplicates only when each mostly runs on the other. (It was the larger share until decision 012, which counted
+    a loop as a copy of the out-and-back it shares its way out with.)"""
     lat0 = a[0][1]
     kx = 111_320 * math.cos(math.radians(lat0))
 
@@ -111,27 +140,7 @@ def route_similarity(a: list[list[float]], b: list[list[float]], near_m: float =
         return hits / len(src)
 
     sa, sb = samples(a), samples(b)
-    return max(share_near(sa, sb), share_near(sb, sa))
-
-
-# --- scoring -------------------------------------------------------------------------
-
-
-def _clamp(x: float) -> float:
-    return max(0.0, min(1.0, x))
-
-
-def shape_score(m: ShapeMetrics) -> float:
-    """0 to 100. Fewer turns, longer straight runs, a compact shape and no retracing score higher.
-
-    The weights (turns 40, straight runs 25, compactness 25, retracing 10) are a first
-    judgment, to be tuned with the "I ran it" ratings.
-    """
-    f_turns = _clamp(1 - (m.turns_per_mile - 1) / 9)  # 1 turn per mile is ideal, 10 or more is worst
-    f_straight = _clamp(m.pct_in_long_runs / 100)
-    f_compact = _clamp((m.compactness or 0.0) / 0.7)  # a square is 0.79
-    f_retrace = 1 - _clamp(m.retraced_pct / MAX_RETRACED_PCT)
-    return 100 * (0.40 * f_turns + 0.25 * f_straight + 0.25 * f_compact + 0.10 * f_retrace)
+    return min(share_near(sa, sb), share_near(sb, sa))
 
 
 # --- generation ----------------------------------------------------------------------
@@ -179,23 +188,64 @@ def _fit(make_route: Callable[[float], Route], target_m: float) -> Route:
     return best
 
 
-def _evaluate(method: str, label: str, route: Route, miles: float, rejected: Counter) -> Candidate | None:
+@dataclass(frozen=True)
+class _Rules:
+    miles: float
+    prefs: dict
+    avoid: tuple[NoGoZone, ...]
+    context_fn: ContextFn | None = None
+
+
+def _classify(shape: ShapeMetrics) -> Kind | None:
+    """What a route that was free to come back any way turned out to be; None for a ribbon."""
+    if shape.retraced_pct >= OUT_AND_BACK_MIN_RETRACED_PCT:
+        return "out_and_back"
+    if shape.retraced_pct > MAX_RETRACED_PCT:
+        return "lollipop"
+    if shape.compactness is None or shape.compactness < MIN_COMPACTNESS:
+        return None
+    return "loop"
+
+
+def _evaluate(
+    method: str, kind: Kind | None, label: str, route: Route, rules: _Rules, rejected: Counter,
+    allowed: tuple[str, ...] = (),
+) -> Candidate | None:
+    """kind=None: classify by geometry (anchored loops), keeping only the kinds in `allowed`."""
+    if touched(route.coordinates, list(rules.avoid)):
+        rejected["no_go_zone"] += 1
+        return None
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
         rejected["degenerate"] += 1
         return None
-    if shape.compactness is None:
-        rejected["not_a_loop"] += 1
-        return None
-    if shape.retraced_pct > MAX_RETRACED_PCT:
-        rejected["retraced"] += 1
-        return None
-    if shape.compactness < MIN_COMPACTNESS:
-        rejected["too_thin"] += 1
-        return None
-    miss = percent_off(miles, meters_to_miles(route.distance_m))
-    return Candidate(method, label, route, shape, shape_score(shape), miss, abs(miss) <= TOLERANCE_PCT)
+    if kind is None:
+        kind = _classify(shape)
+        if kind is None:
+            rejected["too_thin"] += 1
+            return None
+        if kind not in allowed:
+            rejected[f"unwanted_{kind}"] += 1
+            return None
+    elif kind == "out_and_back":
+        if shape.retraced_pct < OUT_AND_BACK_MIN_RETRACED_PCT:
+            rejected["not_out_and_back"] += 1
+            return None
+    elif kind == "loop":
+        if shape.compactness is None:
+            rejected["not_a_loop"] += 1
+            return None
+        if shape.retraced_pct > MAX_RETRACED_PCT:
+            rejected["retraced"] += 1
+            return None
+        if shape.compactness < MIN_COMPACTNESS:
+            rejected["too_thin"] += 1
+            return None
+    miss = percent_off(rules.miles, meters_to_miles(route.distance_m))
+    context = rules.context_fn(route.coordinates) if rules.context_fn else None
+    ranking = rank(kind, shape, rules.prefs, context)
+    return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking)
 
 
 def _dedupe(ranked: list[Candidate], limit: int) -> list[Candidate]:
@@ -208,6 +258,18 @@ def _dedupe(ranked: list[Candidate], limit: int) -> list[Candidate]:
     return chosen
 
 
+def _offer_both_kinds(chosen: list[Candidate], ranked: list[Candidate]) -> list[Candidate]:
+    """When either shape is fine, make sure the options include the best of each kind, if there is one."""
+    if len(chosen) < 2:
+        return chosen
+    for kind in ("loop", "out_and_back"):
+        if not any(c.kind == kind for c in chosen):
+            best = next((c for c in ranked if c.kind == kind), None)
+            if best is not None:
+                chosen = chosen[:-1] + [best]
+    return sorted(chosen, key=lambda c: -c.score)
+
+
 def generate_loops(
     lat: float,
     lon: float,
@@ -217,9 +279,17 @@ def generate_loops(
     round_trip_fn: RoundTripFn,
     top_n: int = 3,
     workers: int = 4,
+    shape: str = "loop",  # RunConstraints.shape: "loop", "out_and_back" or "any"
+    prefs: dict | None = None,  # resolved preferences; neutral defaults when None
+    avoid: list[NoGoZone] | tuple[NoGoZone, ...] = (),
+    context_fn: ContextFn | None = None,  # scores park/water, signals, familiarity; those stay not_scored without it
+    anchor_fn: AnchorFn | None = None,  # optional: points on the runner's own corridors (familiar routes)
+    feature_anchor_fn: AnchorFn | None = None,  # parks, waterfront and catalog corridors from OSM, for every runner
+    area_route_fn: AreaRouteFn | None = None,  # routes anchored candidates preferring the feature's area, if given
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn)
     rejected: Counter = Counter()
     candidates: list[Candidate] = []
     generated = 0
@@ -246,7 +316,7 @@ def generate_loops(
             except RoutingError:
                 rejected["routing_failed"] += 1
                 return None
-            return _evaluate("rectangle", spec.label, route, miles, rejected)
+            return _evaluate("rectangle", "loop", spec.label, route, rules, rejected)
 
         return job
 
@@ -257,28 +327,116 @@ def generate_loops(
             except RoutingError:
                 rejected["routing_failed"] += 1
                 return None
-            return _evaluate("round_trip", f"round trip, seed {seed}", route, miles, rejected)
+            return _evaluate("round_trip", "loop", f"round trip, seed {seed}", route, rules, rejected)
 
         return job
 
-    # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good
-    # loop. Where the grid is weak neither method wins everywhere (measured in decision 008), so round
-    # trips are generated too and the shape score decides.
-    run_all([rectangle_job(s) for s in _rectangle_specs()])
-    grid_is_weak = grid.strength < MIN_GRID_STRENGTH
-    if grid_is_weak:
-        notes.append(
-            f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable; "
-            "also tried GraphHopper round trips and kept whichever scored best."
-        )
-    if grid_is_weak or not any(c.within_tolerance for c in candidates):
-        if not grid_is_weak:
-            notes.append("No rectangle reached the distance target; added GraphHopper round trips.")
+    def out_and_back_job(heading: float) -> Callable[[], Candidate | None]:
+        bearing = (grid.angle_deg + heading) % 360
+
+        def job():
+            def make_route(scale: float) -> Route:
+                return route_fn([start, _offset(*start, bearing, target_m / 2 * scale), start])
+
+            try:
+                route = _fit(make_route, target_m)
+            except RoutingError:
+                rejected["routing_failed"] += 1
+                return None
+            label = f"out-and-back, heading {bearing:.0f} degrees"
+            return _evaluate("out_and_back", "out_and_back", label, route, rules, rejected)
+
+        return job
+
+    def anchored_job(anchors: Anchors, points: list[tuple[float, float, float]], radius: float,
+                     out_and_back: bool) -> Callable[[], Candidate | None]:
+        entry = anchors.entry
+        where = {"familiar": "on a route you run", "park": f"through {anchors.name}", "water": "on the waterfront",
+                 "corridor": f"on {anchors.name}"}.get(anchors.source, anchors.name or anchors.source)
+
+        far = points[-1]
+        bearing = math.degrees(math.atan2((far[1] - lon) * math.cos(math.radians(lat)), far[0] - lat)) % 360
+        beyond_ids: set[int] = set()  # routes that went past the feature's far end
+        # Prefer staying on the feature (decision 012): otherwise the shortest way to a far turnaround runs inland and
+        # the route only touches the water or the park at its tip.
+        router = (lambda pts: area_route_fn(pts, anchors.area)) if area_route_fn and anchors.area else route_fn
+
+        def job():
+            def make_route(scale: float) -> Route:
+                want = radius * scale
+                via = [entry] if entry is not None else []
+                past_end = want > far[2] * 1.02
+                if not past_end:
+                    # Rescaling picks another anchor point rather than sliding the turnaround off the feature.
+                    turn = min(points, key=lambda p: abs(p[2] - want))[:2]
+                    out = [p for p in via if p != turn] + [turn]
+                else:
+                    # The feature is too small for the distance: run through it to its far end and keep going the
+                    # same way to a turnaround that fits (decision 012).
+                    out = [p for p in via if p != far[:2]] + [far[:2], _offset(*start, bearing, want)]
+                back = out[-2::-1] if out_and_back else []
+                try:
+                    route = router([start, *out, *back, start])
+                except RoutingError:
+                    if not past_end:
+                        raise
+                    # The turnaround past the end is off the map (in the river, say): turn at the far end instead.
+                    out = out[:-1]
+                    back = out[-2::-1] if out_and_back else []
+                    return router([start, *out, *back, start])
+                if past_end:
+                    beyond_ids.add(id(route))
+                return route
+
+            try:
+                route = _fit(make_route, target_m)
+            except RoutingError:
+                rejected["routing_failed"] += 1
+                return None
+            beyond = " and beyond" if id(route) in beyond_ids else ""
+            if out_and_back:
+                return _evaluate(f"{anchors.source}_out_and_back", "out_and_back",
+                                 f"out-and-back {where}{beyond}, heading {bearing:.0f} degrees", route, rules, rejected)
+            return _evaluate(f"{anchors.source}_loop", None, f"loop {where}{beyond}, heading {bearing:.0f} degrees",
+                             route, rules, rejected, allowed=SHAPE_KINDS[shape])
+
+        return job
+
+    def anchored_jobs(sets: list[Anchors], radius: float) -> list[Callable[[], Candidate | None]]:
+        jobs = []
+        for anchors in sets:
+            limit = MAX_ANCHOR_DIRECTIONS.get(anchors.source, DEFAULT_ANCHOR_DIRECTIONS)
+            for pts in [p for p in anchors.directions if p][:limit]:
+                if shape in ("out_and_back", "any"):
+                    jobs.append(anchored_job(anchors, pts, radius, out_and_back=True))
+                if shape in ("loop", "any") and anchors.entry is not None:
+                    jobs.append(anchored_job(anchors, pts, radius, out_and_back=False))
+        return jobs
+
+    if shape in ("loop", "any"):
+        # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good loop.
+        # Round trips are tried everywhere too (decision 012): on a strong grid they lose on shape, but they are the
+        # one generator not tied to the grid, and the ranking decides.
+        run_all([rectangle_job(s) for s in _rectangle_specs()])
+        if grid.strength < MIN_GRID_STRENGTH:
+            notes.append(
+                f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable."
+            )
         run_all([round_trip_job(seed) for seed in FALLBACK_SEEDS])
+    if shape in ("out_and_back", "any"):
+        run_all([out_and_back_job(h) for h in OUT_AND_BACK_HEADINGS])
+    # Turnaround roughly half the distance out, allowing ~25% for streets not running straight there.
+    radius = target_m / 2 / 1.25
+    if feature_anchor_fn is not None:
+        run_all(anchored_jobs(feature_anchor_fn(lat, lon, radius), radius))
+    if anchor_fn is not None:
+        run_all(anchored_jobs(anchor_fn(lat, lon, radius), radius))
 
     in_tolerance = sorted((c for c in candidates if c.within_tolerance), key=lambda c: -c.score)
     if in_tolerance:
         chosen = _dedupe(in_tolerance, top_n)
+        if shape == "any":
+            chosen = _offer_both_kinds(chosen, in_tolerance)
     else:
         chosen = _dedupe(sorted(candidates, key=lambda c: abs(c.miss_pct)), top_n)
         if chosen:

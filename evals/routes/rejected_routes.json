@@ -1,0 +1,19 @@
+{
+  "_about": "Every route a reviewer rejected, kept as a failing eval until the generator stops producing it (decision 009). Each case names a start from starts.json, the distances and how many of the top results to check, and a rule the rejected route broke. Rule types: avoid_area (no top route may touch the polygon).",
+  "cases": [
+    {
+      "id": "kips-bay-through-times-square",
+      "rejected_on": "2026-10-30",
+      "start": "kips-bay",
+      "miles": [4, 6],
+      "top": 3,
+      "seen": "4 mi rank 2 (shape score 95) and 6 mi rank 3 passed within 10-14 m of Times Square",
+      "reason": "Goes through Times Square. No runner would choose that route.",
+      "rule": {
+        "type": "avoid_area",
+        "name": "Times Square (Broadway and 7th Ave, W 42nd to W 47th St, plus 40 m)",
+        "area": {"type": "Polygon", "coordinates": [[[-73.98599, 40.75569], [-73.98627, 40.75548], [-73.98665, 40.75551], [-73.98717, 40.75572], [-73.98739, 40.75592], [-73.98738, 40.75617], [-73.98557, 40.75957], [-73.98529, 40.75977], [-73.98491, 40.75975], [-73.98439, 40.75954], [-73.98418, 40.75934], [-73.98418, 40.75909], [-73.98599, 40.75569]]]}
+      }
+    }
+  ]
+}
