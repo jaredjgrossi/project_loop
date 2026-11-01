@@ -36,3 +36,4 @@ Loop turns a plain-English run request ("6 mi loop from Kips Bay, mostly waterfr
 - Log tokens and cost for every Claude call into the `llm_calls` table.
 - Record each architecture choice as a short note in `docs/decisions/NNN-title.md`.
 - Keep each phase shippable; don't start v2 (tours) work until asked.
+- Personal run data (`apple_health_export/`, `data/`) is git-ignored and never committed. Trim the first and last 200 m of any real route before storing or rendering it (decision 011).

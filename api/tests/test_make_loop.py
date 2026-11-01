@@ -31,7 +31,7 @@ def candidate(miles_actual=4.0, requested=4.0, label="rectangle 1:1, ++", score=
 
 
 def fake_generate(candidates, note=None, within=True):
-    def generate_fn(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3):
+    def generate_fn(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
         return GenerationResult(
             candidates=candidates[:top_n], within_tolerance=within, grid=grid, generated=20,
             rejected=Counter({"retraced": 2}), note=note,
@@ -56,7 +56,7 @@ def test_writes_geojson_with_shape_and_reports_it(tmp_path, capsys):
     assert "geojson.io" in text
     fc = json.loads((tmp_path / "loop.geojson").read_text())
     props = fc["features"][0]["properties"]
-    for key in ("turns", "turns_per_mile", "longest_straight_m", "retraced_pct", "shape_score", "method", "rank"):
+    for key in ("turns", "turns_per_mile", "longest_straight_m", "retraced_pct", "score", "kind", "method", "rank"):
         assert key in props
     assert props["rank"] == 1
 
@@ -138,3 +138,49 @@ def test_main_parses_arguments(tmp_path, monkeypatch):
     out = tmp_path / "x.geojson"
     assert main(["11 Madison Ave, Manhattan", "4", "--out", str(out)]) == 0
     assert out.exists()
+
+
+def test_parsed_request_is_shown_and_passed_to_the_generator(tmp_path, capsys):
+    seen = {}
+
+    def spy(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        seen.update(kw)
+        return fake_generate([candidate()])(lat, lon, miles, grid, route_fn, round_trip_fn, top_n)
+
+    assert go(tmp_path, spy, shape="out_and_back", mode="training") == 0
+    text = capsys.readouterr().out
+    assert "Request:" in text and "Shape: out and back" in text and "Training preset" in text
+    assert seen["shape"] == "out_and_back"
+    assert seen["prefs"]["crowds"] == "avoid"
+    assert any(z.id == "times_square" for z in seen["avoid"])  # default no-go zones always apply
+
+
+def test_an_unknown_place_to_avoid_is_reported_not_silently_dropped(tmp_path, capsys):
+    assert go(tmp_path, fake_generate([candidate()]), avoid=["Nowhere Plaza"]) == 0
+    assert "'Nowhere Plaza' isn't in the no-go list, so it was NOT applied" in capsys.readouterr().out
+
+
+def test_stretches_elevation_and_hour_go_into_the_geojson(tmp_path):
+    stretch = {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+               "properties": {"feature": "stretch", "name": "East River Esplanade"}}
+    assert go(tmp_path, fake_generate([candidate()]), stretch_fn=lambda coords, ele: [stretch], start_time="06:30") == 0
+    fc = json.loads((tmp_path / "loop.geojson").read_text())
+    props = fc["features"][0]["properties"]
+    assert props["start_hour"] == 6
+    assert props["elevation"]["status"] == "not_scored"  # the fake route has no elevation
+    assert fc["features"][-1]["properties"]["name"] == "East River Esplanade"
+
+
+def test_the_pool_is_written_with_the_request_and_timing(tmp_path):
+    pool_file = tmp_path / "pool.json"
+
+    def with_pool(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        r = fake_generate([candidate()])(lat, lon, miles, grid, route_fn, round_trip_fn, top_n)
+        r.pool = [{"method": "rectangle", "status": "chosen", "metrics": {"turns_per_mile": 2.0}}]
+        r.timing = {"first_candidate_s": 0.2, "winner_arrived_s": 0.4, "total_s": 1.0}
+        return r
+
+    assert go(tmp_path, with_pool, pool_out=pool_file) == 0
+    data = json.loads(pool_file.read_text())
+    assert data["pool"][0]["status"] == "chosen" and data["timing"]["first_candidate_s"] == 0.2
+    assert data["request"]["distance_mi"] == 4.0

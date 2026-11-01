@@ -41,6 +41,8 @@ This is the part that makes the project read as product work. Talk to **5–8 NY
 
 **Out (for now):** accounts beyond simple sign-in, social features, live tracking, elevation scoring (NYC is mostly flat, so this can wait for v1.5), building stories (v2).
 
+**Product idea, not built: "routes you already run."** A runner uploads their own GPX history, or connects Strava or Apple Health. Loop map-matches it, trims the ends for privacy, and learns which corridors they actually use. Those corridors become a "matches routes you run" dimension that the runner can turn up ("a good variation on what I already run") or reverse ("show me new ground"). It works today for one runner from a local Apple Health export (decision 011). For other runners it needs consent, storage and deletion designed first.
+
 ---
 
 ## 4. Success metrics
@@ -114,8 +116,14 @@ This is the section product and AI interviewers will ask about.
 |---|---|---|
 | 0. Discovery | 1 | 5–8 runner interviews, pain-point summary, final v1 scope |
 | 1. Data foundation | 2 | Docker Compose: Postgres+PostGIS and GraphHopper on the NYC extract. Load parks, fountains and restrooms. A script returns one loop from an address |
-| 2. Scoring | 3 | **Loop shape first** (turns per mile, straight-run share, retraced share, width, compactness; reported for every loop), then grid-aligned rectangle candidates with a distance rescale loop (decision 008). Then park/waterfront share, crossing count, amenities near mile X with trust labels. Return the top 3 from a CLI. Corridor anchoring (avenues, East River path) comes after plain rectangles are measured |
-| 3. API + Claude | 4–5 | FastAPI endpoints, Claude parse step (tool use with strict schema), explain step, parse eval set and cost logging |
+| 2. Scoring | 3 | **Loop shape first** (turns per mile, straight-run share, retraced share, width, compactness; reported for every loop), then grid-aligned rectangle candidates with a distance rescale loop (decision 008). Then, per decision 009, rank routes against the runner's preferences (`RunConstraints`: lights, crowds, scenery, surface, turns, "matches routes you run", Training vs. Exploring preset).
+- Done: the combined ranking with no-go zones, out-and-back as a route type (010), and calibration against the reviewer's map-matched real runs with one set of definitions, which added park/water, signals and the runner prior (011).
+- Done: park, waterfront and corridor generators from OSM for every runner, a verified corridor catalog, lollipop as a route type, and round trips everywhere (012).
+- Done: UI-ready outputs (streaming with timing, the candidate pool, per-segment GeoJSON with stretch names, elevation, start hour, the feedback schema), turnarounds by walking distance, and cleaned corridor names (014).
+- Next, one at a time: the lights preference on the router side, roadway share and the bike-lane rule, crowds (estimate, using the start hour), a closures layer.
+- Every value is labeled measured, estimate or not scored, and weights stay provisional until calibrated. Amenities near mile X annotate the top 3 after ranking.
+- Every change is checked on the fixed review starts and against real runs. Every rejected route becomes a failing eval |
+| 3. API + Claude | 4–5 | FastAPI endpoints, Claude parse step into `RunConstraints` (tool use with strict schema; the parsed request is shown to the runner before routing), explain step, parse eval set and cost logging |
 | 4. Frontend | 6–7 | Phone-first PWA: request box, map with 3 options, score cards, GPX export, "I ran it" and rating |
 | 5. Ship | 8 | Deploy, auth, PostHog, README with architecture and eval results, 90-second demo video |
 | 6. Users | 9–12 | Put it in front of 2–3 run clubs and the discovery runners. Weekly changelog of fixes based on feedback |
@@ -152,7 +160,7 @@ Fill in the X's with real numbers. That's the point.
 
 ---
 
-## 12. Phase 1 findings (what the real data and tools changed)
+## 12. Findings (what the real data and tools changed)
 Checked 2026-10-30. Details and reasoning are in `docs/decisions/`.
 
 | Finding | Effect on the plan |
@@ -166,3 +174,5 @@ Checked 2026-10-30. Details and reasoning are in `docs/decisions/`.
 | 14 park polygons are self-intersecting | Repaired and flagged at load (006) |
 | Official PostGIS image is Intel-only | Use the community multi-arch image on Apple Silicon (001) |
 | `round_trip` loops zigzag, ribbon, or retrace (median compactness 0.15, 5.5 turns per mile); grid rectangles did far better in a prototype | Shape metrics are scored for every loop; candidates are generated as grid-aligned rectangles (008) |
+| The reviewer's real runs (197 map-matched, last 12 months): 66% out-and-back, median 76% retraced, 3.4 turns per mile, 48% in parks and 62% by the water; generated routes reached parks and water almost never | Out-and-back is a route type (010); retracing and turns stay provisional; park, water and corridor generators come next (011) |
+| Decision 008's turn definition counted GPS jitter and short spurs as turns (5.8 per mile on matched runs, against 3.2 for the same runs as raw GPS) | Spurs are removed and the line simplified at 20 m before counting turns, for real and generated routes alike (011) |

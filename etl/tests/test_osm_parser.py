@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from etl.osm_parser import OSM_SOURCE_ID, parse_way
+from etl.osm_parser import OSM_SOURCE_ID, parse_coastline, parse_park, parse_way
 from etl.parsers import RowError
 
 LOADED_AT = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)
@@ -73,3 +73,46 @@ def test_unnamed_way_is_fine():
 def test_unusable_features_are_rejected(bad):
     with pytest.raises(RowError):
         parse(bad)
+
+
+def test_crossing_tags_are_kept_for_signal_counts():
+    f = {**BOERUM, "properties": {"highway": "footway", "footway": "crossing", "crossing": "traffic_signals",
+                                  "crossing:signals": "yes", "crossing_ref": "zebra"}}
+    tags = json.loads(parse(f)["tags"])
+    assert tags == {"highway": "footway", "footway": "crossing", "crossing": "traffic_signals", "crossing:signals": "yes"}
+
+
+def test_coastline_way_is_parsed_with_provenance():
+    f = {"type": "Feature", "id": "w42", "geometry": BOERUM["geometry"], "properties": {"natural": "coastline"}}
+    out = parse_coastline(f, loaded_at=LOADED_AT, source_updated_at=SOURCE_UPDATED)
+    assert out["way_id"] == 42 and out["source_row_id"] == "w42"
+    assert out["geom_ewkt"].startswith("SRID=4326;LINESTRING(-73.9892384 40.6909958")
+
+
+def test_non_coastline_is_rejected():
+    with pytest.raises(RowError):
+        parse_coastline(BOERUM, loaded_at=LOADED_AT, source_updated_at=SOURCE_UPDATED)
+
+
+PARK = {
+    "type": "Feature", "id": "a10058222",
+    "geometry": {"type": "MultiPolygon", "coordinates": [[[[-74.0, 40.70], [-73.99, 40.70], [-73.99, 40.71], [-74.0, 40.70]]]]},
+    "properties": {"leisure": "park", "name": "Hudson River Park", "operator": "Hudson River Park Trust"},
+}
+
+
+def test_osm_park_area_is_parsed_with_provenance():
+    out = parse_park(PARK, loaded_at=LOADED_AT, source_updated_at=SOURCE_UPDATED)
+    assert out["area_id"] == 10058222 and out["source_row_id"] == "a10058222"
+    assert out["name"] == "Hudson River Park" and out["leisure"] == "park"
+    assert json.loads(out["geojson"])["type"] == "MultiPolygon"
+
+
+@pytest.mark.parametrize("bad", [
+    {**PARK, "properties": {"leisure": "playground"}},
+    {**PARK, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}},
+    {**PARK, "id": "w12"},
+])
+def test_non_park_areas_are_rejected(bad):
+    with pytest.raises(RowError):
+        parse_park(bad, loaded_at=LOADED_AT, source_updated_at=SOURCE_UPDATED)

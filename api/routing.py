@@ -24,14 +24,22 @@ class Route:
     time_s: float
     coordinates: list[list[float]]  # [lon, lat]
     seed: int = 0  # round-trip seed; 0 for routes through chosen waypoints
+    elevation: list[float] | None = None  # meters, one per coordinate, when GraphHopper has elevation (decision 014)
 
 
 def graphhopper_url() -> str:
     return os.environ.get("GRAPHHOPPER_URL", DEFAULT_GRAPHHOPPER_URL)
 
 
-def build_round_trip_request(lat: float, lon: float, distance_m: float, seed: int = 0) -> dict:
-    return {
+def _with_model(body: dict, custom_model: dict | None) -> dict:
+    # Merged by GraphHopper into the profile's model (loop_foot.json); works because the profile has no CH (decision 009).
+    return {**body, "custom_model": custom_model} if custom_model else body
+
+
+def build_round_trip_request(
+    lat: float, lon: float, distance_m: float, seed: int = 0, custom_model: dict | None = None
+) -> dict:
+    return _with_model({
         "points": [[lon, lat]],  # GraphHopper takes lon, lat
         "profile": "foot",
         "algorithm": "round_trip",
@@ -39,17 +47,19 @@ def build_round_trip_request(lat: float, lon: float, distance_m: float, seed: in
         "round_trip.seed": seed,
         "points_encoded": False,  # plain GeoJSON coordinates instead of an encoded polyline
         "instructions": False,
-    }
+        "elevation": True,
+    }, custom_model)
 
 
-def build_waypoint_request(points: list[tuple[float, float]]) -> dict:
+def build_waypoint_request(points: list[tuple[float, float]], custom_model: dict | None = None) -> dict:
     """Route through (lat, lon) points in order."""
-    return {
+    return _with_model({
         "points": [[lon, lat] for lat, lon in points],
         "profile": "foot",
         "points_encoded": False,
         "instructions": False,
-    }
+        "elevation": True,
+    }, custom_model)
 
 
 def parse_route(response: dict, seed: int) -> Route:
@@ -57,11 +67,13 @@ def parse_route(response: dict, seed: int) -> Route:
     if not paths:
         raise RoutingError(response.get("message") or "GraphHopper returned no route")
     path = paths[0]
+    coords = path["points"]["coordinates"]
     return Route(
         distance_m=path["distance"],
         time_s=path["time"] / 1000,
-        coordinates=[c[:2] for c in path["points"]["coordinates"]],
+        coordinates=[c[:2] for c in coords],
         seed=seed,
+        elevation=[c[2] for c in coords] if coords and all(len(c) > 2 for c in coords) else None,
     )
 
 
@@ -91,17 +103,21 @@ def request_round_trip(
     seed: int = 0,
     client: httpx.Client | None = None,
     base_url: str | None = None,
+    custom_model: dict | None = None,
 ) -> Route:
-    return _post_route(build_round_trip_request(lat, lon, distance_m, seed), seed, client, base_url)
+    return _post_route(build_round_trip_request(lat, lon, distance_m, seed, custom_model), seed, client, base_url)
 
 
 def request_route(
-    points: list[tuple[float, float]], client: httpx.Client | None = None, base_url: str | None = None
+    points: list[tuple[float, float]],
+    client: httpx.Client | None = None,
+    base_url: str | None = None,
+    custom_model: dict | None = None,
 ) -> Route:
     """A foot route through (lat, lon) points in order."""
     if len(points) < 2:
         raise ValueError("a route needs at least two points")
-    return _post_route(build_waypoint_request(points), 0, client, base_url)
+    return _post_route(build_waypoint_request(points, custom_model), 0, client, base_url)
 
 
 def route_to_geojson(

@@ -89,3 +89,61 @@ CREATE TABLE IF NOT EXISTS osm_ways (
 );
 CREATE INDEX IF NOT EXISTS osm_ways_geom_idx ON osm_ways USING gist (geom);
 CREATE INDEX IF NOT EXISTS osm_ways_highway_idx ON osm_ways (highway);
+
+-- OSM natural=coastline ways (tidal shoreline, which in NYC includes the East and Harlem Rivers): waterfront share.
+CREATE TABLE IF NOT EXISTS osm_coastline (
+    way_id             bigint      PRIMARY KEY,
+    source_dataset_id  text        NOT NULL,
+    source_row_id      text        NOT NULL,
+    source_updated_at  timestamptz,
+    loaded_at          timestamptz NOT NULL,
+    geom               geometry(LineString, 4326) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS osm_coastline_geom_idx ON osm_coastline USING gist (geom);
+
+-- OSM park areas (leisure=park or nature_reserve): park anchors for the generator (decision 012). Unlike Parks
+-- Properties they include Hudson River Park, Brooklyn Bridge Park and Governors Island.
+CREATE TABLE IF NOT EXISTS osm_parks (
+    area_id            bigint      PRIMARY KEY,  -- osmium area id (from a closed way or a multipolygon relation)
+    source_dataset_id  text        NOT NULL,
+    source_row_id      text        NOT NULL,
+    source_updated_at  timestamptz,
+    loaded_at          timestamptz NOT NULL,
+    name               text,
+    leisure            text        NOT NULL,
+    geom               geometry(MultiPolygon, 4326) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS osm_parks_geom_idx ON osm_parks USING gist (geom);
+
+-- Routes as shown to a runner, and what the runner said about them (decision 014). generated_routes keeps the parsed
+-- request, the route's metric vector and dimensions, its stretches, and the generation timing, so a rating can be
+-- traced to exactly what was scored.
+CREATE TABLE IF NOT EXISTS generated_routes (
+    id            text        PRIMARY KEY,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    constraints   jsonb       NOT NULL,           -- RunConstraints as parsed and shown back
+    rank          integer     NOT NULL,
+    method        text        NOT NULL,
+    kind          text        NOT NULL,           -- loop | out_and_back | lollipop
+    label         text        NOT NULL,
+    score         double precision NOT NULL,
+    metrics       jsonb       NOT NULL,           -- Candidate.metric_vector()
+    dimensions    jsonb       NOT NULL,           -- ranking dimensions with status measured / estimate / not_scored
+    stretches     jsonb       NOT NULL,           -- api/segments.py features
+    elevation     jsonb,                          -- api/elevation.py profile (estimate)
+    timing        jsonb,
+    geom          geometry(LineString, 4326) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS route_feedback (
+    id             serial      PRIMARY KEY,
+    route_id       text        NOT NULL REFERENCES generated_routes(id),
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    ran_it         boolean     NOT NULL,
+    rating         smallint    CHECK (rating BETWEEN 1 AND 5),
+    ran_at         timestamptz,
+    issues         text[]      NOT NULL DEFAULT '{}',
+    stretch_issues jsonb       NOT NULL DEFAULT '[]',
+    note           text        CHECK (char_length(note) <= 500),
+    CHECK ((ran_it AND rating IS NOT NULL) OR (NOT ran_it AND rating IS NULL))
+);
+CREATE INDEX IF NOT EXISTS route_feedback_route_idx ON route_feedback (route_id);
