@@ -10,3 +10,7 @@ routing/data/
 out/
 .pytest_cache/
 .DS_Store
+
+# Personal GPS/health data - never commit
+apple_health_export/
+data/

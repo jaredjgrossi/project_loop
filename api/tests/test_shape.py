@@ -8,7 +8,7 @@ import math
 
 import pytest
 
-from api.shape import ShapeMetrics, shape_metrics
+from api.shape import ShapeMetrics, shape_metrics, trim_ends
 
 LAT0, LON0 = 40.74, -73.98
 M_PER_DEG_LAT = 110_574
@@ -145,7 +145,7 @@ def test_returns_a_shapemetrics_and_serializes_to_plain_numbers():
     d = m.as_dict()
     assert set(d) == {
         "distance_miles", "turns", "turns_per_mile", "longest_straight_m",
-        "pct_in_long_runs", "retraced_pct", "mean_width_m", "compactness",
+        "pct_in_long_runs", "retraced_pct", "mean_width_m", "compactness", "out_and_back_pct", "closure_m",
     }
     assert all(isinstance(v, (int, float)) or v is None for v in d.values())
 
@@ -154,3 +154,53 @@ def test_returns_a_shapemetrics_and_serializes_to_plain_numbers():
 def test_degenerate_routes_are_rejected(coords):
     with pytest.raises(ValueError):
         shape_metrics(coords)
+
+
+# --- definitions fixed in decision 011 ------------------------------------------------
+
+
+def test_short_spurs_are_not_turns():
+    # Map matching and waypoint snapping leave 10-20 m out-and-back spikes; decision 008's definition counted
+    # each as two turns.
+    pts = densify([(0, 0), (500, 0), (500, 15), (500, 0), (1000, 0), (1000, -10), (1020, -10), (1000, -10),
+                   (1000, 0), (1500, 0)], step=5)
+    assert shape_metrics(lonlat(pts)).turns == 0
+
+
+def test_gps_jitter_does_not_make_turns():
+    import random
+
+    rng = random.Random(1)
+    pts = [(x + rng.gauss(0, 3), y + rng.gauss(0, 3)) for x, y in densify([(0, 0), (1600, 0), (1600, 800)], step=5)]
+    assert shape_metrics(lonlat(pts)).turns == 1
+
+
+def test_sidewalk_jog_at_a_crossing_is_not_a_turn():
+    # Straight on, with a 6 m sideways offset where the sidewalk meets the crosswalk.
+    pts = densify([(0, 0), (400, 0), (406, 6), (420, 6), (800, 6)], step=5)
+    assert shape_metrics(lonlat(pts)).turns == 0
+
+
+def test_out_and_back_share_is_how_much_of_the_second_half_revisits_the_first():
+    out_back = shape_metrics(lonlat(densify([(0, 0), (1500, 0), (0, 0)])))
+    square = shape_metrics(lonlat(rect(1000, 1000)))
+    # Lollipop: 600 m stick, 1200 m loop, back down the stick. Second half = 600 m of loop + the 600 m stick.
+    lollipop = shape_metrics(lonlat(densify([(0, 0), (600, 0), (900, 0), (900, 300), (600, 300), (600, 0), (0, 0)])))
+    assert out_back.out_and_back_pct == pytest.approx(100, abs=3)
+    assert square.out_and_back_pct < 5
+    assert 35 < lollipop.out_and_back_pct < 70
+
+
+def test_closure_is_the_start_to_finish_gap():
+    assert shape_metrics(lonlat(rect(1000, 1000))).closure_m == pytest.approx(0, abs=1)
+    assert shape_metrics(lonlat(densify([(0, 0), (0, 1000), (300, 1000)]))).closure_m == pytest.approx(1044, rel=0.01)
+
+
+def test_trim_ends_drops_the_first_and_last_200_m():
+    line = lonlat(densify([(0, 0), (1000, 0)], step=10))
+    trimmed = shape_metrics(trim_ends(line, 200))
+    assert trimmed.distance_miles * 1609.344 == pytest.approx(600, abs=15)
+
+
+def test_trim_ends_of_a_short_route_leaves_nothing():
+    assert trim_ends(lonlat(densify([(0, 0), (300, 0)])), 200) == []
