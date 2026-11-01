@@ -3,7 +3,11 @@
 graphhopper:
   custom_models.directory: /config/custom_models
   datareader.file: /data/nyc.osm.pbf
-  graph.location: /graph-cache/foot-v2 # to force a re-import, delete routing/graph-cache/foot-v2 (or bump the suffix)
+  graph.location: /graph-cache/foot-v3 # to force a re-import, delete routing/graph-cache/foot-v3 (or bump the suffix)
+  # Elevation (decision 014): public Terrain Tiles on AWS (Skadi format; USGS elevation data in the US), downloaded on
+  # import into the cache. Routes return [lon, lat, elevation] when a request asks for elevation.
+  graph.elevation.provider: skadi
+  graph.elevation.cache_dir: /graph-cache/elevation
   profiles:
     - name: foot
       custom_model_files: [loop_foot.json]

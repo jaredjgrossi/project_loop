@@ -20,13 +20,15 @@ import psycopg
 from etl.load import database_url
 
 from api.constraints import RunConstraints, describe, resolve_preferences
-from api.anchors import Anchors, feature_anchors
+from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
 from api.grid import GridEstimate
 from api.nogo import NoGoZone, custom_model
 from api.nogo import resolve as resolve_zones
+from api.elevation import elevation_profile
 from api.route_context import ContextScores, score_context
+from api.segments import route_stretches
 from api.routing import RoutingError, request_round_trip, request_route, route_to_geojson
 from api.streets import grid_at
 
@@ -93,14 +95,27 @@ def familiar_anchors(lat: float, lon: float, radius_m: float) -> list[Anchors]:
             if dist >= 0.4 * radius_m:
                 sectors.setdefault(int(bearing // ANCHOR_SECTOR_DEG), []).append((a_lat, a_lon, dist, runs))
         busiest = sorted(sectors.values(), key=lambda pts: -sum(p[3] for p in pts))
-        out.append(Anchors(entry=entry, directions=[sorted((p[:3] for p in pts), key=lambda p: p[2]) for pts in busiest]))
+        out.append(Anchors(entry=entry, directions=[sorted((p[:3] for p in pts), key=lambda p: p[2]) for pts in busiest],
+                           placement="straight"))
     return out
 
 
-def db_feature_anchors(lat: float, lon: float, radius_m: float) -> list[Anchors]:
-    """Parks, waterfront and catalog corridors within reach, from OSM in PostGIS (decision 012)."""
+def _on_own_connection(fetch: Callable) -> Callable:
+    def run(lat: float, lon: float, radius_m: float) -> list[Anchors]:
+        with psycopg.connect(database_url()) as conn:
+            return fetch(conn, lat, lon, radius_m)
+
+    return run
+
+
+# One function per source, so the generator fetches them in parallel and starts routing the first to arrive.
+DB_FEATURE_ANCHOR_SOURCES = [_on_own_connection(f) for f in (corridor_anchors, park_anchors, water_anchors)]
+
+
+def db_stretches(coords: list[list[float]], elevation: list[float] | None) -> list[dict]:
+    """Per-stretch GeoJSON features for a route (decision 014)."""
     with psycopg.connect(database_url()) as conn:
-        return feature_anchors(conn, lat, lon, radius_m)
+        return route_stretches(conn, coords, elevation)
 
 
 def routers(zones: list[NoGoZone]) -> tuple[Callable, Callable]:
@@ -167,12 +182,15 @@ def run(
     anchor_fn: Callable | None = None,
     feature_anchor_fn: Callable | None = None,
     area_route_fn: Callable | None = None,
+    start_time: str | None = None,
+    stretch_fn: Callable | None = None,  # (coords, elevation) -> stretch features (api/segments.py)
+    pool_out: Path | None = None,
 ) -> int:
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
         return 4
     constraints = RunConstraints(start_address=address, distance_mi=miles, shape=shape, mode=mode,
-                                 avoid_places=avoid or [])
+                                 avoid_places=avoid or [], start_time=start_time)
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)
     for name in unknown:
@@ -207,6 +225,14 @@ def run(
 
     rejected = ", ".join(f"{n} {why}" for why, n in result.rejected.items())
     print(f"Tried:     {result.generated} candidates" + (f" (rejected: {rejected})" if rejected else ""))
+    tm = result.timing
+    if tm.get("first_candidate_s") is not None:
+        print(f"Timing:    first candidate {tm['first_candidate_s']:.2f} s, #1 arrived {tm['winner_arrived_s']:.2f} s, "
+              f"all done {tm['total_s']:.2f} s")
+    if pool_out is not None:
+        pool_out.parent.mkdir(parents=True, exist_ok=True)
+        pool_out.write_text(json.dumps({"request": constraints.model_dump(mode="json"), "timing": tm, "pool": result.pool}))
+        print(f"Pool:      {len(result.pool)} candidates with metric vectors -> {pool_out}")
     if result.note:
         print(f"Note:      {result.note}")
     if not result.candidates:
@@ -221,8 +247,12 @@ def run(
         path = base if len(result.candidates) == 1 else base.with_name(f"{base.stem}-rank{rank}{base.suffix}")
         geojson = route_to_geojson(
             c.route, place.lat, place.lon, place.label, miles, c.shape.as_dict(),
-            extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score)},
+            extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score),
+                              "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
+                              "start_hour": constraints.start_hour},
         )
+        if stretch_fn is not None:
+            geojson["features"] += stretch_fn(c.route.coordinates, c.route.elevation)
         path.write_text(json.dumps(geojson))
         saved.append(path)
 
@@ -242,10 +272,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], default="any", help="route shape (default any)")
     ap.add_argument("--mode", choices=["training", "exploring"], help="preference preset")
     ap.add_argument("--avoid", action="append", default=[], help="a named no-go place (repeatable)")
+    ap.add_argument("--start-time", help="departure time, HH:MM (carried and shown; nothing hour-dependent is scored yet)")
+    ap.add_argument("--pool", type=Path, help="also write every candidate with its metric vector to this JSON file")
     args = ap.parse_args(argv)
     return run(args.address, args.miles, out=args.out, top=args.top, geocode_fn=geocode, grid_fn=current_grid,
                generate_fn=generate_loops, shape=args.shape, mode=args.mode, avoid=args.avoid,
-               context_fn=db_context, anchor_fn=familiar_anchors, feature_anchor_fn=db_feature_anchors)
+               context_fn=db_context, anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,
+               start_time=args.start_time, stretch_fn=db_stretches, pool_out=args.pool)
 
 
 if __name__ == "__main__":

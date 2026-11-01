@@ -17,11 +17,14 @@ by api/ranking.py. If none reaches the distance tolerance, the nearest ones are 
 Pure orchestration: routing is injected, so this module needs no network or database.
 """
 
+import itertools
 import math
+import queue
+import threading
+import time
 from collections import Counter
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass, field
 
 from api.anchors import Anchors
 from api.constraints import DEFAULTS
@@ -50,8 +53,10 @@ ContextFn = Callable[[list[list[float]]], ContextScores]  # [lon, lat] route -> 
 AnchorFn = Callable[[float, float, float], list[Anchors]]  # (lat, lon, radius_m) -> anchor sets
 AreaRouteFn = Callable[[list[tuple[float, float]], dict], Route]  # (lat, lon) points, GeoJSON area -> route
 # Per anchor set; other sources get DEFAULT_ANCHOR_DIRECTIONS. The waterfront set spans the whole shore within reach,
-# so every direction is tried: ranked by point count, the top two can both be across the river.
-MAX_ANCHOR_DIRECTIONS = {"familiar": 4, "water": 8}
+# so it gets more: ranked by point count, the top straight-line directions can all be across the river (cutting the
+# straight-line set to 3 lost the Kips Bay 6 mi winner; decision 014).
+MAX_ANCHOR_DIRECTIONS = {("familiar", "along"): 4, ("familiar", "straight"): 4, ("water", "along"): 4,
+                         ("water", "straight"): 8}
 DEFAULT_ANCHOR_DIRECTIONS = 2
 SHAPE_KINDS = {  # which route kinds each RunConstraints.shape accepts; a lollipop starts and ends as a loop does
     "loop": ("loop", "lollipop"),
@@ -73,6 +78,23 @@ class Candidate:
     within_tolerance: bool
     kind: Kind = "loop"
     ranking: Ranking | None = None
+    context: ContextScores | None = None
+
+    def metric_vector(self) -> dict:
+        """Every measured number for this candidate, flat, for the candidate pool and the UI (decision 014)."""
+        vec = {"distance_m": round(self.route.distance_m), "miss_pct": round(self.miss_pct, 1), **self.shape.as_dict()}
+        if self.context is not None:
+            vec.update({k: (None if v is None else round(v, 1)) for k, v in asdict(self.context).items()})
+        return vec
+
+
+@dataclass(frozen=True)
+class Rejection:
+    """A job that produced no candidate: routing failed, or a hard rule rejected the route."""
+
+    method: str
+    label: str
+    reason: str
 
 
 @dataclass
@@ -83,9 +105,15 @@ class GenerationResult:
     generated: int  # candidates attempted
     rejected: Counter = field(default_factory=Counter)  # reason -> count
     note: str | None = None
+    pool: list[dict] = field(default_factory=list)  # every job's outcome with its metric vector (decision 014)
+    timing: dict = field(default_factory=dict)  # seconds: first candidate, when the winner arrived, total
 
 
 # --- geometry ------------------------------------------------------------------------
+
+
+def _meters(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return math.hypot((a[1] - b[1]) * 111_320 * math.cos(math.radians(a[0])), (a[0] - b[0]) * M_PER_DEG_LAT)
 
 
 def _offset(lat: float, lon: float, bearing_deg: float, meters: float) -> tuple[float, float]:
@@ -208,44 +236,37 @@ def _classify(shape: ShapeMetrics) -> Kind | None:
 
 
 def _evaluate(
-    method: str, kind: Kind | None, label: str, route: Route, rules: _Rules, rejected: Counter,
+    method: str, kind: Kind | None, label: str, route: Route, rules: _Rules,
     allowed: tuple[str, ...] = (),
-) -> Candidate | None:
+) -> Candidate | Rejection:
     """kind=None: classify by geometry (anchored loops), keeping only the kinds in `allowed`."""
     if touched(route.coordinates, list(rules.avoid)):
-        rejected["no_go_zone"] += 1
-        return None
+        return Rejection(method, label, "no_go_zone")
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
-        rejected["degenerate"] += 1
-        return None
+        return Rejection(method, label, "degenerate")
     if kind is None:
         kind = _classify(shape)
         if kind is None:
-            rejected["too_thin"] += 1
-            return None
+            return Rejection(method, label, "too_thin")
         if kind not in allowed:
-            rejected[f"unwanted_{kind}"] += 1
-            return None
+            return Rejection(method, label, f"unwanted_{kind}")
     elif kind == "out_and_back":
         if shape.retraced_pct < OUT_AND_BACK_MIN_RETRACED_PCT:
-            rejected["not_out_and_back"] += 1
-            return None
+            return Rejection(method, label, "not_out_and_back")
     elif kind == "loop":
         if shape.compactness is None:
-            rejected["not_a_loop"] += 1
-            return None
+            return Rejection(method, label, "not_a_loop")
         if shape.retraced_pct > MAX_RETRACED_PCT:
-            rejected["retraced"] += 1
-            return None
+            return Rejection(method, label, "retraced")
         if shape.compactness < MIN_COMPACTNESS:
-            rejected["too_thin"] += 1
-            return None
+            return Rejection(method, label, "too_thin")
     miss = percent_off(rules.miles, meters_to_miles(route.distance_m))
     context = rules.context_fn(route.coordinates) if rules.context_fn else None
     ranking = rank(kind, shape, rules.prefs, context)
-    return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking)
+    return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking,
+                     context)
 
 
 def _dedupe(ranked: list[Candidate], limit: int) -> list[Candidate]:
@@ -270,6 +291,83 @@ def _offer_both_kinds(chosen: list[Candidate], ranked: list[Candidate]) -> list[
     return sorted(chosen, key=lambda c: -c.score)
 
 
+PRIORITY = {"anchors": 0, "anchored": 1, "anchored_straight": 2, "out_and_back": 3, "rectangle": 4, "round_trip": 5}
+
+
+def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
+                     on_candidate: Callable[[Candidate, float], None] | None) -> list[tuple[object, float]]:
+    """Run jobs on `workers` threads, lowest priority number first. A job returns a Candidate, a Rejection, or a list
+    of further (priority, job) pairs to schedule (an anchor lookup returns the routes built from its anchors).
+    Returns every outcome with the seconds since the start at which it arrived; calls on_candidate as each Candidate
+    arrives, so a caller can stream them."""
+    t0 = time.perf_counter()
+    tasks: queue.PriorityQueue = queue.PriorityQueue()
+    order = itertools.count()
+    lock = threading.Lock()
+    pending = [0]
+    all_done = threading.Event()
+    outcomes: list[tuple[object, float]] = []
+
+    def put(priority: int, job: Callable) -> None:
+        with lock:
+            pending[0] += 1
+        tasks.put((priority, next(order), job))
+
+    def worker() -> None:
+        while True:
+            priority, _, job = tasks.get()
+            if job is None:
+                return
+            try:
+                result = job()
+            except RoutingError as exc:  # an anchor lookup or router failing outright
+                result = Rejection("job", str(exc)[:80], "routing_failed")
+            if isinstance(result, list):
+                for p, j in result:
+                    put(p, j)
+            else:
+                elapsed = time.perf_counter() - t0
+                with lock:
+                    outcomes.append((result, elapsed))
+                if on_candidate is not None and isinstance(result, Candidate):
+                    on_candidate(result, elapsed)
+            with lock:
+                pending[0] -= 1
+                if pending[0] == 0:
+                    all_done.set()
+
+    if not jobs:
+        return []
+    for p, j in jobs:
+        put(p, j)
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, workers))]
+    for th in threads:
+        th.start()
+    all_done.wait()
+    for _ in threads:
+        tasks.put((math.inf, next(order), None))
+    for th in threads:
+        th.join()
+    return outcomes
+
+
+def _pool_entry(outcome, elapsed: float, chosen: bool) -> dict:
+    """One job's outcome for the candidate pool (decision 014): JSON-ready, with the metric vector if it produced a
+    route that passed the hard rules."""
+    if isinstance(outcome, Rejection):
+        return {"method": outcome.method, "label": outcome.label, "status": "rejected", "reason": outcome.reason,
+                "elapsed_s": round(elapsed, 3)}
+    c = outcome
+    return {
+        "method": c.method, "label": c.label, "kind": c.kind,
+        "status": "chosen" if chosen else ("ranked" if c.within_tolerance else "out_of_tolerance"),
+        "elapsed_s": round(elapsed, 3), "score": round(c.score, 1), "metrics": c.metric_vector(),
+        "dimensions": [] if c.ranking is None else [
+            {"key": d.key, "label": d.label, "status": d.status, "value": d.value,
+             "fit": None if d.fit is None else round(d.fit, 3), "weight": d.weight} for d in c.ranking.dimensions],
+    }
+
+
 def generate_loops(
     lat: float,
     lon: float,
@@ -284,24 +382,16 @@ def generate_loops(
     avoid: list[NoGoZone] | tuple[NoGoZone, ...] = (),
     context_fn: ContextFn | None = None,  # scores park/water, signals, familiarity; those stay not_scored without it
     anchor_fn: AnchorFn | None = None,  # optional: points on the runner's own corridors (familiar routes)
-    feature_anchor_fn: AnchorFn | None = None,  # parks, waterfront and catalog corridors from OSM, for every runner
+    # Parks, waterfront and catalog corridors from OSM, for every runner: one function, or one per source so they
+    # are fetched in parallel.
+    feature_anchor_fn: AnchorFn | Sequence[AnchorFn] | None = None,
     area_route_fn: AreaRouteFn | None = None,  # routes anchored candidates preferring the feature's area, if given
+    on_candidate: Callable[[Candidate, float], None] | None = None,  # streaming: each candidate as it passes the rules
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
     rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn)
-    rejected: Counter = Counter()
-    candidates: list[Candidate] = []
-    generated = 0
     notes: list[str] = []
-
-    def run_all(jobs: list[Callable[[], Candidate | None]]) -> None:
-        nonlocal generated
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            for outcome in pool.map(lambda job: job(), jobs):
-                generated += 1
-                if outcome is not None:
-                    candidates.append(outcome)
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:
         def job():
@@ -314,9 +404,8 @@ def generate_loops(
             try:
                 route = _fit(make_route, target_m)
             except RoutingError:
-                rejected["routing_failed"] += 1
-                return None
-            return _evaluate("rectangle", "loop", spec.label, route, rules, rejected)
+                return Rejection("rectangle", spec.label, "routing_failed")
+            return _evaluate("rectangle", "loop", spec.label, route, rules)
 
         return job
 
@@ -325,9 +414,8 @@ def generate_loops(
             try:
                 route = _fit(lambda scale: round_trip_fn(lat, lon, target_m * scale, seed), target_m)
             except RoutingError:
-                rejected["routing_failed"] += 1
-                return None
-            return _evaluate("round_trip", "loop", f"round trip, seed {seed}", route, rules, rejected)
+                return Rejection("round_trip", f"round trip, seed {seed}", "routing_failed")
+            return _evaluate("round_trip", "loop", f"round trip, seed {seed}", route, rules)
 
         return job
 
@@ -338,13 +426,12 @@ def generate_loops(
             def make_route(scale: float) -> Route:
                 return route_fn([start, _offset(*start, bearing, target_m / 2 * scale), start])
 
+            label = f"out-and-back, heading {bearing:.0f} degrees"
             try:
                 route = _fit(make_route, target_m)
             except RoutingError:
-                rejected["routing_failed"] += 1
-                return None
-            label = f"out-and-back, heading {bearing:.0f} degrees"
-            return _evaluate("out_and_back", "out_and_back", label, route, rules, rejected)
+                return Rejection("out_and_back", label, "routing_failed")
+            return _evaluate("out_and_back", "out_and_back", label, route, rules)
 
         return job
 
@@ -361,19 +448,40 @@ def generate_loops(
         # the route only touches the water or the park at its tip.
         router = (lambda pts: area_route_fn(pts, anchors.area)) if area_route_fn and anchors.area else route_fn
 
+        along = len(far) > 3 and far[3] is not None  # walking distances along the feature (decision 014)
+        tail = next((p for p in reversed(points) if along and far[3] - p[3] >= 150), points[0])
+        tail_bearing = math.degrees(math.atan2((far[1] - tail[1]) * math.cos(math.radians(lat)), far[0] - tail[0])) % 360
+        access = 1.3 * _meters(start, entry) if entry is not None else 0.0  # streets to the entry, estimated
+
+        def length_if(p, scale: float) -> float:
+            """Estimated total length with a turnaround at p, against the scaled target."""
+            back = p[3] + access if out_and_back else 1.3 * p[2]  # same way back, or straight-ish home from p
+            return access + p[3] + back - target_m * scale
+
         def job():
             def make_route(scale: float) -> Route:
-                want = radius * scale
                 via = [entry] if entry is not None else []
-                past_end = want > far[2] * 1.02
+                if along:
+                    # Turnaround by walking distance along the feature, so bends, bridges and gaps don't throw it off.
+                    best = min(points, key=lambda p: abs(length_if(p, scale)))
+                    past_end = best is far and length_if(far, scale) < -0.02 * target_m * scale
+                    turn = best[:2]
+                else:
+                    want = radius * scale
+                    past_end = want > far[2] * 1.02
+                    turn = min(points, key=lambda p: abs(p[2] - want))[:2]
                 if not past_end:
                     # Rescaling picks another anchor point rather than sliding the turnaround off the feature.
-                    turn = min(points, key=lambda p: abs(p[2] - want))[:2]
                     out = [p for p in via if p != turn] + [turn]
                 else:
                     # The feature is too small for the distance: run through it to its far end and keep going the
                     # same way to a turnaround that fits (decision 012).
-                    out = [p for p in via if p != far[:2]] + [far[:2], _offset(*start, bearing, want)]
+                    if along:
+                        # Keep going the way the path was heading at its end, for half the shortfall (there and back).
+                        beyond_pt = _offset(*far[:2], tail_bearing, abs(length_if(far, scale)) / 2)
+                    else:
+                        beyond_pt = _offset(*start, bearing, radius * scale)
+                    out = [p for p in via if p != far[:2]] + [far[:2], beyond_pt]
                 back = out[-2::-1] if out_and_back else []
                 try:
                     route = router([start, *out, *back, start])
@@ -391,21 +499,53 @@ def generate_loops(
             try:
                 route = _fit(make_route, target_m)
             except RoutingError:
-                rejected["routing_failed"] += 1
-                return None
+                return Rejection(f"{anchors.source}_{'out_and_back' if out_and_back else 'loop'}", where, "routing_failed")
             beyond = " and beyond" if id(route) in beyond_ids else ""
             if out_and_back:
                 return _evaluate(f"{anchors.source}_out_and_back", "out_and_back",
-                                 f"out-and-back {where}{beyond}, heading {bearing:.0f} degrees", route, rules, rejected)
+                                 f"out-and-back {where}{beyond}, heading {bearing:.0f} degrees", route, rules)
             return _evaluate(f"{anchors.source}_loop", None, f"loop {where}{beyond}, heading {bearing:.0f} degrees",
-                             route, rules, rejected, allowed=SHAPE_KINDS[shape])
+                             route, rules, allowed=SHAPE_KINDS[shape])
+
+        return job
+
+    def both_ways_job(anchors: Anchors) -> Callable[[], Candidate | None]:
+        """Reach the feature, run one branch to a turnaround, back past the entry along the other branch to a second
+        turnaround, back to the entry and home. For features too short one way (decision 014): from Kips Bay the
+        waterfront runs 1.9 km south and 0.7 km north between gaps, and neither branch alone makes 4 mi."""
+        entry, (one, two) = anchors.entry, anchors.directions[:2]
+        router = (lambda pts: area_route_fn(pts, anchors.area)) if area_route_fn and anchors.area else route_fn
+        access = 1.3 * _meters(start, entry)
+        where = {"water": "on the waterfront", "corridor": f"on {anchors.name}", "park": f"through {anchors.name}"}.get(
+            anchors.source, anchors.name or anchors.source)
+
+        def job():
+            def make_route(scale: float) -> Route:
+                need = max(0.0, (target_m * scale - 2 * access) / 2)  # walking distance along the feature, each way
+                a = min(one[-1][3], need / 2)
+                b = min(two[-1][3], need - a)
+                a = min(one[-1][3], need - b)  # if the second branch is short, take more of the first
+                pa = min(one, key=lambda p: abs(p[3] - a))[:2]
+                pb = min(two, key=lambda p: abs(p[3] - b))[:2]
+                return router([start, entry, pa, entry, pb, entry, start])
+
+            try:
+                route = _fit(make_route, target_m)
+            except RoutingError:
+                return Rejection(f"{anchors.source}_out_and_back", f"out-and-back both ways {where}", "routing_failed")
+            return _evaluate(f"{anchors.source}_out_and_back", "out_and_back", f"out-and-back both ways {where}",
+                             route, rules)
 
         return job
 
     def anchored_jobs(sets: list[Anchors], radius: float) -> list[Callable[[], Candidate | None]]:
         jobs = []
         for anchors in sets:
-            limit = MAX_ANCHOR_DIRECTIONS.get(anchors.source, DEFAULT_ANCHOR_DIRECTIONS)
+            two_branches = [d for d in anchors.directions if d][:2]
+            if (shape in ("out_and_back", "any") and anchors.entry is not None and len(two_branches) == 2
+                    and all(len(d[-1]) > 3 for d in two_branches)):
+                jobs.append(both_ways_job(Anchors(anchors.entry, two_branches, anchors.source, anchors.name, anchors.area)))
+            limit = MAX_ANCHOR_DIRECTIONS.get((anchors.source, anchors.placement), DEFAULT_ANCHOR_DIRECTIONS)
             for pts in [p for p in anchors.directions if p][:limit]:
                 if shape in ("out_and_back", "any"):
                     jobs.append(anchored_job(anchors, pts, radius, out_and_back=True))
@@ -413,24 +553,34 @@ def generate_loops(
                     jobs.append(anchored_job(anchors, pts, radius, out_and_back=False))
         return jobs
 
+    # Generation order (decision 014): anchor lookups first, then the job types most likely to win, so the first
+    # candidate arrives early and is usually the eventual #1. Measured across the review starts after decision 012,
+    # anchored routes were #1 at 11 of 15 starts, rectangles at 4.
+    radius = target_m / 2 / 1.25  # turnaround roughly half the distance out, ~25% for streets not running straight
+    jobs: list[tuple[int, Callable]] = []
+    sources = [] if feature_anchor_fn is None else (
+        list(feature_anchor_fn) if isinstance(feature_anchor_fn, (list, tuple)) else [feature_anchor_fn])
+    if anchor_fn is not None:
+        sources.append(anchor_fn)
+    for fetch in sources:
+        jobs.append((PRIORITY["anchors"], lambda fetch=fetch: [
+            (PRIORITY["anchored" if a.placement == "along" else "anchored_straight"], j)
+            for a in fetch(lat, lon, radius) for j in anchored_jobs([a], radius)]))
+    if shape in ("out_and_back", "any"):
+        jobs += [(PRIORITY["out_and_back"], out_and_back_job(h)) for h in OUT_AND_BACK_HEADINGS]
     if shape in ("loop", "any"):
         # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good loop.
-        # Round trips are tried everywhere too (decision 012): on a strong grid they lose on shape, but they are the
-        # one generator not tied to the grid, and the ranking decides.
-        run_all([rectangle_job(s) for s in _rectangle_specs()])
+        # Round trips are tried everywhere too (decision 012): the one generator not tied to the grid.
+        jobs += [(PRIORITY["rectangle"], rectangle_job(s)) for s in _rectangle_specs()]
+        jobs += [(PRIORITY["round_trip"], round_trip_job(seed)) for seed in FALLBACK_SEEDS]
         if grid.strength < MIN_GRID_STRENGTH:
             notes.append(
                 f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable."
             )
-        run_all([round_trip_job(seed) for seed in FALLBACK_SEEDS])
-    if shape in ("out_and_back", "any"):
-        run_all([out_and_back_job(h) for h in OUT_AND_BACK_HEADINGS])
-    # Turnaround roughly half the distance out, allowing ~25% for streets not running straight there.
-    radius = target_m / 2 / 1.25
-    if feature_anchor_fn is not None:
-        run_all(anchored_jobs(feature_anchor_fn(lat, lon, radius), radius))
-    if anchor_fn is not None:
-        run_all(anchored_jobs(anchor_fn(lat, lon, radius), radius))
+    outcomes = _run_prioritized(jobs, workers, on_candidate)
+    candidates = [c for c, _ in outcomes if isinstance(c, Candidate)]
+    rejected = Counter(r.reason for r, _ in outcomes if isinstance(r, Rejection))
+    generated = len(outcomes)
 
     in_tolerance = sorted((c for c in candidates if c.within_tolerance), key=lambda c: -c.score)
     if in_tolerance:
@@ -447,6 +597,15 @@ def generate_loops(
         else:
             notes.append("No valid loop could be generated from this start point.")
 
+    arrived = {id(c): s for c, s in outcomes}
+    first_ok = min((s for c, s in outcomes if isinstance(c, Candidate) and c.within_tolerance), default=None)
+    timing = {
+        "first_candidate_s": first_ok,
+        "first_any_s": min((s for c, s in outcomes if isinstance(c, Candidate)), default=None),
+        "winner_arrived_s": arrived[id(chosen[0])] if chosen else None,
+        "total_s": max((s for _, s in outcomes), default=0.0),
+    }
+    chosen_ids = {id(c) for c in chosen}
     return GenerationResult(
         candidates=chosen,
         within_tolerance=bool(chosen) and chosen[0].within_tolerance,
@@ -454,4 +613,6 @@ def generate_loops(
         generated=generated,
         rejected=rejected,
         note=" ".join(notes) or None,
+        pool=[_pool_entry(o, s, id(o) in chosen_ids) for o, s in outcomes],
+        timing=timing,
     )

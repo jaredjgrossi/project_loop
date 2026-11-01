@@ -94,3 +94,16 @@ def test_describe_shows_every_field_and_where_preferences_came_from():
     for expected in ["446 3rd Ave, 10016", "6 mi", "Shape: any", "Training", "waits for the light (you said)",
                      "avoid (Training preset)", "Times Square", "water near mile 3"]:
         assert expected in text
+
+
+def test_start_hour_comes_from_start_time_and_is_shown():
+    c = RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time="06:45")
+    assert c.start_hour == 6
+    assert any("06:45" in line and "hour 6" in line for line in describe(c))
+    assert RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3).start_hour is None
+
+
+@pytest.mark.parametrize("bad", ["24:00", "6:45", "06:60", "noon"])
+def test_start_time_must_be_hh_mm(bad):
+    with pytest.raises(ValidationError):
+        RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time=bad)

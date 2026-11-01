@@ -12,6 +12,9 @@ streets even where the corridor is continuous). If less than VERIFIED_SHARE of t
 corridor is not continuous on foot, and the stretches where the route leaves it are recorded as internal gaps. Gaps between neighboring corridors (closer than GAP_MAX_M but
 not connected) are recorded too; the East River path is the known example.
 
+Also stores waterfront_paths: every path-like way within WATERFRONT_M of the coastline, which the generator's
+waterfront anchors read (decision 014; computing it per request took about 0.8 s).
+
 Writes the tables corridors and corridor_gaps (rebuilt from scratch each run; derived from OSM only, never from a
 runner's own routes).
 """
@@ -23,6 +26,7 @@ import httpx
 import psycopg
 
 from api.routing import RoutingError, request_route
+from etl.corridor_names import choose_name
 from etl.load import database_url
 
 WATERFRONT_M = 60
@@ -41,7 +45,9 @@ DROP TABLE IF EXISTS corridor_gaps;
 DROP TABLE IF EXISTS corridors;
 CREATE TABLE corridors (
     id               serial PRIMARY KEY,
-    name             text NOT NULL,
+    name             text NOT NULL,          -- see etl/corridor_names.py; becomes the UI stretch name
+    name_source      text NOT NULL,          -- way | park | none
+    cluster_key      text NOT NULL,
     kind             text NOT NULL,          -- waterfront | greenway | park_drive
     length_m         double precision NOT NULL,
     ways             integer NOT NULL,
@@ -74,6 +80,8 @@ WITH ways AS (
       AND coalesce(w.tags->>'access', 'yes') NOT IN ('no', 'private')
 )
 SELECT w.way_id, w.name, w.geom, ST_Transform(w.geom, 2263) AS g,
+       EXISTS (SELECT 1 FROM osm_coastline c WHERE c.geom && ST_Expand(w.geom, 0.001)
+               AND ST_DWithin(ST_Transform(c.geom, 2263), ST_Transform(w.geom, 2263), {WATERFRONT_M * FT})) AS near_coast,
        CASE
          WHEN w.name ~* ' drive$' AND w.highway <> 'service' AND EXISTS (
               SELECT 1 FROM osm_parks p WHERE p.geom && w.geom AND ST_Within(w.geom, p.geom)) THEN 'park_drive'
@@ -89,29 +97,36 @@ WHERE (w.highway <> 'service' AND w.name ~* '(greenway|esplanade|promenade|board
           WHERE c.geom && ST_Expand(w.geom, 0.001)
             AND ST_DWithin(ST_Transform(c.geom, 2263), ST_Transform(w.geom, 2263), {WATERFRONT_M * FT})));
 CREATE INDEX ON corridor_ways USING gist (g);
+DROP TABLE IF EXISTS waterfront_paths;
+CREATE TABLE waterfront_paths AS SELECT way_id, geom FROM corridor_ways WHERE near_coast;
+CREATE INDEX waterfront_paths_geom_idx ON waterfront_paths USING gist (geom);
 """
 
 CLUSTERS = f"""
-WITH c AS (
-    -- Clustered per kind, so a waterfront path, a bridge promenade and a park drive don't chain into one network.
-    SELECT *, kind || ':' || ST_ClusterDBSCAN(g, eps := {CLUSTER_M * FT}, minpoints := 1) OVER (PARTITION BY kind) AS cid
-    FROM corridor_ways
-),
-named AS (
-    SELECT cid, coalesce(name, '') AS name, sum(ST_Length(g)) AS len,
-           row_number() OVER (PARTITION BY cid ORDER BY (name IS NULL), sum(ST_Length(g)) DESC) AS rn
-    FROM c GROUP BY cid, name
-),
-kinds AS (
+-- Clustered per kind, so a waterfront path, a bridge promenade and a park drive don't chain into one network.
+CREATE TEMP TABLE clustered AS
+SELECT *, kind || ':' || ST_ClusterDBSCAN(g, eps := {CLUSTER_M * FT}, minpoints := 1) OVER (PARTITION BY kind) AS cid
+FROM corridor_ways;
+WITH kinds AS (
     SELECT cid, kind, row_number() OVER (PARTITION BY cid ORDER BY sum(ST_Length(g)) DESC) AS rn
-    FROM c GROUP BY cid, kind
+    FROM clustered GROUP BY cid, kind
 )
-INSERT INTO corridors (name, kind, length_m, ways, source, geom)
-SELECT coalesce(nullif(n.name, ''), 'unnamed ' || k.kind || ' path'), k.kind, sum(ST_Length(c.g)) / {FT}, count(*),
-       'osm:geofabrik-new-york ways (decision 012)', ST_Multi(ST_Collect(c.geom))
-FROM c JOIN named n ON n.cid = c.cid AND n.rn = 1 JOIN kinds k ON k.cid = c.cid AND k.rn = 1
-GROUP BY c.cid, n.name, k.kind
+INSERT INTO corridors (name, name_source, cluster_key, kind, length_m, ways, source, geom)
+SELECT 'pending', 'none', c.cid, k.kind, sum(ST_Length(c.g)) / {FT}, count(*),
+       'osm:geofabrik-new-york ways (decisions 012, 014)', ST_Multi(ST_Collect(c.geom))
+FROM clustered c JOIN kinds k ON k.cid = c.cid AND k.rn = 1
+GROUP BY c.cid, k.kind
 HAVING sum(ST_Length(c.g)) / {FT} >= {MIN_LENGTH_M}
+"""
+
+WAY_NAMES = f"""
+SELECT name, sum(ST_Length(g)) / {FT} FROM clustered WHERE cid = %s AND name IS NOT NULL GROUP BY name
+"""
+
+PARK_SHARES = f"""
+SELECT p.name, ST_Length(ST_Intersection(ST_Transform(c.geom, 2263), ST_Transform(p.geom, 2263))) / {FT}
+FROM corridors c JOIN osm_parks p ON p.geom && c.geom AND ST_Intersects(p.geom, c.geom)
+WHERE c.id = %s AND p.name IS NOT NULL
 """
 
 ENDS = """
@@ -162,6 +177,10 @@ def main() -> int:
         conn.execute(CANDIDATES)
         print("Grouping them into corridors ...")
         conn.execute(CLUSTERS)
+        for cid, key, kind, length in conn.execute("SELECT id, cluster_key, kind, length_m FROM corridors").fetchall():
+            name, source = choose_name(conn.execute(WAY_NAMES, (key,)).fetchall(),
+                                       conn.execute(PARK_SHARES, (cid,)).fetchall(), kind, length)
+            conn.execute("UPDATE corridors SET name = %s, name_source = %s WHERE id = %s", (name, source, cid))
         ends = conn.execute(ENDS).fetchall()
         print(f"Verifying {len(ends)} corridors with GraphHopper ...")
         failed = 0
@@ -196,12 +215,14 @@ def main() -> int:
         longest = conn.execute(
             "SELECT name, kind, round(length_m), verified, round(on_corridor_pct) FROM corridors ORDER BY length_m DESC LIMIT 12"
         ).fetchall()
+        sources = conn.execute("SELECT name_source, count(*) FROM corridors GROUP BY 1 ORDER BY 1").fetchall()
     for kind, n, ok, km in summary:
         print(f"  {kind:11s} {n:4d} corridors, {ok:4d} verified continuous, {km:5.0f} km of ways")
     for kind, n, avg in gaps:
         print(f"  gaps {kind:8s} {n:4d} (mean {avg:.0f} m)")
     if failed:
         print(f"  {failed} corridors could not be routed end to end (marked not verified)")
+    print("  names from: " + ", ".join(f"{s} {n}" for s, n in sources))
     print("Longest:")
     for name, kind, length, ok, pct in longest:
         print(f"  {length:7.0f} m  {kind:11s} {'verified' if ok else 'GAPS    '} {pct or 0:3.0f}% on corridor  {name}")

@@ -1,6 +1,6 @@
 # Loop: handoff (Phase 2 in progress)
 
-As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`012`.
+As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`014`. Branch `phase2-ranking-generators`: decisions 009–012 and 014 are committed. Decision 013 is another session's crowd-signal research spike (`013-crowd-signal-options.md`), not this work.
 
 **Where it stands:**
 - Routes are ranked against the runner's preferences, with every dimension labeled `measured`, `estimate` or `not_scored` (decisions 009 and 010).
@@ -8,6 +8,17 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
 - Out-and-backs are a route type alongside loops.
 - The ranking has been compared with the reviewer's own map-matched runs using identical definitions (decision 011).
 - **Phase 2 step 2 (decision 012):** park, waterfront and corridor generators built from OSM for every runner, plus a verified corridor catalog and round trips everywhere. With the reviewer's runs off, the real-run check now passes at all three home-area starts (Kips Bay 87 vs 77, up from 61). At most starts and distances the #1 route reaches a park or the water. It doesn't at Kips Bay 4 mi or Flatiron 4 mi (see Known issues).
+- **Decision 014:**
+  - streaming, prioritized generation, with the first candidate in 0.1–0.3 s;
+  - the candidate pool with metric vectors;
+  - per-segment GeoJSON with stretch names and trust labels;
+  - elevation with mile positions (estimate);
+  - start hour;
+  - the feedback schema;
+  - turnarounds by walking distance, plus "both ways" routes;
+  - cleaned corridor names and a catalog regression check.
+
+  All 15 review rows now have a park, waterfront or corridor route at #1.
 - **All weights are provisional.** Turns and retracing in particular are not to be tuned before more calibration.
 
 ## What's built
@@ -27,6 +38,11 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - optionally, the same along the runner's own corridors, when a runner prior is loaded and wanted.
 
   Each is rescaled to the distance, checked against no-go zones and ranked. Route types are loop, out-and-back and lollipop.
+- **UI-ready outputs** (decision 014):
+  - `GenerationResult.pool` and `.timing`, and an `on_candidate` streaming callback;
+  - `api/segments.py`: stretches with names, miles, signals, climb, and sourced, trust-labeled facts;
+  - `api/elevation.py`: profile every 0.1 mi, labeled estimate;
+  - `api/feedback.py` plus the `generated_routes` and `route_feedback` tables.
 - **Ranking** (`api/ranking.py`):
   - measured: turns, straight runs, loop shape, retracing (loops only), park/water, signals, matches routes you run;
   - not scored: crowds, closures, roadway.
@@ -48,9 +64,9 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
 ## Run it
 ```bash
 make setup        # first time: ~600 MB download, a few minutes
-uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4 --top 3 [--shape loop|out_and_back|any] [--mode training] [--avoid "Times Square"]
+uv run python -m api.scripts.make_loop "11 Madison Ave, Manhattan" 4 --top 3 [--shape loop|out_and_back|any] [--mode training] [--avoid "Times Square"] [--start-time 06:45] [--pool out/pool.json]
 ```
-Drag the files in `out/` onto geojson.io. Day to day: `make up`, `make down`, `make test`. Setup details and troubleshooting: `README.md`.
+Drag the files in `out/` onto geojson.io: each holds the route, its start, and its stretch features. Day to day: `make up`, `make down`, `make test`, and `make corridors` after an OSM reload. Setup details and troubleshooting: `README.md`.
 
 Review after every change to scoring or generation (needs `make up`):
 ```bash
@@ -68,8 +84,8 @@ uv run python -m evals.routes.report_starts --label after   # before/after table
 ```
 
 ## Verified
-- 245 unit tests pass: geocoder against recorded real responses, ETL parsers against real rows, shape metrics and share-of-route on hand-made shapes, no-go geometry, ranking, anchor grouping, generator with a fake router (anchored routes, lollipops, running past a feature, the off-map fallback), request schema and presets.
-- `pytest evals/` passes 5 of 5: Times Square at 4 and 6 mi, and the real-run check at kips-bay, flatiron and upper-east-side. The real-run check now runs with "matches routes you run" off on both sides and generates without the reviewer's runs (decision 012). No weights changed to get there.
+- 295 unit tests pass (decision 014 added walking-distance anchors, stretches, elevation, feedback, corridor names, and the scheduler's order, streaming, timing and pool). Before that, 245: geocoder against recorded real responses, ETL parsers against real rows, shape metrics and share-of-route on hand-made shapes, no-go geometry, ranking, anchor grouping, generator with a fake router (anchored routes, lollipops, running past a feature, the off-map fallback), request schema and presets.
+- `pytest evals/` passes 9 of 9, including the four corridor catalog checks (decision 014). As of 012 it was 5 of 5: Times Square at 4 and 6 mi, and the real-run check at kips-bay, flatiron and upper-east-side. The real-run check now runs with "matches routes you run" off on both sides and generates without the reviewer's runs (decision 012). No weights changed to get there.
 - Corridor catalog: 160 corridors, checked end to end with GraphHopper. The known East River gap shows up (709 m internal gap, East Midtown Greenway).
 - The kips-bay review start is a public stand-in (Kips Bay Library, 446 3rd Ave), 192 m from the reviewer's address, which is kept out of the repo.
 - Map matching: 197 of the 205 runs from the last 12 months matched. The 8 that didn't are outside NYC. Matching was checked visually on 4 runs at 3 accuracy settings.
@@ -107,22 +123,28 @@ Generated without the reviewer's runs; shares on routes trimmed 200 m at both en
 
 Weak-grid starts on Staten Island are reported, not targeted. The full tables are `out/review/starts-before.md` and `starts-after.md` (git-ignored).
 
+Decision 014 changed the 4 mi rows:
+- **kips-bay 4 mi:** park 4 → 16, water 26 → 76, signals 9.4 → 2.2, with a both-ways waterfront out-and-back at #1;
+- **flatiron 4 mi:** park 5 → 10, water 20 → 38, signals 5.5 → 3.3, with a corridor out-and-back at #1.
+
+`out/review/starts-after-turnarounds.md` has all rows.
+
 ## Known issues
-- **Some distances can't be met on the water:** at Kips Bay 4 mi and Flatiron 4 mi, every waterfront and corridor candidate misses ±5%, so rectangles stay #1 there (26% and 20% water). Turnarounds are picked by straight-line distance, and where the shore bends, crosses a bridge or has a gap (the UN stretch) the routed length jumps. The fix is to pick turnarounds by walking distance along the feature (decision 012).
-- **Generation is slower:** 5–15 s per start, up from about 1 s, with about 60 candidates and per-request areas.
+- **The eventual #1 can arrive late:** the first candidate arrives in 0.1–0.3 s, but the winner can take up to 10.5 s (Kips Bay 6 mi) and totals reach 18 s (decision 014). Levers: cache anchors and areas per start, and check gaps with GraphHopper in the catalog build.
+- **Kips Bay 6 mi is a near tie** between a waterfront route and a rectangle under the provisional weights.
 - **Staten Island scores low** (winding streets); weak-grid starts are mixed.
 - **Port 8989 (resolved 2026-10-30):** `project_loop-graphhopper-1`, from the clone at `~/project_loop`, had identical config, custom models, map (same SHA-256) and Dockerfile. It is stopped, and this folder's container serves 8989; it had to be recreated with `docker compose up -d --force-recreate graphhopper` to publish the port. Starting the other clone again would take the port back.
 - **Fountain data is stale** (last updated 2024-07-15, no status or season): `listed` at best (decision 004).
 - **Crosswalk gaps:** crosswalks are missed wherever a route runs on a road centerline (decision 009).
 - **Park share** uses Parks Properties only. Waterfront share covers Hudson River Park.
 - **Start addresses:** the start must be a street address with a number; place names are refused on purpose.
-- **Graph cache:** after changing the map or `routing/config.yml`, delete `routing/graph-cache/foot-v2`.
+- **Graph cache:** the graph is `routing/graph-cache/foot-v3`, with elevation (the old `foot-v2` was deleted 2026-11-01). After changing the map or `routing/config.yml`, delete it or bump the suffix.
 - **Config module:** `make_loop.py` imports `database_url` from `etl.load`; move it to a shared config module.
 
 ## Left for Phase 2
 Order after decision 011. Each step ends with the review page and `pytest evals/`.
 1. ~~Combined ranking with no-go zones~~ (decision 010). ~~Park and waterfront share~~ and ~~signal counts~~ (decision 011). ~~Park, water and corridor generators; round trips everywhere~~ (decision 012).
-2. **Turnarounds by walking distance** along parks, the waterfront and corridors, instead of straight-line distance. This is the fix for the 4 mi starts above.
+2. ~~Turnarounds by walking distance~~ (decision 014). Next: gaps checked with GraphHopper so walking distance can cross them, and caching for speed.
 3. **Lights preference, router side.** A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
 4. **Roadway share and the bike-lane rule.** Measure the share of a route on a road centerline where a separate sidewalk exists. The bike-lane rule has lower priority, and its purpose is narrow: never send a runner down an on-street lane such as 3rd Ave's because it is emptier. It needs NYC DOT bike-route data.
 5. **Crowds** (estimate): named zones today; a data source once one is checked (NYC DOT pedestrian counts are a candidate).

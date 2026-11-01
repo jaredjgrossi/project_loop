@@ -1,51 +1,89 @@
 import pytest
 
-from api.anchors import group_into_directions
+from api.anchors import along_feature
 
-START = (40.74, -73.98)
+# --- walking distance along the feature (decision 014) ------------------------------------------
 
-
-def row(dist, bearing, weight=1.0, lat=None, lon=None):
-    # Positions only need to be distinct for these tests; distance and bearing drive the grouping.
-    return (lat if lat is not None else START[0] + dist / 1e6, lon if lon is not None else START[1] + bearing / 1e6,
-            dist, weight, bearing)
+LAT0, LON0 = 40.74, -73.98
+KX = 111_320 * 0.7581  # meters per degree of longitude at 40.74
+KY = 110_574
 
 
-def test_entry_is_the_nearest_point():
-    a = group_into_directions([row(900, 10), row(300, 200), row(1500, 15)], radius_m=1000)
-    assert a.entry == row(300, 200)[:2]
+def ll(points_m):
+    return [[LON0 + x / KX, LAT0 + y / KY] for x, y in points_m]
 
 
-def test_points_are_grouped_by_direction_and_sorted_nearest_first():
-    a = group_into_directions([row(1200, 10), row(800, 20), row(900, 100), row(300, 200)], radius_m=1000)
-    by_first = {round(d[0][2]): [round(p[2]) for p in d] for d in a.directions}
-    assert by_first[800] == [800, 1200]  # 10 and 20 degrees share the 0-45 sector
-    assert by_first[900] == [900]
+def test_along_distances_follow_the_path_not_the_straight_line():
+    # A U-shaped shore: out 1 km east, 300 m north, back 1 km west. Its far end is only 300 m from its start in a
+    # straight line, but 2.3 km along it.
+    shore = ll([(0, 0)] + [(x, 0) for x in range(100, 1001, 100)] + [(1000, 150), (1000, 300)]
+               + [(x, 300) for x in range(900, -1, -100)])
+    a = along_feature([shore], start=(LAT0, LON0 - 200 / KX), radius_m=2000, source="water", name="waterfront")
+    far = max((p for d in a.directions for p in d), key=lambda p: p[3])
+    assert far[3] == pytest.approx(2300, rel=0.05)
+    assert far[2] < 400  # straight-line distance from the start stays small
 
 
-def test_points_too_close_to_be_a_turnaround_are_not_offered():
-    a = group_into_directions([row(100, 10), row(150, 100), row(900, 200)], radius_m=1000)
-    assert all(p[2] >= 200 for d in a.directions for p in d)
+def test_a_disconnected_piece_across_the_water_is_not_offered():
+    near = ll([(0, 0), (500, 0), (1000, 0)])
+    across = ll([(0, 900), (1000, 900)])  # the other bank: no path joins it
+    a = along_feature([near, across], start=(LAT0, LON0), radius_m=2000, source="water", name="waterfront")
+    assert all(p[1] < LAT0 + 100 / KY for d in a.directions for p in d)
 
 
-def test_busiest_direction_comes_first():
-    rows = [row(800, 10, weight=1), row(900, 100, weight=5), row(950, 110, weight=5)]
-    a = group_into_directions(rows, radius_m=1000)
-    assert [round(p[2]) for p in a.directions[0]] == [900, 950]
+def test_each_branch_out_of_the_entry_is_a_direction():
+    # The entry is in the middle of a path: one direction each way.
+    path = ll([(-1000, 0), (-500, 0), (0, 0), (500, 0), (1000, 0)])
+    a = along_feature([path], start=(LAT0 - 50 / KY, LON0), radius_m=2000, source="corridor", name="Test Greenway")
+    assert len(a.directions) == 2
+    assert a.entry == pytest.approx((LAT0, LON0), abs=1e-6)
 
 
-def test_no_points_means_no_anchors():
-    a = group_into_directions([], radius_m=1000)
+def test_points_carry_straight_line_and_along_distances_and_are_sorted_by_along():
+    path = ll([(x, 0) for x in range(0, 3001, 50)])
+    a = along_feature([path], start=(LAT0, LON0), radius_m=2000, source="corridor", name="Test Greenway")
+    pts = a.directions[0]
+    assert all(len(p) == 4 for p in pts)
+    assert [p[3] for p in pts] == sorted(p[3] for p in pts)
+    assert pts[-1][3] == pytest.approx(3000, rel=0.05)
+
+
+def test_no_lines_means_no_anchors():
+    a = along_feature([], start=(LAT0, LON0), radius_m=2000, source="park", name="Nothing")
     assert a.entry is None and a.directions == []
 
 
-def test_source_and_name_are_carried():
-    a = group_into_directions([row(800, 10)], radius_m=1000, source="park", name="Stuyvesant Square")
-    assert (a.source, a.name) == ("park", "Stuyvesant Square")
+def test_paths_that_nearly_meet_are_joined():
+    # Two waterfront paths that end 10 m apart (in OSM they meet through a short connector that isn't in the set).
+    a = ll([(0, 0), (500, 0), (1000, 0)])
+    b = ll([(1010, 0), (1500, 0), (2000, 0)])
+    anchors = along_feature([a, b], start=(LAT0, LON0), radius_m=2000, source="water", name="waterfront")
+    assert max(p[3] for d in anchors.directions for p in d) == pytest.approx(2000, rel=0.05)
 
 
-@pytest.mark.parametrize("radius", [500, 2000])
-def test_entry_farther_than_the_radius_is_still_reported(radius):
-    # Reachability is decided by the caller (it filters features by distance); grouping never drops the entry.
-    a = group_into_directions([row(1500, 10), row(1800, 20)], radius_m=radius)
-    assert a.entry is not None
+def test_a_dead_end_joins_the_middle_of_another_path():
+    # A T-junction without a shared vertex: the stem ends 8 m short of the bar.
+    bar = ll([(-1000, 500), (0, 500), (1000, 500)])
+    stem = ll([(0, 0), (0, 250), (0, 492)])
+    anchors = along_feature([stem, bar], start=(LAT0, LON0), radius_m=2000, source="park", name="Test Park")
+    assert max(p[3] for d in anchors.directions for p in d) > 1400  # up the stem and along the bar
+
+
+def test_real_gaps_stay_gaps():
+    a = ll([(0, 0), (1000, 0)])
+    b = ll([(1700, 0), (3000, 0)])  # 700 m away: the East Midtown Greenway gap is about this
+    anchors = along_feature([a, b], start=(LAT0, LON0), radius_m=2000, source="water", name="waterfront")
+    assert max(p[3] for d in anchors.directions for p in d) == pytest.approx(1000, rel=0.05)
+
+
+def test_a_straight_line_set_covers_every_piece_of_the_feature():
+    # The along set stops at a gap; the straight-line set still offers the piece past it.
+    from api.anchors import straight_line_anchors
+
+    a = ll([(0, 0), (1000, 0)])
+    b = ll([(1700, 0), (3000, 0)])
+    s = straight_line_anchors([a, b], start=(LAT0, LON0), radius_m=2000, source="water", name="waterfront")
+    pts = [p for d in s.directions for p in d]
+    assert all(len(p) == 3 for p in pts)  # no along distance: placed by straight-line distance
+    assert max(p[2] for p in pts) > 2500
+    assert s.entry == pytest.approx((LAT0, LON0), abs=1e-5)

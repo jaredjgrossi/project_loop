@@ -15,7 +15,9 @@ from pathlib import Path
 
 import psycopg
 
+from api.elevation import elevation_profile
 from api.scripts.make_loop import KIND_LABELS
+from api.segments import route_stretches
 from etl.load import database_url
 from evals.routes.live import load_starts, rule_violations, stack_problem, top_loops
 
@@ -88,6 +90,13 @@ def panel(frame: Frame, bg_id: str, rank: int, c, start, violations) -> str:
         for d in c.ranking.scored()
     )
     missing = ", ".join(d.label for d in c.ranking.not_scored())
+    with psycopg.connect(database_url()) as conn:
+        stretches = route_stretches(conn, c.route.coordinates, c.route.elevation)
+    ele = elevation_profile(c.route.coordinates, c.route.elevation)
+    names = " → ".join(f"{html.escape(s['properties']['name'])} <span class='m'>mi {s['properties']['from_mile']:.1f}"
+                       f"–{s['properties']['to_mile']:.1f}</span>" for s in stretches)
+    climb = (f"Climb {ele['gain_m']:.0f} m, steepest {ele['max_grade_pct']:.1f}% <span class='tag'>estimate</span>"
+             if ele["status"] == "estimate" else "Climb <span class='tag'>not scored</span>")
     return f"""
 <figure class="{'bad' if flags else ''}">
   <svg viewBox="0 0 {frame.width:.0f} {frame.height:.0f}"><use href="#{bg_id}"/>
@@ -95,6 +104,8 @@ def panel(frame: Frame, bg_id: str, rank: int, c, start, violations) -> str:
   <figcaption><b>#{rank}</b> {kind} · score {c.score:.0f} <span class="m">(provisional weights)</span>{flags}
     <div class="m">{html.escape(c.label)} · {c.route.distance_m / 1609.344:.2f} mi ({c.miss_pct:+.0f}%)</div>
     <ul class="m dims">{dims}</ul>
+    <div class="m stretches">{names}</div>
+    <div class="m">{climb}</div>
     <div class="m todo">Not scored: {html.escape(missing)}</div>
   </figcaption>
 </figure>"""
@@ -150,7 +161,7 @@ figure.bad {{ background:var(--bad); }} svg {{ width:100%; height:auto; display:
 .route {{ stroke:var(--route); stroke-width:2.4; fill:none; stroke-linejoin:round; }} .start {{ fill:var(--start); stroke:var(--bg); stroke-width:1.5; }}
 figcaption {{ margin-top:4px; }} .m {{ color:var(--muted); font-size:12px; }} .todo {{ font-style:italic; }}
 .flag {{ color:var(--route); font-weight:600; }} .dims {{ margin:2px 0; padding-left:16px; }}
-.tag {{ font-size:10px; border:1px solid var(--muted); border-radius:3px; padding:0 3px; }}
+.stretches {{ margin:4px 0; }} .tag {{ font-size:10px; border:1px solid var(--muted); border-radius:3px; padding:0 3px; }}
 </style></head><body><h1>Loop review</h1><div class="m">Rendered {when}. Top 3 per start with nothing but the distance stated (shape any, neutral preferences, default no-go zones; park/water and signals measured from PostGIS). {prior} Parks green, paths dashed. Scores use provisional weights. To reject a route, add it to evals/routes/rejected_routes.json.</div>
 {body}</body></html>""".replace("{px}", str(PANEL_PX))
 

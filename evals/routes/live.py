@@ -19,7 +19,7 @@ from api.scripts.make_loop import (
     current_grid,
     db_context,
     db_context_without_prior,
-    db_feature_anchors,
+    DB_FEATURE_ANCHOR_SOURCES,
     area_router,
     familiar_anchors,
     routers,
@@ -67,7 +67,7 @@ def top_loops(
         shape=shape, prefs={**DEFAULTS, **dict(prefs)}, avoid=zones,
         context_fn=db_context if use_prior else db_context_without_prior,
         anchor_fn=familiar_anchors if use_prior else None,
-        feature_anchor_fn=db_feature_anchors,  # from OSM, for every runner: on in both settings
+        feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,  # from OSM, for every runner: on in both settings
         area_route_fn=area_router(zones),
     )
     return tuple(result.candidates)

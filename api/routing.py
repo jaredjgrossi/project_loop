@@ -24,6 +24,7 @@ class Route:
     time_s: float
     coordinates: list[list[float]]  # [lon, lat]
     seed: int = 0  # round-trip seed; 0 for routes through chosen waypoints
+    elevation: list[float] | None = None  # meters, one per coordinate, when GraphHopper has elevation (decision 014)
 
 
 def graphhopper_url() -> str:
@@ -46,6 +47,7 @@ def build_round_trip_request(
         "round_trip.seed": seed,
         "points_encoded": False,  # plain GeoJSON coordinates instead of an encoded polyline
         "instructions": False,
+        "elevation": True,
     }, custom_model)
 
 
@@ -56,6 +58,7 @@ def build_waypoint_request(points: list[tuple[float, float]], custom_model: dict
         "profile": "foot",
         "points_encoded": False,
         "instructions": False,
+        "elevation": True,
     }, custom_model)
 
 
@@ -64,11 +67,13 @@ def parse_route(response: dict, seed: int) -> Route:
     if not paths:
         raise RoutingError(response.get("message") or "GraphHopper returned no route")
     path = paths[0]
+    coords = path["points"]["coordinates"]
     return Route(
         distance_m=path["distance"],
         time_s=path["time"] / 1000,
-        coordinates=[c[:2] for c in path["points"]["coordinates"]],
+        coordinates=[c[:2] for c in coords],
         seed=seed,
+        elevation=[c[2] for c in coords] if coords and all(len(c) > 2 for c in coords) else None,
     )
 
 

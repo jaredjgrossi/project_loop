@@ -63,7 +63,9 @@ class RunConstraints(BaseModel):
     shape: Literal["loop", "out_and_back", "any"] = "any"  # unstated: offer both (out-and-backs are common, decision 010)
     avoid_places: list[str] = Field(default_factory=list)  # names only; code resolves them to areas
     amenities: list[AmenityRequest] = Field(default_factory=list)
-    start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")  # HH:MM, for restroom hours
+    # HH:MM, local time. The departure-hour input for hour-dependent dimensions (crowds, restroom hours); none of
+    # those is scored yet, so it is carried and shown, not used for ranking (decision 014).
+    start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     # Preferences (None = not stated)
     mode: Mode | None = None
@@ -73,6 +75,11 @@ class RunConstraints(BaseModel):
     surface: Surface | None = None
     turns: Turns | None = None
     familiar: Familiar | None = None
+
+    @property
+    def start_hour(self) -> int | None:
+        """Hour of day, 0-23, from start_time."""
+        return int(self.start_time[:2]) if self.start_time else None
 
     @model_validator(mode="after")
     def _check(self) -> "RunConstraints":
@@ -133,5 +140,5 @@ def describe(c: RunConstraints) -> list[str]:
     for a in c.amenities:
         lines.append(f"Stop: {a.kind} near mile {a.at_mile:g} (within {a.within_mi:g} mi)")
     if c.start_time:
-        lines.append(f"Start time: {c.start_time}")
+        lines.append(f"Start time: {c.start_time} (hour {c.start_hour}; nothing hour-dependent is scored yet)")
     return lines

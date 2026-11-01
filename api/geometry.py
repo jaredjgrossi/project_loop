@@ -14,7 +14,7 @@ def point_in_ring(x: float, y: float, ring: list[list[float]]) -> bool:
     return inside
 
 
-def _segments_cross(p, q, a, b) -> bool:
+def segments_cross(p, q, a, b) -> bool:
     def orient(u, v, w):
         return (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0])
 
@@ -32,4 +32,4 @@ def line_touches_polygon(coords: list[list[float]], rings: list[list[list[float]
     if any(_inside(c[0], c[1], rings) for c in coords):
         return True
     edges = [(a, b) for ring in rings for a, b in zip(ring, ring[1:])]
-    return any(_segments_cross(p, q, a, b) for p, q in zip(coords, coords[1:]) for a, b in edges)
+    return any(segments_cross(p, q, a, b) for p, q in zip(coords, coords[1:]) for a, b in edges)

@@ -499,3 +499,96 @@ def test_a_turnaround_past_the_feature_that_is_off_the_map_falls_back_to_the_far
     fallback = [c for i, c in enumerate(calls) if len(c) == 5 and i > 0 and len(calls[i - 1]) == 7]
     assert fallback and all(c[2] == pts[-1][:2] for c in fallback)  # turned at the far end instead
     assert result.rejected["routing_failed"] == 0  # the candidate was kept, with its miss, not dropped
+
+
+def test_turnarounds_are_picked_by_walking_distance_along_the_feature():
+    # A U-shaped shore: points whose straight-line distance from the start shrinks again as you walk along it.
+    lat, lon = START
+    entry = (lat, lon + 200 / kx(lat))
+    pts = []
+    for along in range(100, 2401, 100):
+        x, y = (along, 0) if along <= 1000 else ((1000, along - 1000) if along <= 1300 else (2300 - along, 300))
+        p = (lat + y / M_LAT, entry[1] + x / kx(lat))
+        pts.append((*p, meters(START, p), float(along)))
+    shore = Anchors(entry=entry, directions=[pts], source="water", name="waterfront")
+    calls = []
+    generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(calls=calls), round_trip_fn=no_round_trips,
+                   shape="out_and_back", feature_anchor_fn=lambda *a: [shore], top_n=60)
+    first = next(c for c in calls if len(c) == 5 and c[1] == entry)
+    turn = next(p for p in pts if p[:2] == first[2])
+    access = 1.3 * meters(START, entry)
+    # Out-and-back: access + along there and back should make 3 mi.
+    assert turn[3] == pytest.approx(miles_to_meters(3.0) / 2 - access, abs=100)
+
+
+def test_a_feature_too_short_one_way_is_run_both_ways_from_the_entry():
+    # Waterfront 600 m each way from the entry, 300 m from the start: one branch tops out at 1.2 mi, both at 1.9 mi.
+    lat, lon = START
+    entry = (lat, lon + 300 / kx(lat))
+    north = [(lat + k * 100 / M_LAT, entry[1], 0.0, float(k * 100)) for k in range(1, 7)]
+    south = [(lat - k * 100 / M_LAT, entry[1], 0.0, float(k * 100)) for k in range(1, 7)]
+    north = [(a, b, meters(START, (a, b)), d) for a, b, _, d in north]
+    south = [(a, b, meters(START, (a, b)), d) for a, b, _, d in south]
+    shore = Anchors(entry=entry, directions=[north, south], source="water", name="waterfront")
+    calls = []
+    result = generate_loops(*START, miles=1.7, grid=STRONG, route_fn=make_router(calls=calls), round_trip_fn=no_round_trips,
+                            shape="out_and_back", feature_anchor_fn=lambda *a: [shore], top_n=60)
+    both = [c for c in calls if len(c) == 7 and c[1] == c[3] == c[5] == entry]
+    assert both  # start, entry, north turn, entry, south turn, entry, start
+    best = next(c for c in result.candidates if "both ways" in c.label)
+    assert abs(best.miss_pct) <= 5
+
+
+# --- order, streaming, timing and the candidate pool (decision 014) ------------------------------------
+
+
+def test_anchored_routes_are_generated_before_the_geometric_ones():
+    order = []
+
+    def recording_router(points):
+        order.append("anchored" if len(points) in (5, 7) and points[1] == park_east().entry else "geometric")
+        return make_router()(points)
+
+    generate_loops(*START, miles=3.0, grid=STRONG, route_fn=recording_router, round_trip_fn=no_round_trips,
+                   shape="any", feature_anchor_fn=lambda *a: [park_east()], workers=1)
+    first_geometric = order.index("geometric")
+    assert order[:first_geometric] and set(order[:first_geometric]) == {"anchored"}
+
+
+def test_candidates_are_streamed_as_they_pass_the_rules():
+    streamed = []
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            on_candidate=lambda c, s: streamed.append((c, s)))
+    assert streamed and all(isinstance(c, Candidate) for c, _ in streamed)
+    assert [s for _, s in streamed] == sorted(s for _, s in streamed)
+    assert {id(c) for c in result.candidates} <= {id(c) for c, _ in streamed}
+
+
+def test_timing_reports_first_candidate_winner_and_total():
+    t = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips).timing
+    assert 0 <= t["first_candidate_s"] <= t["winner_arrived_s"] <= t["total_s"]
+
+
+def test_the_pool_holds_every_job_with_metric_vectors_and_reasons():
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=3)
+    pool = result.pool
+    assert len(pool) == result.generated
+    chosen = [e for e in pool if e["status"] == "chosen"]
+    assert len(chosen) == len(result.candidates)
+    for e in pool:
+        if e["status"] == "rejected":
+            assert e["reason"]
+        else:
+            assert {"turns_per_mile", "retraced_pct", "distance_m", "miss_pct"} <= set(e["metrics"])
+            assert all(d["status"] in ("measured", "estimate", "not_scored") for d in e["dimensions"])
+    assert sum(e["status"] == "rejected" for e in pool) == sum(result.rejected.values())
+
+
+def test_feature_anchor_sources_can_be_several_functions():
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", feature_anchor_fn=[lambda *a: [park_east()],
+                                                            lambda *a: [park_east(source="water", name="waterfront")]],
+                            top_n=80)
+    methods = {e["method"].split("_")[0] for e in result.pool}  # same geometry, so the copies dedupe in the top list
+    assert {"park", "water"} <= methods
