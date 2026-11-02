@@ -69,6 +69,30 @@ Why ×0.2: decision 009's router test, rerun on the new graph from the Kips Bay 
 - **Zig-zag credit:** largest where routes have staircase stretches (Kips Bay 3 mi: 1.4 min against 2.4 for the same kind of route when waiting). Nearly zero on routes that are mostly waterfront path or straight avenue (Flatiron 3 mi: 1.9 min either way).
 - **Time to first candidate:** 0.14–0.62 s after, against 0.11–0.32 s before, still within the 1 s budget. The wait estimate adds work per candidate. Totals rose too (up to 23 s for Flatiron 6 mi when waiting, from 10 s). This needs work, and the UI brief's ~5 s full-pool budget isn't met.
 
+## Why "I wait" picked a route with more signals at Kips Bay 3 mi
+This is not the ranking trading signals for something else, and not a code bug. **It is a candidate the penalty changed.**
+
+The zig-zag winner is a waterfront out-and-back (heading 159°): 4,921 m, 8 signalized crosswalks (2.6 per mile), 60% park or water. Routed with the penalty, the same job came out as a different path: 4,711 m, 3.1 per mile, 4.8 turns per mile against 3.3. The 2.6-per-mile route no longer existed in the waits candidate set. The waits ranking then picked the best of what it had: the waterfront loop.
+
+| | zig-zag #1 (out-and-back) | waits #1 (loop) |
+|---|---|---|
+| distance | 4,921 m | 4,958 m |
+| signalized crosswalks (per mile) | 8 (2.6) | 9 (2.9) |
+| park or water | 60% | 60% |
+| turns per mile | 3.3 | 3.9 |
+| on runs of 500 m or more | 66% | 61% |
+| expected wait for a runner who waits (estimate) | 2.2 min | 2.4 min |
+
+For a runner who waits, the zig-zag winner is slightly better: one signal fewer and about 0.2 min less estimated wait.
+
+**Why the penalty can add a signal.** GraphHopper custom models can only multiply an edge's cost, and an edge's cost grows with its length. So the penalty is per meter of signalized crosswalk, not per crossing, and on some legs the router swaps one wide avenue crosswalk for two narrow street crosswalks. Across the 113 distinct anchored requests in the Kips Bay 3 mi waits run, the same waypoints routed with the penalty instead of without gave:
+- fewer signalized crosswalks for 95, the same for 11, more for 7 (mostly +1 signal for about +51 m; one went from 25 to 45);
+- 31% fewer in total (2,688 → 1,847) for 4% more distance.
+
+GraphHopper's own `crossing` value agreed with our signal count on 275 of 300 sampled signalized crosswalks, so this isn't the router and the metric meaning different things.
+
+**Remedy, not built:** for runners who wait, also generate the unpenalized candidates and let the ranking choose. The ranking already weighs signals twice as heavily for them. That would have kept the 2.6-per-mile route here, at the cost of roughly twice the candidates for that setting. A fixed per-crossing cost would need additive per-edge costs, which custom models don't offer; turn costs are additive but push routes into the roadway (009).
+
 ## Still open from the UI brief (`docs/ui/brief-v1.md`, "What the engine must provide")
 - per-segment crowd estimate and surface;
 - streaming over the network (server-sent events or WebSocket; today a callback);
