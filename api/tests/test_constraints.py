@@ -107,3 +107,12 @@ def test_start_hour_comes_from_start_time_and_is_shown():
 def test_start_time_must_be_hh_mm(bad):
     with pytest.raises(ValidationError):
         RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time=bad)
+
+
+def test_start_date_and_time_give_the_start_moment():
+    from datetime import date, datetime
+
+    c = RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time="18:00", start_date=date(2026, 11, 3))
+    assert c.start_moment() == datetime(2026, 11, 3, 18, 0)
+    assert any("Tuesday" in line for line in describe(c))
+    assert RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3).start_moment() is None

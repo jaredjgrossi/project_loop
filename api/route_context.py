@@ -51,6 +51,14 @@ class ContextScores:
     wait_s: float | None = None
     wait_signals: int | None = None
     wait_credited: int | None = None  # signals where a zig-zagger has a same-length alternative
+    # Crowds (decision 016): shares of the route by estimated level, and the share with no crowd data.
+    crowd_high_pct: float | None = None
+    crowd_medium_pct: float | None = None
+    crowd_low_pct: float | None = None
+    crowd_not_scored_pct: float | None = None
+    crowd_band: str | None = None
+    crowd_reason: str | None = None  # why nothing was scored, when no stretch had a band
+    crowd_start_band: str | None = None  # the band at the start; None: crowds not scored for any route in the request
 
 
 class _Frame:
@@ -202,7 +210,7 @@ def fetch_context(conn, coords) -> Context:
     return Context(parks, shore, crossings, familiar)
 
 
-def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None) -> ContextScores:
+def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None, start=None) -> ContextScores:
     """use_prior=False leaves "matches routes you run" unscored, as if no runs were on file (the honest eval setting).
     With lights and grid (a GridEstimate), also estimates the wait at lights for that kind of runner (decision 015)."""
     ctx = fetch_context(conn, coords)
@@ -220,7 +228,17 @@ def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None) 
         signals_per_mile=signals / miles,
         familiar_pct=None if ctx.familiar is None else familiar_share(coords, ctx.familiar),
         **_wait_fields(coords, ctx.crossings, lights, grid),
+        **_crowd_fields(conn, coords, start),
     )
+
+
+def _crowd_fields(conn, coords, start) -> dict:
+    from api.crowds import route_crowds
+
+    c = route_crowds(conn, coords, start)
+    return {"crowd_high_pct": c["high_pct"], "crowd_medium_pct": c["medium_pct"], "crowd_low_pct": c["low_pct"],
+            "crowd_not_scored_pct": c["not_scored_pct"], "crowd_band": c["band"],
+            "crowd_reason": c["reason"], "crowd_start_band": c["start_band"]}
 
 
 def _wait_fields(coords, crossings, lights, grid) -> dict:

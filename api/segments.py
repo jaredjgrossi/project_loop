@@ -83,7 +83,7 @@ def _resample(coords: list[list[float]], step_m: float) -> list[list[float]]:
 
 def stretch_features(samples: list[list[float]], labels: list[Label], step_m: float = STEP_M,
                      signals: list[int] | None = None, gains: list[float | None] | None = None,
-                     extra_facts: list[list[dict]] | None = None) -> list[dict]:
+                     extra_facts: list[list[dict]] | None = None, crowds: list[dict] | None = None) -> list[dict]:
     """GeoJSON features for the stretches of a route sampled every step_m (samples[i] has labels[i])."""
     stretches = merge_stretches(labels, step_m)
     feats = []
@@ -105,6 +105,7 @@ def stretch_features(samples: list[list[float]], labels: list[Label], step_m: fl
                 "signals": {"value": signals[i], "status": "measured"} if signals else {"value": None, "status": "not_scored"},
                 "elevation_gain_m": ({"value": gains[i], "status": "estimate"} if gains and gains[i] is not None
                                      else {"value": None, "status": "not_scored"}),
+                "crowd": crowds[i] if crowds else {"value": None, "status": "not_scored", "basis": "not computed"},
                 "facts": facts,
             },
         })
@@ -166,8 +167,13 @@ def _label(row) -> Label:
     return Label("path", "unnamed path", "OSM ways (unnamed)")
 
 
-def route_stretches(conn, coords: list[list[float]], elevation: list[float] | None = None) -> list[dict]:
-    """Stretch features for a route: labels from PostGIS, signals from OSM crosswalks, climb from the elevation."""
+WIDTH_SOURCE = "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), width measured across the way by Loop"
+
+
+def route_stretches(conn, coords: list[list[float]], elevation: list[float] | None = None, start=None) -> list[dict]:
+    """Stretch features for a route: labels from PostGIS, signals from OSM crosswalks, climb from the elevation, and
+    the crowd level (estimate) for a run starting at `start` (decision 016)."""
+    from api.crowds import route_crowds, stretch_crowd
     from api.elevation import elevation_profile
     from api.route_context import crossing_counts, fetch_context
 
@@ -177,8 +183,17 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
     stretches = merge_stretches(labels, STEP_M)
     crossings = fetch_context(conn, coords).crossings
     sample_ele = _elevation_at_samples(coords, elevation, samples) if elevation else None
-    signals, gains, extra = [], [], []
+    crowd = route_crowds(conn, coords, start)
+    widths = {}
+    ways = list({w for w in crowd["sidewalk_ways"] if w is not None})
+    if ways:
+        widths = dict(conn.execute("SELECT way_id, width_ft FROM sidewalk_width WHERE width_ft IS NOT NULL AND way_id = ANY(%s)", (ways,)).fetchall())
+    signals, gains, extra, crowds = [], [], [], []
     for s in stretches:
+        lo, hi = s.start * STEP_M, s.end * STEP_M
+        idx = [k for k, a in enumerate(crowd["along_m"]) if lo <= a < hi]
+        crowds.append(stretch_crowd([crowd["levels"][k] for k in idx]))
+        ws = sorted(widths[w] for w in (crowd["sidewalk_ways"][k] for k in idx) if w in widths)
         part = samples[s.start:min(s.end + 1, len(samples))]
         if len(part) < 2:
             part = samples[max(0, s.start - 1):s.start + 1]
@@ -188,7 +203,10 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
         extra.append([{"text": f"A known {int(m)} m gap in the waterfront or greenway path is nearby",
                        "source": f"Loop corridor catalog gap #{gid} (routed in OSM)", "trust": "listed"}
                       for gid, m in gaps])
-    return stretch_features(samples, labels, STEP_M, signals, gains, extra)
+        if idx and 2 * len(ws) > len(idx):  # mostly on sidewalks with a measured width
+            extra[-1].append({"text": f"Sidewalk about {ws[len(ws) // 2]:.0f} ft wide", "source": WIDTH_SOURCE,
+                              "trust": "listed"})
+    return stretch_features(samples, labels, STEP_M, signals, gains, extra, crowds)
 
 
 def _elevation_at_samples(coords, elevation, samples) -> list[float]:

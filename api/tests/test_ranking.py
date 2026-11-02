@@ -130,3 +130,42 @@ def test_an_open_loop_has_no_loop_shape_dimension():
     # Trimmed routes (real or generated) are open, so compactness is unknown: leave it out rather than score it 0.
     keys = {d.key for d in rank("loop", metrics(compactness=None, mean_width_m=None), DEFAULTS).dimensions}
     assert "loop_shape" not in keys
+
+
+def test_crowds_are_not_scored_without_a_band_at_the_start():
+    for c in (ctx(), ctx(crowd_high_pct=0, crowd_medium_pct=0, crowd_low_pct=0, crowd_not_scored_pct=100,
+                     crowd_reason="no count data on Sundays")):
+        by = {d.key: d for d in rank("loop", metrics(), DEFAULTS, c).dimensions}
+        assert by["crowds"].status == "not_scored" and by["crowds"].weight == 0
+    assert by["crowds"].value == "no count data on Sundays"
+
+
+def pm(**kw):
+    return ctx(crowd_band="weekday 4-7pm (a DOT count window)", crowd_start_band="weekday_pm", **kw)
+
+
+def test_crowds_are_an_estimate_and_busy_routes_score_lower():
+    quiet = pm(crowd_high_pct=0, crowd_medium_pct=10, crowd_low_pct=80, crowd_not_scored_pct=10)
+    busy = pm(crowd_high_pct=60, crowd_medium_pct=20, crowd_low_pct=10, crowd_not_scored_pct=10)
+    by = {d.key: d for d in rank("loop", metrics(), DEFAULTS, busy).dimensions}
+    assert by["crowds"].status == "estimate" and "busy" in by["crowds"].value
+    assert rank("loop", metrics(), DEFAULTS, quiet).score > rank("loop", metrics(), DEFAULTS, busy).score
+
+
+def test_distance_without_crowd_data_is_neutral_and_only_busy_distance_costs():
+    # Decision 016: a mostly-path route keeps the crowds weight, so a street route can't win just by being scorable,
+    # and no-data distance costs nothing, so a path route doesn't lose to a street route that is no less crowded.
+    paths = pm(crowd_high_pct=0, crowd_medium_pct=0, crowd_low_pct=20, crowd_not_scored_pct=80)
+    quiet_street = pm(crowd_high_pct=0, crowd_medium_pct=0, crowd_low_pct=100, crowd_not_scored_pct=0)
+    busy_street = pm(crowd_high_pct=40, crowd_medium_pct=30, crowd_low_pct=30, crowd_not_scored_pct=0)
+    dim = lambda c: {d.key: d for d in rank("loop", metrics(), DEFAULTS, c).dimensions}["crowds"]
+    assert dim(paths).weight == dim(quiet_street).weight > 0
+    assert dim(paths).fit == dim(quiet_street).fit == 1.0
+    assert dim(busy_street).fit == pytest.approx(0.6)
+    assert "neither quiet nor busy" in dim(paths).value
+
+
+def test_avoiding_crowds_weighs_them_more_and_other_weights_are_unchanged():
+    avoid, some = weights_for({**DEFAULTS, "crowds": "avoid"}), weights_for({**DEFAULTS, "crowds": "some"})
+    assert avoid["crowds"] > some["crowds"] > weights_for({**DEFAULTS, "crowds": "dont_mind"})["crowds"]
+    assert {k: v for k, v in avoid.items() if k != "crowds"} == {k: v for k, v in some.items() if k != "crowds"}

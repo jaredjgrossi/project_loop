@@ -38,6 +38,7 @@ def test_stretch_features_carry_miles_name_kind_and_facts_with_source_and_trust(
     feats = stretch_features(coords, labels, step_m=20, signals=[1, 0], gains=[0.0, 2.5],
                              extra_facts=[[], [{"text": "Known gap nearby", "source": "corridor_gaps #1", "trust": "listed"}]])
     assert [f["properties"]["name"] for f in feats] == ["East 34th Street", "East River Greenway"]
+    assert all(f["properties"]["crowd"]["status"] == "not_scored" for f in feats)  # none passed: never assumed quiet
     first, second = (f["properties"] for f in feats)
     assert first["from_mile"] == 0 and second["to_mile"] == pytest.approx(1000 / 1609.344, abs=0.02)
     assert second["kind"] == "corridor" and second["signals"] == {"value": 0, "status": "measured"}
