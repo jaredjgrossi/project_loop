@@ -29,6 +29,7 @@ from dataclasses import asdict, dataclass, field
 from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
+from api.closures import Closure, passed
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
 from api.route_context import ContextScores
@@ -226,6 +227,7 @@ class _Rules:
     prefs: dict
     avoid: tuple[NoGoZone, ...]
     context_fn: ContextFn | None = None
+    closures: tuple[Closure, ...] = ()
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -246,6 +248,8 @@ def _evaluate(
     """kind=None: classify by geometry (anchored loops), keeping only the kinds in `allowed`."""
     if touched(route.coordinates, list(rules.avoid)):
         return Rejection(method, label, "no_go_zone")
+    if passed(route.coordinates, rules.closures):  # decision 017: a hard rule, like a no-go zone
+        return Rejection(method, label, "closure")
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
@@ -388,6 +392,7 @@ def generate_loops(
     shape: str = "loop",  # RunConstraints.shape: "loop", "out_and_back" or "any"
     prefs: dict | None = None,  # resolved preferences; neutral defaults when None
     avoid: list[NoGoZone] | tuple[NoGoZone, ...] = (),
+    closures: list[Closure] | tuple[Closure, ...] = (),  # known closures near the start (decision 017)
     context_fn: ContextFn | None = None,  # scores park/water, signals, familiarity; those stay not_scored without it
     anchor_fn: AnchorFn | None = None,  # optional: points on the runner's own corridors (familiar routes)
     # Parks, waterfront and catalog corridors from OSM, for every runner: one function, or one per source so they
@@ -398,7 +403,7 @@ def generate_loops(
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn)
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures))
     notes: list[str] = []
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:

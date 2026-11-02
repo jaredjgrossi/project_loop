@@ -19,6 +19,7 @@ from api.scripts.make_loop import (
     DB_FEATURE_ANCHOR_SOURCES,
     context_for,
     current_grid,
+    db_closures,
     familiar_anchors,
     routers_for,
 )
@@ -52,20 +53,22 @@ def stack_problem() -> str | None:
 @cache
 def top_loops(
     start_id: str, miles: float, top: int, shape: str = "any", prefs: tuple = (), use_prior: bool = True,
-    when=None,
+    when=None, extra_closures: tuple = (),
 ) -> tuple[Candidate, ...]:
     """What a runner gets from this start with nothing but a distance stated: default zones, neutral preferences
     (override some with prefs, as (name, value) pairs). Context is always scored. use_prior=False ignores the
     reviewer's own runs entirely: no "matches routes you run" score and no placement along their corridors. when (the
-    start datetime) sets the crowd band (decision 016); without it crowds are not scored."""
+    start datetime) sets the crowd band (decision 016); without it crowds are not scored. Known closures within reach
+    always apply (decision 017); extra_closures adds more, as for a confirmed report."""
     start = load_starts()[start_id]
     grid = current_grid(start["lat"], start["lon"])
     zones, _ = resolve_zones([])
     full_prefs = {**DEFAULTS, **dict(prefs)}
-    route_fn, round_trip_fn, area_route_fn = routers_for(zones, full_prefs["lights"])
+    closures = [*db_closures(start["lat"], start["lon"], miles), *extra_closures]
+    route_fn, round_trip_fn, area_route_fn = routers_for(zones, full_prefs["lights"], closures)
     result = generate_loops(
         start["lat"], start["lon"], miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
-        shape=shape, prefs=full_prefs, avoid=zones,
+        shape=shape, prefs=full_prefs, avoid=zones, closures=closures,
         context_fn=context_for(full_prefs["lights"], grid, use_prior=use_prior, start=when),
         anchor_fn=familiar_anchors if use_prior else None,
         feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,  # from OSM, for every runner: on in both settings

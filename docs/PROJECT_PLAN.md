@@ -122,7 +122,8 @@ This is the section product and AI interviewers will ask about.
 - Done: UI-ready outputs (streaming with timing, the candidate pool, per-segment GeoJSON with stretch names, elevation, start hour, the feedback schema), turnarounds by walking distance, and cleaned corridor names (014).
 - Done: the lights preference on the router side (signal penalty for runners who wait; expected-wait estimate with zig-zag credit) (015).
 - Done: crowds as an estimate from subway volume and DOT count windows, with the start date and hour; not scored on paths and outside count hours (016).
-- Next, one at a time: roadway share and the bike-lane rule, a closures layer.
+- Done: known closures as a hard rule (the corridor catalog's East Midtown missing link), with runner reports a reviewer confirms (017).
+- Next: roadway share and the bike-lane rule.
 - Every value is labeled measured, estimate or not scored, and weights stay provisional until calibrated. Amenities near mile X annotate the top 3 after ranking.
 - Every change is checked on the fixed review starts and against real runs. Every rejected route becomes a failing eval |
 | 3. API + Claude | 4–5 | FastAPI endpoints, Claude parse step into `RunConstraints` (tool use with strict schema; the parsed request is shown to the runner before routing), explain step, parse eval set and cost logging |

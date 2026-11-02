@@ -67,3 +67,20 @@ def test_no_crowded_issue_means_no_reports_and_unknown_time_is_kept_unknown():
     assert crowd_report_rows(RouteFeedback(route_id="r1", ran_it=False), [], start=None) == []
     rows = crowd_report_rows(RouteFeedback(route_id="r1", ran_it=False, issues=["crowded"]), [], start=None)
     assert rows[0]["hour"] is None and rows[0]["weekday"] is None
+
+
+def test_closed_or_blocked_reports_keep_the_stretch_geometry_and_whole_route_reports_have_none():
+    import json
+
+    from api.feedback import closure_report_rows
+
+    geom = {"type": "LineString", "coordinates": [[-73.97, 40.74], [-73.97, 40.75]]}
+    fb = RouteFeedback(route_id="r1", ran_it=True, rating=2, issues=["closed_or_blocked"], note="fenced off",
+                       stretch_issues=[{"stretch": 1, "issue": "closed_or_blocked"}, {"stretch": 0, "issue": "crowded"}])
+    stretches = [{"properties": {"stretch": 0, "name": "East 34th Street"}, "geometry": geom},
+                 {"properties": {"stretch": 1, "name": "East River Esplanade"}, "geometry": geom}]
+    whole, stretch = closure_report_rows(fb, stretches)
+    assert whole["stretch"] is None and whole["geom"] is None and whole["note"] == "fenced off"
+    assert stretch["stretch"] == 1 and stretch["stretch_name"] == "East River Esplanade"
+    assert json.loads(stretch["geom"]) == geom
+    assert closure_report_rows(RouteFeedback(route_id="r1", ran_it=False, issues=["crowded"]), stretches) == []

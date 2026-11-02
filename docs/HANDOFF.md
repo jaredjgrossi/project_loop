@@ -1,6 +1,6 @@
 # Loop: handoff (Phase 2 in progress)
 
-As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`016`. Decisions 009–014 are merged into main (PR #1); 013 is a crowd-signal research spike. Decision 015 (lights) and the GPX writer are in PR #2 (`phase2-lights`). Decision 016 (crowds) is on branch `phase2-crowds`, built on `phase2-lights`.
+As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`017`. Decisions 009–015 and the GPX writer are merged into main (PRs #1 and #2); 013 is a crowd-signal research spike. Decision 016 (crowds) is in PR #3 (`phase2-crowds`). Decision 017 (closures) is on branch `phase2-closures`, built on `phase2-crowds`.
 
 **Where it stands:**
 - Routes are ranked against the runner's preferences, with every dimension labeled `measured`, `estimate` or `not_scored` (decisions 009 and 010).
@@ -29,7 +29,11 @@ As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - a crowd level on each stretch;
   - "crowded" reports logged for calibration.
 
-  Paths, Sundays, before 7am and after 8pm are not scored. Eval: Spearman 0.73–0.82 against the held-out DOT round.
+  Paths, Sundays, before 7am and after 8pm are not scored. Only known-busy distance costs a route; no-data distance is neutral. Eval: Spearman 0.73–0.82 against the held-out DOT round.
+- **Decision 017, closures** (hard rule):
+  - a route with 30 m or more inside a known closure is rejected;
+  - the corridor catalog's East Midtown Greenway missing link applies; the other 106 gaps are recorded with the reason (between two corridors, walkable ways along the link, or the link is too short), because treating them as closures closed real paths;
+  - "closed or blocked" stretch reports go to `closure_reports`, and a reviewer confirms one into a closure that GraphHopper routes around.
 - **All weights are provisional.** Turns and retracing in particular are not to be tuned before more calibration.
 
 ## What's built
@@ -57,7 +61,8 @@ As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
 - **Ranking** (`api/ranking.py`):
   - measured: turns, straight runs, loop shape, retracing (loops only), park/water, signals, matches routes you run;
   - estimate: crowds (only with a start date and time, decision 016);
-  - not scored: closures, roadway.
+  - not scored: roadway.
+- **Closures** (`api/closures.py`, `etl/build_closures.py`, table `closures`): a hard rule, like no-go zones (decision 017).
 - **No-go zones** (`routing/no_go_zones.geojson`, `api/nogo.py`): GraphHopper avoid-areas plus a geometry check. Times Square is a default zone.
 - **Metrics** (`api/shape.py`, `api/route_context.py`): turns (definition revised in decision 011), straight runs, retracing, out-and-back share, closure, width, compactness, park share, waterfront share, crosswalks and signalized crosswalks per mile.
 - **Review loop** (`evals/routes/`):
@@ -160,7 +165,7 @@ Order after decision 011. Each step ends with the review page and `pytest evals/
 3. ~~Lights preference, router side~~ (decision 015). Was: A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
 4. **Roadway share and the bike-lane rule.** Measure the share of a route on a road centerline where a separate sidewalk exists. The bike-lane rule has lower priority, and its purpose is narrow: never send a runner down an on-street lane such as 3rd Ave's because it is emptier. It needs NYC DOT bike-route data.
 5. ~~Crowds~~ (decision 016). Next: calibrate with "crowded" reports, and find a source for paths and greenways (DOT's automated counters cover 21 path ways).
-6. **Closures layer**: known East River gaps first, user reports later.
+6. ~~Closures layer~~ (decision 017). Next: a live closure source (DOT construction closures, Parks), and showing the runner when a closure changed their route.
 7. **Amenities after the ranking**: they annotate the top 3 with trust labels and don't change the order.
 8. **Calibrate, then tune.** Re-run `calibrate.py` after each generator change. Tune turns and retracing only once there are ratings or more runners.
 

@@ -6,7 +6,7 @@ help:
 	@echo "make up      start Postgres + GraphHopper"
 	@echo "make down    stop them (data is kept)"
 	@echo "make data    reload parks, fountains, restrooms into Postgres"
-	@echo "make corridors rebuild the corridor catalog from OSM (needs GraphHopper running)"
+	@echo "make corridors rebuild the corridor catalog from OSM, then its closures (needs GraphHopper running)"
 	@echo "make crowds  precompute crowd levels per sidewalk (needs the downloads in data/crowds/raw, decision 016)"
 	@echo "make test    run the unit tests"
 
@@ -17,6 +17,7 @@ setup:
 	uv run python -m etl.load_all
 	uv run python -m etl.load_osm
 	uv run python -m etl.build_corridors
+	uv run python -m etl.build_closures
 
 up:
 	docker compose up -d --wait
@@ -29,6 +30,7 @@ data:
 
 corridors:
 	uv run python -m etl.build_corridors
+	uv run python -m etl.build_closures
 
 crowds:
 	uv run python -m etl.load_crowds

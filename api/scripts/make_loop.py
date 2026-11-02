@@ -24,6 +24,8 @@ from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
 from api.grid import GridEstimate
+from api.closures import Closure, load_closures, reach_m
+from api.closures import custom_model as closures_model
 from api.nogo import NoGoZone, custom_model
 from api.nogo import resolve as resolve_zones
 from api.elevation import elevation_profile
@@ -124,12 +126,18 @@ def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable,
     return partial(request_route, custom_model=model), partial(request_round_trip, custom_model=model)
 
 
-def routers_for(zones: list[NoGoZone], lights: Lights) -> tuple[Callable, Callable, Callable]:
+def routers_for(zones: list[NoGoZone], lights: Lights, closures=()) -> tuple[Callable, Callable, Callable]:
     """Route, round-trip and feature-area route functions for a runner: a signal penalty in every request when they
-    wait at lights, none when they zig-zag (decision 015)."""
-    extra = signal_penalty_model() if lights == Lights.WAITS else None
+    wait at lights, none when they zig-zag (decision 015), and around reported closures (decision 017)."""
+    extra = _merged(signal_penalty_model() if lights == Lights.WAITS else None, closures_model(closures))
     route_fn, round_trip_fn = routers(zones, extra)
     return route_fn, round_trip_fn, area_router(zones, extra)
+
+
+def db_closures(lat: float, lon: float, miles: float) -> list[Closure]:
+    """The known closures a route of this length from this start could reach (decision 017)."""
+    with psycopg.connect(database_url()) as conn:
+        return load_closures(conn, lat, lon, reach_m(miles))
 
 
 def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True, start=None) -> Callable:
@@ -212,6 +220,7 @@ def run(
     start_date: str | None = None,
     stretch_fn: Callable | None = None,  # (coords, elevation, start) -> stretch features (api/segments.py)
     pool_out: Path | None = None,
+    closures_fn: Callable | None = None,  # (lat, lon, miles) -> known closures (decision 017)
 ) -> int:
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
@@ -224,7 +233,6 @@ def run(
     zones, unknown = resolve_zones(constraints.avoid_places)
     for name in unknown:
         print(f"Avoid:     '{name}' isn't in the no-go list, so it was NOT applied.")
-    route_fn, round_trip_fn, lights_area_router = routers_for(zones, prefs["lights"])
 
     try:
         place = geocode_fn(address)
@@ -240,11 +248,15 @@ def run(
         print(f"Could not read street data from Postgres ({exc}). Is it running and loaded? Try: make up", file=sys.stderr)
         return 3
     print(f"Grid:      street grid at {grid.angle_deg:.1f} degrees, strength {grid.strength:.2f}")
+    closures = closures_fn(place.lat, place.lon, miles) if closures_fn else []
+    if closures:
+        print(f"Closures:  {len(closures)} known closures within reach; no route may pass through one")
+    route_fn, round_trip_fn, lights_area_router = routers_for(zones, prefs["lights"], closures)
 
     try:
         result = generate_fn(
             place.lat, place.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
-            shape=constraints.shape, prefs=prefs, avoid=zones,
+            shape=constraints.shape, prefs=prefs, avoid=zones, closures=closures,
             context_fn=context_fn or (context_factory(prefs["lights"], grid, constraints.start_moment())
                                       if context_factory else None),
             anchor_fn=anchor_fn, feature_anchor_fn=feature_anchor_fn,
@@ -311,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
     return run(args.address, args.miles, out=args.out, top=args.top, geocode_fn=geocode, grid_fn=current_grid,
                generate_fn=generate_loops, shape=args.shape, mode=args.mode, avoid=args.avoid,
                anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES, start_time=args.start_time,
-               stretch_fn=db_stretches, pool_out=args.pool, lights=args.lights, start_date=args.start_date,
+               stretch_fn=db_stretches, closures_fn=db_closures, pool_out=args.pool, lights=args.lights, start_date=args.start_date,
                context_factory=lambda lights, grid, start: context_for(lights, grid, use_prior=True, start=start))
 
 
