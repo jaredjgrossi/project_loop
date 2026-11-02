@@ -47,6 +47,10 @@ class ContextScores:
     crossings_per_mile: float
     signals_per_mile: float
     familiar_pct: float | None  # None: no runs on file
+    # Expected wait at lights for the runner's lights setting (decision 015). An estimate, reported but not scored.
+    wait_s: float | None = None
+    wait_signals: int | None = None
+    wait_credited: int | None = None  # signals where a zig-zagger has a same-length alternative
 
 
 class _Frame:
@@ -198,8 +202,9 @@ def fetch_context(conn, coords) -> Context:
     return Context(parks, shore, crossings, familiar)
 
 
-def score_context(conn, coords, use_prior: bool = True) -> ContextScores:
-    """use_prior=False leaves "matches routes you run" unscored, as if no runs were on file (the honest eval setting)."""
+def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None) -> ContextScores:
+    """use_prior=False leaves "matches routes you run" unscored, as if no runs were on file (the honest eval setting).
+    With lights and grid (a GridEstimate), also estimates the wait at lights for that kind of runner (decision 015)."""
     ctx = fetch_context(conn, coords)
     if not use_prior:
         ctx = Context(ctx.parks, ctx.shoreline, ctx.crossings, None)
@@ -214,4 +219,41 @@ def score_context(conn, coords, use_prior: bool = True) -> ContextScores:
         crossings_per_mile=crossings / miles,
         signals_per_mile=signals / miles,
         familiar_pct=None if ctx.familiar is None else familiar_share(coords, ctx.familiar),
+        **_wait_fields(coords, ctx.crossings, lights, grid),
     )
+
+
+def _wait_fields(coords, crossings, lights, grid) -> dict:
+    if lights is None or grid is None:
+        return {}
+    from api.grid import MIN_GRID_STRENGTH
+    from api.lights import expected_wait
+
+    w = expected_wait(coords, crossings, grid.angle_deg, grid.strength >= MIN_GRID_STRENGTH, lights)
+    return {"wait_s": w["seconds"], "wait_signals": w["signals"], "wait_credited": w["credited"]}
+
+
+ROADWAY_HIGHWAYS = ("primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link", "residential",
+                    "unclassified", "living_street", "service", "road")
+_ROADWAY = """
+WITH s AS (
+    SELECT ord, ST_SetSRID(ST_MakePoint(lon, lat), 4326) AS g
+    FROM unnest(%(lons)s::float8[], %(lats)s::float8[]) WITH ORDINALITY AS u(lon, lat, ord)
+)
+SELECT count(*) FILTER (WHERE w.highway = ANY(%(roads)s)), count(w.highway)
+FROM s LEFT JOIN LATERAL (
+    SELECT highway FROM osm_ways w WHERE w.geom && ST_Expand(s.g, 0.0001)
+      AND ST_DWithin(w.geom::geography, s.g::geography, 6) ORDER BY w.geom <-> s.g LIMIT 1) w ON true
+"""
+
+
+def roadway_share(conn, coords, step_m: float = 10.0) -> float | None:
+    """Percent of the route whose nearest walkable way (within 6 m) is a road centerline rather than a sidewalk,
+    path or crosswalk (decision 015). Measured. Routed geometry sits on the graph's ways, so the nearest way is the
+    one walked. None when no sample has a way nearby."""
+    frame = _Frame(coords[0][1])
+    pts = _samples(coords, frame, step=step_m)
+    lons = [x / frame.kx for x, _ in pts]
+    lats = [y / frame.ky for _, y in pts]
+    roads, known = conn.execute(_ROADWAY, {"lons": lons, "lats": lats, "roads": list(ROADWAY_HIGHWAYS)}).fetchone()
+    return 100 * roads / known if known else None

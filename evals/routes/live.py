@@ -16,13 +16,11 @@ from api.generate import Candidate, generate_loops
 from api.nogo import resolve as resolve_zones
 from api.routing import graphhopper_url
 from api.scripts.make_loop import (
-    current_grid,
-    db_context,
-    db_context_without_prior,
     DB_FEATURE_ANCHOR_SOURCES,
-    area_router,
+    context_for,
+    current_grid,
     familiar_anchors,
-    routers,
+    routers_for,
 )
 from etl.load import database_url
 
@@ -61,14 +59,15 @@ def top_loops(
     start = load_starts()[start_id]
     grid = current_grid(start["lat"], start["lon"])
     zones, _ = resolve_zones([])
-    route_fn, round_trip_fn = routers(zones)
+    full_prefs = {**DEFAULTS, **dict(prefs)}
+    route_fn, round_trip_fn, area_route_fn = routers_for(zones, full_prefs["lights"])
     result = generate_loops(
         start["lat"], start["lon"], miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
-        shape=shape, prefs={**DEFAULTS, **dict(prefs)}, avoid=zones,
-        context_fn=db_context if use_prior else db_context_without_prior,
+        shape=shape, prefs=full_prefs, avoid=zones,
+        context_fn=context_for(full_prefs["lights"], grid, use_prior=use_prior),
         anchor_fn=familiar_anchors if use_prior else None,
         feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,  # from OSM, for every runner: on in both settings
-        area_route_fn=area_router(zones),
+        area_route_fn=area_route_fn,
     )
     return tuple(result.candidates)
 

@@ -113,7 +113,7 @@ To open a database prompt: `docker compose exec db psql -U loop -d loop`.
 - **GraphHopper stays "unhealthy" or restarts**: give Docker Desktop more memory (Settings → Resources), then `docker compose up -d`. Check `docker compose logs graphhopper`.
 - **"Could not reach GraphHopper"** from `make_loop`: run `make up`.
 - **"port is already allocated"**: something else uses 5432 or 8989. Stop it, or change the left-hand port numbers in `docker-compose.yml`.
-- **After changing the map or GraphHopper config**, delete `routing/graph-cache/foot-v3` (or bump the suffix in `routing/config.yml`) so GraphHopper rebuilds its graph. To rebuild the map itself: `uv run python -m routing.prepare_osm --refresh`.
+- **After changing the map or GraphHopper config**, delete `routing/graph-cache/foot-v4` (or bump the suffix in `routing/config.yml`) so GraphHopper rebuilds its graph. To rebuild the map itself: `uv run python -m routing.prepare_osm --refresh`.
 - **Start over completely**: `docker compose down -v` also deletes the database volume; `make setup` rebuilds it.
 
 ## Tests

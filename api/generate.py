@@ -85,6 +85,8 @@ class Candidate:
         vec = {"distance_m": round(self.route.distance_m), "miss_pct": round(self.miss_pct, 1), **self.shape.as_dict()}
         if self.context is not None:
             vec.update({k: (None if v is None else round(v, 1)) for k, v in asdict(self.context).items()})
+            if self.context.wait_s is not None:
+                vec["wait_status"] = "estimate"  # expected wait at lights (decision 015)
         return vec
 
 
@@ -319,22 +321,26 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
             if job is None:
                 return
             try:
-                result = job()
-            except RoutingError as exc:  # an anchor lookup or router failing outright
-                result = Rejection("job", str(exc)[:80], "routing_failed")
-            if isinstance(result, list):
-                for p, j in result:
-                    put(p, j)
-            else:
-                elapsed = time.perf_counter() - t0
+                try:
+                    result = job()
+                except RoutingError as exc:  # an anchor lookup or router failing outright
+                    result = Rejection("job", str(exc)[:80], "routing_failed")
+                except Exception as exc:  # anything else is recorded, never left to kill the thread (decision 015)
+                    result = Rejection("job", f"{type(exc).__name__}: {exc}"[:120], f"error: {type(exc).__name__}")
+                if isinstance(result, list):
+                    for p, j in result:
+                        put(p, j)
+                else:
+                    elapsed = time.perf_counter() - t0
+                    with lock:
+                        outcomes.append((result, elapsed))
+                    if on_candidate is not None and isinstance(result, Candidate):
+                        on_candidate(result, elapsed)
+            finally:
                 with lock:
-                    outcomes.append((result, elapsed))
-                if on_candidate is not None and isinstance(result, Candidate):
-                    on_candidate(result, elapsed)
-            with lock:
-                pending[0] -= 1
-                if pending[0] == 0:
-                    all_done.set()
+                    pending[0] -= 1
+                    if pending[0] == 0:
+                        all_done.set()
 
     if not jobs:
         return []

@@ -3,7 +3,7 @@
 graphhopper:
   custom_models.directory: /config/custom_models
   datareader.file: /data/nyc.osm.pbf
-  graph.location: /graph-cache/foot-v3 # to force a re-import, delete routing/graph-cache/foot-v3 (or bump the suffix)
+  graph.location: /graph-cache/foot-v4 # to force a re-import, delete routing/graph-cache/foot-v4 (or bump the suffix)
   # Elevation (decision 014): public Terrain Tiles on AWS (Skadi format; USGS elevation data in the US), downloaded on
   # import into the cache. Routes return [lon, lat, elevation] when a request asks for elevation.
   graph.elevation.provider: skadi
@@ -13,7 +13,9 @@ graphhopper:
       custom_model_files: [loop_foot.json]
   profiles_ch: []
   profiles_lm: []
-  graph.encoded_values: foot_access, foot_priority, foot_average_speed, foot_road_access, hike_rating, mtb_rating, country, road_class, road_environment
+  # crossing: OSM crosswalk type (traffic_signals, marked, ...) per edge, for the signal penalty of runners who wait
+  # at lights (decision 015).
+  graph.encoded_values: foot_access, foot_priority, foot_average_speed, foot_road_access, hike_rating, mtb_rating, country, road_class, road_environment, crossing
   import.osm.ignored_highways: "" # required key; keep every highway type, the foot model already excludes the unwalkable ones
   prepare.min_network_size: 200
   prepare.subnetworks.threads: 1

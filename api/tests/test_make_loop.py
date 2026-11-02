@@ -184,3 +184,33 @@ def test_the_pool_is_written_with_the_request_and_timing(tmp_path):
     data = json.loads(pool_file.read_text())
     assert data["pool"][0]["status"] == "chosen" and data["timing"]["first_candidate_s"] == 0.2
     assert data["request"]["distance_mi"] == 4.0
+
+
+def test_lights_setting_reaches_the_router_and_the_context(tmp_path, monkeypatch):
+    import api.scripts.make_loop as mod
+
+    seen = {}
+    real = mod.routers_for
+
+    def spy_routers(zones, lights):
+        seen["router_lights"] = lights
+        return real(zones, lights)
+
+    monkeypatch.setattr(mod, "routers_for", spy_routers)
+
+    def factory(lights, grid):
+        seen["context_lights"] = lights
+        return lambda coords: None
+
+    assert go(tmp_path, fake_generate([candidate()]), lights="waits", context_factory=factory) == 0
+    assert seen["router_lights"] == "waits" and seen["context_lights"] == "waits"
+
+
+def test_waiting_runners_get_the_signal_penalty_in_every_request():
+    from api.scripts.make_loop import routers_for
+
+    waits = routers_for([], "waits")
+    zigzags = routers_for([], "zigzags")
+    assert waits[0].keywords["custom_model"]["priority"][0]["if"] == "crossing == TRAFFIC_SIGNALS"
+    assert waits[1].keywords["custom_model"]["priority"][0]["if"] == "crossing == TRAFFIC_SIGNALS"
+    assert zigzags[0].keywords["custom_model"] is None

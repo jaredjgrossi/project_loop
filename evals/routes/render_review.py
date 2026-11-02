@@ -97,6 +97,11 @@ def panel(frame: Frame, bg_id: str, rank: int, c, start, violations) -> str:
                        f"–{s['properties']['to_mile']:.1f}</span>" for s in stretches)
     climb = (f"Climb {ele['gain_m']:.0f} m, steepest {ele['max_grade_pct']:.1f}% <span class='tag'>estimate</span>"
              if ele["status"] == "estimate" else "Climb <span class='tag'>not scored</span>")
+    ctx = c.context
+    if ctx is not None and ctx.wait_s is not None:
+        credit = f", zig-zag alternative at {ctx.wait_credited}" if ctx.wait_credited else ""
+        climb += (f" · Wait at lights {ctx.wait_s / 60:.1f} min at {ctx.wait_signals} signals{credit} "
+                  f"<span class='tag'>estimate</span>")
     return f"""
 <figure class="{'bad' if flags else ''}">
   <svg viewBox="0 0 {frame.width:.0f} {frame.height:.0f}"><use href="#{bg_id}"/>
@@ -114,6 +119,7 @@ def panel(frame: Frame, bg_id: str, rank: int, c, start, violations) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--with-prior", action="store_true", help="use the reviewer's own runs (familiar placement and score)")
+    ap.add_argument("--lights", choices=["waits", "zigzags"], default="zigzags", help="the runner's lights setting")
     args = ap.parse_args(argv)
     problem = stack_problem()
     if problem:
@@ -124,7 +130,7 @@ def main(argv=None) -> int:
         for start in load_starts().values():
             for miles in start["miles"]:
                 print(f"{start['id']} {miles:g} mi ...", flush=True)
-                cands = top_loops(start["id"], miles, TOP, use_prior=args.with_prior)
+                cands = top_loops(start["id"], miles, TOP, use_prior=args.with_prior, prefs=(("lights", args.lights),))
                 if not cands:
                     sections.append(f"<section><h2>{html.escape(start['address'])} · {miles:g} mi</h2><p>No loop generated.</p></section>")
                     continue
@@ -143,6 +149,7 @@ def main(argv=None) -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     prior = ("Includes the reviewer's own runs (placement along their corridors and the \"matches routes you run\" score)."
              if args.with_prior else "Without the reviewer's own runs: what any runner gets.")
+    prior += f" Lights: the runner {'waits for the light' if args.lights == 'waits' else 'zig-zags with the lights'}."
     OUT.write_text(PAGE.format(when=datetime.now().strftime("%Y-%m-%d %H:%M"), body="".join(sections), prior=prior))
     print(f"Saved {OUT}")
     return 0
