@@ -592,3 +592,29 @@ def test_feature_anchor_sources_can_be_several_functions():
                             top_n=80)
     methods = {e["method"].split("_")[0] for e in result.pool}  # same geometry, so the copies dedupe in the top list
     assert {"park", "water"} <= methods
+
+
+def test_a_job_that_crashes_is_recorded_and_never_hangs_generation():
+    # Decision 015: an unexpected exception in a worker used to kill the thread and leave generation waiting forever.
+    def broken_anchors(*a):
+        raise ValueError("database went away")
+
+    result = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", feature_anchor_fn=[broken_anchors], top_n=3)
+    assert result.candidates  # the other jobs still ran
+    assert result.rejected["error: ValueError"] == 1
+    assert any(e["status"] == "rejected" and "database went away" in e["label"] for e in result.pool)
+
+
+def test_a_crashing_candidate_job_is_recorded_too():
+    calls = {"n": 0}
+    good = make_router()
+
+    def sometimes_broken(points):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise KeyError("paths")
+        return good(points)
+
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=sometimes_broken, round_trip_fn=no_round_trips)
+    assert result.rejected["error: KeyError"] == 1 and result.candidates
