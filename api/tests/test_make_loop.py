@@ -163,7 +163,7 @@ def test_an_unknown_place_to_avoid_is_reported_not_silently_dropped(tmp_path, ca
 def test_stretches_elevation_and_hour_go_into_the_geojson(tmp_path):
     stretch = {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
                "properties": {"feature": "stretch", "name": "East River Esplanade"}}
-    assert go(tmp_path, fake_generate([candidate()]), stretch_fn=lambda coords, ele: [stretch], start_time="06:30") == 0
+    assert go(tmp_path, fake_generate([candidate()]), stretch_fn=lambda coords, ele, start: [stretch], start_time="06:30") == 0
     fc = json.loads((tmp_path / "loop.geojson").read_text())
     props = fc["features"][0]["properties"]
     assert props["start_hour"] == 6
@@ -198,7 +198,7 @@ def test_lights_setting_reaches_the_router_and_the_context(tmp_path, monkeypatch
 
     monkeypatch.setattr(mod, "routers_for", spy_routers)
 
-    def factory(lights, grid):
+    def factory(lights, grid, start):
         seen["context_lights"] = lights
         return lambda coords: None
 

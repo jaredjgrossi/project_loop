@@ -618,3 +618,16 @@ def test_a_crashing_candidate_job_is_recorded_too():
 
     result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=sometimes_broken, round_trip_fn=no_round_trips)
     assert result.rejected["error: KeyError"] == 1 and result.candidates
+
+
+def test_metric_vector_keeps_the_crowd_band_text_and_labels_crowds_an_estimate():
+    from api.route_context import ContextScores
+
+    busy = ContextScores(park_pct=0, waterfront_pct=0, park_or_water_pct=40, crossings_per_mile=5, signals_per_mile=3,
+                         familiar_pct=None, crowd_high_pct=12.34, crowd_medium_pct=20.0, crowd_low_pct=60.0,
+                         crowd_not_scored_pct=7.66, crowd_band="weekday 4-7pm (a DOT count window)")
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=1, context_fn=lambda coords: busy)
+    vec = result.candidates[0].metric_vector()
+    assert vec["crowd_band"] == "weekday 4-7pm (a DOT count window)" and vec["crowd_high_pct"] == 12.3
+    assert vec["crowd_status"] == "estimate"

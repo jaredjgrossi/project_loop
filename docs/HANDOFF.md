@@ -1,6 +1,6 @@
 # Loop: handoff (Phase 2 in progress)
 
-As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`015`. Decisions 009–014 are merged into main (PR #1); 013 is a crowd-signal research spike (nothing built). Decision 015 (lights) is on branch `phase2-lights`.
+As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`016`. Decisions 009–014 are merged into main (PR #1); 013 is a crowd-signal research spike. Decision 015 (lights) and the GPX writer are in PR #2 (`phase2-lights`). Decision 016 (crowds) is on branch `phase2-crowds`, built on `phase2-lights`.
 
 **Where it stands:**
 - Routes are ranked against the runner's preferences, with every dimension labeled `measured`, `estimate` or `not_scored` (decisions 009 and 010).
@@ -23,6 +23,13 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - runners who wait get a signal penalty in every GraphHopper request;
   - both kinds of runner get an expected wait at lights (estimate, not scored), with zig-zag credit where a same-length staircase exists;
   - the penalty lowers the share of the route on road centerlines; it doesn't raise it.
+- **Decision 016, crowds** (estimate):
+  - a low / medium / high level per sidewalk way and DOT count window, from subway volume per foot of sidewalk width;
+  - a crowds ranking dimension when the request has a start date and time;
+  - a crowd level on each stretch;
+  - "crowded" reports logged for calibration.
+
+  Paths, Sundays, before 7am and after 8pm are not scored. Eval: Spearman 0.73–0.82 against the held-out DOT round.
 - **All weights are provisional.** Turns and retracing in particular are not to be tuned before more calibration.
 
 ## What's built
@@ -49,7 +56,8 @@ As of 2026-10-30. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - `api/feedback.py` plus the `generated_routes` and `route_feedback` tables.
 - **Ranking** (`api/ranking.py`):
   - measured: turns, straight runs, loop shape, retracing (loops only), park/water, signals, matches routes you run;
-  - not scored: crowds, closures, roadway.
+  - estimate: crowds (only with a start date and time, decision 016);
+  - not scored: closures, roadway.
 - **No-go zones** (`routing/no_go_zones.geojson`, `api/nogo.py`): GraphHopper avoid-areas plus a geometry check. Times Square is a default zone.
 - **Metrics** (`api/shape.py`, `api/route_context.py`): turns (definition revised in decision 011), straight runs, retracing, out-and-back share, closure, width, compactness, park share, waterfront share, crosswalks and signalized crosswalks per mile.
 - **Review loop** (`evals/routes/`):
@@ -151,7 +159,7 @@ Order after decision 011. Each step ends with the review page and `pytest evals/
 2. ~~Turnarounds by walking distance~~ (decision 014). Next: gaps checked with GraphHopper so walking distance can cross them, and caching for speed.
 3. ~~Lights preference, router side~~ (decision 015). Was: A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
 4. **Roadway share and the bike-lane rule.** Measure the share of a route on a road centerline where a separate sidewalk exists. The bike-lane rule has lower priority, and its purpose is narrow: never send a runner down an on-street lane such as 3rd Ave's because it is emptier. It needs NYC DOT bike-route data.
-5. **Crowds** (estimate): named zones today; a data source once one is checked (NYC DOT pedestrian counts are a candidate).
+5. ~~Crowds~~ (decision 016). Next: calibrate with "crowded" reports, and find a source for paths and greenways (DOT's automated counters cover 21 path ways).
 6. **Closures layer**: known East River gaps first, user reports later.
 7. **Amenities after the ranking**: they annotate the top 3 with trust labels and don't change the order.
 8. **Calibrate, then tune.** Re-run `calibrate.py` after each generator change. Tune turns and retracing only once there are ratings or more runners.

@@ -84,9 +84,11 @@ class Candidate:
         """Every measured number for this candidate, flat, for the candidate pool and the UI (decision 014)."""
         vec = {"distance_m": round(self.route.distance_m), "miss_pct": round(self.miss_pct, 1), **self.shape.as_dict()}
         if self.context is not None:
-            vec.update({k: (None if v is None else round(v, 1)) for k, v in asdict(self.context).items()})
+            vec.update({k: (round(v, 1) if isinstance(v, (int, float)) else v) for k, v in asdict(self.context).items()})
             if self.context.wait_s is not None:
                 vec["wait_status"] = "estimate"  # expected wait at lights (decision 015)
+            if self.context.crowd_not_scored_pct is not None:
+                vec["crowd_status"] = "estimate"  # crowd shares (decision 016)
         return vec
 
 

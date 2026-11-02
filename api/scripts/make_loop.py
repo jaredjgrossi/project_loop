@@ -100,10 +100,10 @@ def _on_own_connection(fetch: Callable) -> Callable:
 DB_FEATURE_ANCHOR_SOURCES = [_on_own_connection(f) for f in (corridor_anchors, park_anchors, water_anchors)]
 
 
-def db_stretches(coords: list[list[float]], elevation: list[float] | None) -> list[dict]:
-    """Per-stretch GeoJSON features for a route (decision 014)."""
+def db_stretches(coords: list[list[float]], elevation: list[float] | None, start=None) -> list[dict]:
+    """Per-stretch GeoJSON features for a route (decision 014), with crowd levels for the start moment (016)."""
     with psycopg.connect(database_url()) as conn:
-        return route_stretches(conn, coords, elevation)
+        return route_stretches(conn, coords, elevation, start)
 
 
 def _merged(*models: dict | None) -> dict | None:
@@ -132,11 +132,12 @@ def routers_for(zones: list[NoGoZone], lights: Lights) -> tuple[Callable, Callab
     return route_fn, round_trip_fn, area_router(zones, extra)
 
 
-def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True) -> Callable:
-    """A context scorer that also estimates the wait at lights for this runner and street grid (decision 015)."""
+def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True, start=None) -> Callable:
+    """A context scorer that also estimates the wait at lights for this runner and street grid (decision 015) and the
+    crowds along the route from the start moment (decision 016)."""
     def score(coords: list[list[float]]) -> ContextScores:
         with psycopg.connect(database_url()) as conn:
-            return score_context(conn, coords, use_prior=use_prior, lights=lights, grid=grid)
+            return score_context(conn, coords, use_prior=use_prior, lights=lights, grid=grid, start=start)
 
     return score
 
@@ -186,7 +187,8 @@ def print_candidate(rank: int, c: Candidate) -> None:
         for dim in c.ranking.scored():
             if dim.key not in ("turns", "straight", "loop_shape", "retrace"):  # shown above
                 print(f"    {dim.label + ':':<23}{dim.value} [{dim.status}]")
-        print("    Not scored yet: " + ", ".join(dim.label for dim in c.ranking.not_scored()))
+        print("    Not scored yet: " + ", ".join(dim.label + (f" ({dim.value})" if dim.value else "")
+                                             for dim in c.ranking.not_scored()))
 
 
 def run(
@@ -205,16 +207,18 @@ def run(
     feature_anchor_fn: Callable | None = None,
     area_route_fn: Callable | None = None,
     start_time: str | None = None,
-    context_factory: Callable | None = None,  # (lights, grid) -> context_fn; used when context_fn is not given
+    context_factory: Callable | None = None,  # (lights, grid, start) -> context_fn; used when context_fn is not given
     lights: str | None = None,
-    stretch_fn: Callable | None = None,  # (coords, elevation) -> stretch features (api/segments.py)
+    start_date: str | None = None,
+    stretch_fn: Callable | None = None,  # (coords, elevation, start) -> stretch features (api/segments.py)
     pool_out: Path | None = None,
 ) -> int:
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
         return 4
     constraints = RunConstraints(start_address=address, distance_mi=miles, shape=shape, mode=mode,
-                                 avoid_places=avoid or [], start_time=start_time, lights=lights)
+                                 avoid_places=avoid or [], start_time=start_time, start_date=start_date,
+                                 lights=lights)
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)
@@ -241,7 +245,8 @@ def run(
         result = generate_fn(
             place.lat, place.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
             shape=constraints.shape, prefs=prefs, avoid=zones,
-            context_fn=context_fn or (context_factory(prefs["lights"], grid) if context_factory else None),
+            context_fn=context_fn or (context_factory(prefs["lights"], grid, constraints.start_moment())
+                                      if context_factory else None),
             anchor_fn=anchor_fn, feature_anchor_fn=feature_anchor_fn,
             area_route_fn=area_route_fn or (lights_area_router if feature_anchor_fn else None),
         )
@@ -278,7 +283,7 @@ def run(
                               "start_hour": constraints.start_hour},
         )
         if stretch_fn is not None:
-            geojson["features"] += stretch_fn(c.route.coordinates, c.route.elevation)
+            geojson["features"] += stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
         path.write_text(json.dumps(geojson))
         saved.append(path)
 
@@ -298,15 +303,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], default="any", help="route shape (default any)")
     ap.add_argument("--mode", choices=["training", "exploring"], help="preference preset")
     ap.add_argument("--avoid", action="append", default=[], help="a named no-go place (repeatable)")
-    ap.add_argument("--start-time", help="departure time, HH:MM (carried and shown; nothing hour-dependent is scored yet)")
+    ap.add_argument("--start-time", help="departure time, HH:MM; with --start-date, sets the crowd band")
+    ap.add_argument("--start-date", help="departure date, YYYY-MM-DD (weekday, Saturday or Sunday matters for crowds)")
     ap.add_argument("--lights", choices=["waits", "zigzags"], help="at a red light: wait, or zig-zag with the green")
     ap.add_argument("--pool", type=Path, help="also write every candidate with its metric vector to this JSON file")
     args = ap.parse_args(argv)
     return run(args.address, args.miles, out=args.out, top=args.top, geocode_fn=geocode, grid_fn=current_grid,
                generate_fn=generate_loops, shape=args.shape, mode=args.mode, avoid=args.avoid,
                anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES, start_time=args.start_time,
-               stretch_fn=db_stretches, pool_out=args.pool, lights=args.lights,
-               context_factory=lambda lights, grid: context_for(lights, grid, use_prior=True))
+               stretch_fn=db_stretches, pool_out=args.pool, lights=args.lights, start_date=args.start_date,
+               context_factory=lambda lights, grid, start: context_for(lights, grid, use_prior=True, start=start))
 
 
 if __name__ == "__main__":

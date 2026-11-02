@@ -51,11 +51,13 @@ def stack_problem() -> str | None:
 
 @cache
 def top_loops(
-    start_id: str, miles: float, top: int, shape: str = "any", prefs: tuple = (), use_prior: bool = True
+    start_id: str, miles: float, top: int, shape: str = "any", prefs: tuple = (), use_prior: bool = True,
+    when=None,
 ) -> tuple[Candidate, ...]:
     """What a runner gets from this start with nothing but a distance stated: default zones, neutral preferences
     (override some with prefs, as (name, value) pairs). Context is always scored. use_prior=False ignores the
-    reviewer's own runs entirely: no "matches routes you run" score and no placement along their corridors."""
+    reviewer's own runs entirely: no "matches routes you run" score and no placement along their corridors. when (the
+    start datetime) sets the crowd band (decision 016); without it crowds are not scored."""
     start = load_starts()[start_id]
     grid = current_grid(start["lat"], start["lon"])
     zones, _ = resolve_zones([])
@@ -64,7 +66,7 @@ def top_loops(
     result = generate_loops(
         start["lat"], start["lon"], miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=top,
         shape=shape, prefs=full_prefs, avoid=zones,
-        context_fn=context_for(full_prefs["lights"], grid, use_prior=use_prior),
+        context_fn=context_for(full_prefs["lights"], grid, use_prior=use_prior, start=when),
         anchor_fn=familiar_anchors if use_prior else None,
         feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES,  # from OSM, for every runner: on in both settings
         area_route_fn=area_route_fn,

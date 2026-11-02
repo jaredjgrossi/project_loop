@@ -20,15 +20,16 @@ Kind = Literal["loop", "out_and_back", "lollipop"]  # lollipop: out, around and 
 
 # Dimensions the plan calls for that have no scorer yet (HANDOFF.md, Phase 2 order).
 NOT_YET_SCORED = {
-    "crowds": "Crowds",
     "closures": "Closures",
     "roadway": "Running in the roadway",
 }
-CONTEXT_LABELS = {"park_water": "Park and waterfront", "signals": "Traffic signals", "familiar": "Matches routes you run"}
+CONTEXT_LABELS = {"park_water": "Park and waterfront", "signals": "Traffic signals", "familiar": "Matches routes you run",
+                  "crowds": "Crowds"}
 
 # Decision 008's shape weights, plus the context dimensions from decision 011; provisional, see the module docstring.
 BASE_WEIGHTS = {"turns": 40.0, "straight": 25.0, "loop_shape": 25.0, "retrace": 10.0,
-                "park_water": 30.0, "signals": 25.0, "familiar": 20.0}
+                "park_water": 30.0, "signals": 25.0, "familiar": 20.0,
+                "crowds": 25.0}  # decision 016: new, provisional; no other weight changed
 SIGNALS_WORST_PER_MILE = 20.0  # a Manhattan avenue sidewalk: a signal every short block
 
 
@@ -69,6 +70,7 @@ def weights_for(prefs: dict) -> dict[str, float]:
     w["signals"] *= 2.0 if waits else 0.5
     w["park_water"] *= {"park_or_water": 2.0, "some": 1.0, "dont_mind": 0.25}[prefs["scenery"]]
     w["familiar"] *= 2.0 if prefs["familiar"] == "favor" else 1.0
+    w["crowds"] *= {"avoid": 2.0, "some": 1.0, "dont_mind": 0.25}[prefs["crowds"]]
     return w
 
 
@@ -83,6 +85,15 @@ def _context_dimensions(context: ContextScores | None, prefs: dict, w: dict) -> 
                   f"{context.signals_per_mile:.1f} signalized crosswalks per mile",
                   _clamp(1 - context.signals_per_mile / SIGNALS_WORST_PER_MILE), w["signals"]),
     ]
+    # Scored for every candidate or for none, decided by the start moment, so no route gains by being scorable.
+    # Only known-busy distance costs a route; distance with no crowd data is neutral, neither quiet nor busy.
+    if context.crowd_not_scored_pct is None or context.crowd_start_band is None:
+        dims.append(Dimension("crowds", CONTEXT_LABELS["crowds"], "not_scored", context.crowd_reason or "", None, 0.0))
+    else:
+        dims.append(Dimension("crowds", CONTEXT_LABELS["crowds"], "estimate",
+                              f"{context.crowd_high_pct:.0f}% of the route busy ({context.crowd_band or 'no sidewalks'}); "
+                              f"{context.crowd_not_scored_pct:.0f}% has no crowd data, counted as neither quiet nor busy",
+                              _clamp(1 - context.crowd_high_pct / 100), w["crowds"]))
     if context.familiar_pct is None:
         dims.append(Dimension("familiar", CONTEXT_LABELS["familiar"], "not_scored", "", None, 0.0))
     else:

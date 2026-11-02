@@ -147,3 +147,17 @@ CREATE TABLE IF NOT EXISTS route_feedback (
     CHECK ((ran_it AND rating IS NOT NULL) OR (NOT ran_it AND rating IS NULL))
 );
 CREATE INDEX IF NOT EXISTS route_feedback_route_idx ON route_feedback (route_id);
+
+-- "Crowded" reports, for the route or a stretch, with the crowd level shown there and the hour run (decision 016).
+-- Kept to calibrate crowd levels later. No location beyond the stretch's name and index.
+CREATE TABLE IF NOT EXISTS crowd_reports (
+    id            serial      PRIMARY KEY,
+    route_id      text        NOT NULL REFERENCES generated_routes(id),
+    reported_at   timestamptz NOT NULL DEFAULT now(),
+    stretch       integer,                        -- NULL: the whole route
+    stretch_name  text,
+    level_shown   text,                           -- low | medium | high, NULL when not scored
+    band          text,
+    hour          smallint    CHECK (hour BETWEEN 0 AND 23),
+    weekday       smallint    CHECK (weekday BETWEEN 0 AND 6)   -- Monday = 0
+);

@@ -10,6 +10,7 @@ neutral default, and `resolve_preferences` records which.
 """
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -66,6 +67,7 @@ class RunConstraints(BaseModel):
     # HH:MM, local time. The departure-hour input for hour-dependent dimensions (crowds, restroom hours); none of
     # those is scored yet, so it is carried and shown, not used for ranking (decision 014).
     start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    start_date: date | None = None  # with start_time, gives weekday / Saturday / Sunday for crowds (decision 016)
 
     # Preferences (None = not stated)
     mode: Mode | None = None
@@ -75,6 +77,12 @@ class RunConstraints(BaseModel):
     surface: Surface | None = None
     turns: Turns | None = None
     familiar: Familiar | None = None
+
+    def start_moment(self) -> datetime | None:
+        """The start as a local date and time, when both are known."""
+        if self.start_time is None or self.start_date is None:
+            return None
+        return datetime.combine(self.start_date, datetime.strptime(self.start_time, "%H:%M").time())
 
     @property
     def start_hour(self) -> int | None:
@@ -140,5 +148,6 @@ def describe(c: RunConstraints) -> list[str]:
     for a in c.amenities:
         lines.append(f"Stop: {a.kind} near mile {a.at_mile:g} (within {a.within_mi:g} mi)")
     if c.start_time:
-        lines.append(f"Start time: {c.start_time} (hour {c.start_hour}; nothing hour-dependent is scored yet)")
+        when = f" on {c.start_date:%A %Y-%m-%d}" if c.start_date else ""
+        lines.append(f"Start time: {c.start_time}{when} (hour {c.start_hour}; sets the crowd band)")
     return lines
