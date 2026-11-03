@@ -1,6 +1,6 @@
 # Loop: handoff (Phase 2 core complete except the run-test gate)
 
-As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`017`. Decisions 009–015 and the GPX writer are merged into main (PRs #1 and #2); 013 is a crowd-signal research spike. Decision 016 (crowds) is in PR #3 (`phase2-crowds`). Decision 017 (closures) is in its own PR (`phase2-closures`), built on `phase2-crowds`.
+As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`017`. Decisions 009–016 and the GPX writer are merged into main (PRs #1–#3); 013 is a crowd-signal research spike. Decision 017 (closures) is in PR #4 (`phase2-closures`).
 
 **Phase 2 core is complete except the reviewer's run-test gate:** running the Kips Bay 3, 4 and 6 mi test routes (`out/run-tests/kips-bay-{3,4,6}mi-{zigzags,waits}.gpx`, with a map image for each; git-ignored) and reporting back. None of them enters a known closure (checked 2026-11-02).
 
