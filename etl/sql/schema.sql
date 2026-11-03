@@ -178,11 +178,11 @@ CREATE TABLE IF NOT EXISTS closure_reports (
 );
 
 -- Known closures (decision 017): no route may pass through an applied one (api/closures.py). corridor_gap rows are
--- rebuilt by etl/build_closures.py from the corridor catalog, including the gaps it did not apply and why; report
--- rows come from confirmed closure_reports and are kept across rebuilds.
+-- rebuilt by etl/build_closures.py from the corridor catalog, including the gaps it did not apply and why; curated rows
+-- are reloaded from routing/curated_closures.geojson; report rows come from confirmed closure_reports and are kept.
 CREATE TABLE IF NOT EXISTS closures (
     id                 serial      PRIMARY KEY,
-    kind               text        NOT NULL CHECK (kind IN ('corridor_gap', 'report')),
+    kind               text        NOT NULL,
     name               text        NOT NULL,
     reason             text        NOT NULL,
     source             text        NOT NULL,
@@ -195,8 +195,16 @@ CREATE TABLE IF NOT EXISTS closures (
     link_m             double precision,                    -- length of the missing link
     walkable_along_m   double precision,                    -- longest walkable OSM way inside the strip
     active_until       date,                                -- NULL: until removed
+    curated_id         text,                                -- routing/curated_closures.geojson feature id
+    checked_on         date,                                -- curated: when the sources were last checked
+    review_by          date,                                -- curated: check again by then (the eval fails after)
     created_at         timestamptz NOT NULL DEFAULT now(),
     geom               geometry(Polygon, 4326),             -- NULL when the link is too short to draw
     CHECK (NOT applied OR geom IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS closures_geom_idx ON closures USING gist (geom);
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS curated_id text;
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS checked_on date;
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS review_by date;
+ALTER TABLE closures DROP CONSTRAINT IF EXISTS closures_kind_check;
+ALTER TABLE closures ADD CONSTRAINT closures_kind_check CHECK (kind IN ('corridor_gap', 'curated', 'report'));

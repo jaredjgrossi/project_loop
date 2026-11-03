@@ -1,4 +1,5 @@
-"""Known closures (decision 017): no generated route at any review start passes through one.
+"""Known closures (decision 017): no generated route at any review start passes through one, and none enters a
+curated closure at all.
 
 Needs the live stack and the closures built (`make corridors`):  uv run pytest evals/
 
@@ -7,11 +8,12 @@ generator's sampled length nor its reach filter is being trusted to check itself
 """
 
 import json
+from datetime import date
 
 import psycopg
 import pytest
 
-from api.closures import PASS_THROUGH_M, REPORT_BUFFER_M, Closure, passes_through
+from api.closures import CURATED_FILE, PASS_THROUGH_M, REPORT_BUFFER_M, Closure, parse_curated, passes_through
 from etl.build_closures import WALKABLE
 from etl.load import database_url
 from evals.routes.live import load_starts, stack_problem, top_loops
@@ -113,3 +115,38 @@ def test_a_confirmed_report_reroutes_the_route_it_was_reported_on(conn):
     after = top_loops("upper-east-side", 3, TOP, extra_closures=(reported,))
     assert after, "no route once the stretch is closed"
     assert not any(passes_through(c.route.coordinates, reported) for c in after)
+
+
+# --- curated closures --------------------------------------------------------------------
+
+ENTERS_M = 1.0  # "enters": more than a meter of the route inside the closed area, not just touching its edge
+
+
+def test_every_curated_closure_is_loaded_as_applied_with_its_sources_and_dates(conn):
+    entries = parse_curated(json.loads(CURATED_FILE.read_text()))
+    rows = {r[0]: r[1:] for r in conn.execute(
+        "SELECT curated_id, applied, in_router, trust, source, checked_on, review_by FROM closures WHERE kind = 'curated'")}
+    assert set(rows) == {e.id for e in entries}, "closures table out of date with the curated file. Run: make closures"
+    for e in entries:
+        applied, in_router, trust, source, checked, review = rows[e.id]
+        assert applied and in_router and trust == e.trust and (checked, review) == (e.checked_on, e.review_by)
+        assert all(s in source for s in e.sources)
+
+
+def test_no_curated_closure_is_past_its_review_by_date():
+    overdue = [f"{e.id} (review by {e.review_by})" for e in parse_curated(json.loads(CURATED_FILE.read_text()))
+               if e.review_by < date.today()]
+    assert not overdue, f"check the sources again and update checked_on and review_by: {overdue}"
+
+
+@pytest.mark.parametrize("lights", ["zigzags", "waits"])
+@pytest.mark.parametrize(("start_id", "miles"), ROWS, ids=[f"{s}-{m:g}mi" for s, m in ROWS])
+def test_no_generated_route_enters_a_curated_closure(conn, start_id, miles, lights):
+    candidates = top_loops(start_id, miles, TOP, prefs=(("lights", lights),))
+    offenders = {}
+    for rank, c in enumerate(candidates, 1):
+        rows = conn.execute(INSIDE.replace("WHERE c.applied", "WHERE c.applied AND c.kind = 'curated'"),
+                            (json.dumps({"type": "LineString", "coordinates": c.route.coordinates}),)).fetchall()
+        if hit := [f"{name} ({m:.0f} m inside)" for _, name, m in rows if m > ENTERS_M]:
+            offenders[rank] = hit
+    assert not offenders, f"{start_id} {miles:g} mi: {offenders}"

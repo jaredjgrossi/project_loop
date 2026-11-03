@@ -1,9 +1,11 @@
 """Known closures (decision 017): places a route may not pass through.
 
-Two sources, both in the closures table (etl/sql/schema.sql):
+Three sources, all in the closures table (etl/sql/schema.sql):
 - corridor_gap: a missing link of the corridor catalog (decision 012), drawn as a strip along the link, applied only
   where no walkable OSM way runs along it (etl/build_closures.py). Nothing routable runs there, so GraphHopper is not
   told; the hard rule is the check below.
+- curated: a closed place checked by hand against public sources (routing/curated_closures.geojson), with its sources,
+  a trust label, the date it was checked and a review-by date. It is a real closed area, so GraphHopper gets it too.
 - report: a runner's "closed or blocked" report on a stretch, once a reviewer confirms it (confirm_report). It sits
   on a real way, so GraphHopper gets it as an area with priority 0, like a no-go zone (decision 010).
 
@@ -13,9 +15,16 @@ A street that only crosses a closure's strip stays open.
 
 import json
 import math
+import re
 from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 
 from api.geometry import point_in_ring
+
+CURATED_FILE = Path(__file__).resolve().parents[1] / "routing" / "curated_closures.geojson"
+TRUST_LABELS = ("verified", "listed", "seasonal_or_closed")  # product rule 2
+_ID = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 PASS_THROUGH_M = 30
 STEP_M = 2.0  # sampling step for the length inside a polygon
@@ -125,3 +134,42 @@ def confirm_report(conn, report_id: int, until=None) -> int | None:
         return None
     conn.execute("UPDATE closure_reports SET status = 'confirmed', closure_id = %s WHERE id = %s", (row[0], report_id))
     return row[0]
+
+
+@dataclass(frozen=True)
+class CuratedClosure:
+    id: str
+    name: str
+    reason: str
+    sources: tuple[str, ...]
+    trust: str
+    checked_on: date
+    review_by: date
+    geometry: dict  # GeoJSON Polygon
+
+
+def parse_curated(collection: dict) -> list[CuratedClosure]:
+    """The entries of routing/curated_closures.geojson, refusing any without a name, a reason, https sources, a trust
+    label, a checked date and a later review-by date, or a polygon."""
+    out = []
+    for f in collection["features"]:
+        p, fid = f.get("properties") or {}, f.get("id") or ""
+        if not _ID.match(fid):
+            raise ValueError(f"curated closure id {fid!r} must be lowercase letters, digits and underscores")
+        if not p.get("name") or not p.get("reason"):
+            raise ValueError(f"curated closure {fid}: needs a name and a reason")
+        sources = tuple(p.get("sources") or ())
+        if not sources or not all(isinstance(s, str) and s.startswith("https://") for s in sources):
+            raise ValueError(f"curated closure {fid}: needs at least one https source URL")
+        if p.get("trust") not in TRUST_LABELS:
+            raise ValueError(f"curated closure {fid}: trust must be one of {TRUST_LABELS}")
+        try:
+            checked, review = date.fromisoformat(p["checked_on"]), date.fromisoformat(p["review_by"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"curated closure {fid}: checked_on and review_by must be YYYY-MM-DD dates") from exc
+        if review <= checked:
+            raise ValueError(f"curated closure {fid}: review_by must come after checked_on")
+        if (f.get("geometry") or {}).get("type") != "Polygon":
+            raise ValueError(f"curated closure {fid}: geometry must be a Polygon")
+        out.append(CuratedClosure(fid, p["name"], p["reason"], sources, p["trust"], checked, review, f["geometry"]))
+    return out

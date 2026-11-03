@@ -1,4 +1,4 @@
-# 017: Closures. Known closures are a hard rule: the corridor catalog's East Midtown missing link, and runner reports a reviewer confirms
+# 017: Closures. Known closures are a hard rule: the corridor catalog's East Midtown missing link, curated closures, and runner reports a reviewer confirms
 
 **Status:** proposed (Phase 2 step 6, 2026-11-02). No ranking weight changed; closures reject candidates, they don't score them.
 
@@ -61,6 +61,24 @@ So the closure is the **missing link**: the straight line from where the route l
 - **Why a reviewer step:** one wrong report would otherwise close a path for every runner.
 - **Checked against Postgres** in a rolled-back transaction: save, confirm (a second confirm returns nothing), load, and the stretch is passed through.
 
+**4. Curated closures** (`routing/curated_closures.geojson`, parsed by `api/closures.py`, loaded by `etl/build_closures.py`; `make closures`).
+- **What they are:** closed places checked by hand against public sources.
+- **What each entry carries:** a name, a reason, its source URLs, a trust label (`listed`), the date it was checked and a review-by date.
+- **What's refused:** an entry with a missing field, a source that isn't https, an unknown trust label, a review-by date before the checked date, or a geometry that isn't a polygon.
+- **How they apply:** like every closure (30 m inside is rejected), and also given to GraphHopper (`in_router`), since a curated closure is a real closed area on ways a route would otherwise use.
+- **Stale entries:** the eval fails once a review-by date passes, so a stale entry gets checked again instead of trusted forever.
+
+**First entry: East River Park, northern section.**
+- **What and since when:** closed since 2025-09-08 for the East Side Coastal Resiliency project, esplanade included, with reopening projected for the end of 2027. Checked 2026-11-02; review by 2027-02-01.
+- **Sources:**
+  - [EV Grieve, Dec 2025](https://evgrieve.com/2025/12/timeline-for-reopening-northern-section.html): "basically everything above Houston Street to 15th Street", reopening pushed to the end of 2027.
+  - [NYC DDC, May 2025](https://www.nyc.gov/site/ddc/about/press-releases/2025/pr-052925-ESCRopenings.page): southern sections reopening, and new closures announced for the northern area, without a boundary.
+- **The date:** 2025-09-08 is the reviewer's. EV Grieve dates the closure only to Phase 2 construction starting in September 2025.
+- **How it's drawn:**
+  - **Base:** OSM's park polygon (osm_parks area a216471684, snapshot 2026-10-28), cut along East Houston St's line extended to the water. That gives 85,640 m², 46% of the park.
+  - **Northern edge:** the reviewer chose E 15th St. Because of the 29° grid, E 15th St's line reaches the river just north of the park's tip. The park polygon lies wholly south of it, at least 81 m away, and between the two are only inland streets (E 13th St, Avenue D, sidewalks). So nothing is added north of the park. The East River Esplanade past Con Ed starts 4 m north of the E 15th line and stays open.
+- **OSM already shows it closed:** the 2026-10-28 snapshot marks the park's paths as `highway=construction`, and only 68 m of walkable footway is left inside. That's why GraphHopper wouldn't route through it even before this entry. The entry guards against mappers reopening paths before the park does, and holds the sources and review date.
+
 ## Eval (`evals/routes/test_closures.py`)
 The route check is PostGIS's own intersection length against every applied closure in the city. It doesn't rely on the generator's sampled length or reach filter.
 - The East Midtown Greenway gap is an applied closure, labeled `listed` with its catalog source.
@@ -69,6 +87,10 @@ The route check is PostGIS's own intersection length against every applied closu
 - A line along the East Midtown missing link is caught; the detour streets around it are not.
 - **No generated route passes through a known closure:** the top 3 at all 15 review rows, for both lights settings (30 cases).
 - **A confirmed report reroutes:** closing a stretch of the Upper East Side 3 mi #1 (15% of its length, buffered like a report) gives a top 3 that doesn't pass through it.
+- **Curated closures:**
+  - every entry in the file is in the table, applied and in the router, with its trust, sources and dates;
+  - none is past its review-by date;
+  - no top-3 route at any review row, for both lights settings, enters one (more than 1 m inside).
 
 **Result (2026-11-02):** 38 closure checks pass, along with the 9 route evals and 5 crowd evals (52 in all). There are 349 unit tests.
 - **At the review starts,** the East Midtown closure is within reach of 10 of the 15 rows and rejects none of their 863 candidates. So no review route changed.
@@ -81,10 +103,14 @@ The route check is PostGIS's own intersection length against every applied closu
 
   The old #2, a loop on the runner's own route, also ran 778 m through the stretch and dropped out. The new #2 is a waterfront loop that avoids it: 44% park or water, 4.6 signals per mile. A closure on the one waterfront path from this start costs the route most of its park and water. That's the right trade for a closed path, and the score drop shows it.
 
+**Curated result (2026-11-02):** 84 evals pass in all (the 52 above, plus 32 for curated closures). There are 357 unit tests.
+- **Review starts:** the East River Park closure is within reach of 9 of the 15 rows. With and without it, for both lights settings, no top-3 route enters it, and the top 3 is unchanged at every row.
+- **Reviewer's run-test files:** none of the six Kips Bay GPX files enters it. The nearest is the 4 mi route, which turns around 285 m north of it. None was regenerated.
+
 ## Limits
 - **No live closure data yet.** Parks construction closures, DOT street closures for construction (NYC Open Data) and event closures are not loaded. Corridor gaps are structural. Reports need a reviewer.
 - **Missing links are straight lines.** Where a shore curves, the real missing piece can bow away from the strip.
-- **East River Park is under reconstruction,** but OSM shows its paths as open, so its 1,506 m gap isn't applied. Real closures like this need a live source or a confirmed report.
+- **Curated closures are only as current as their last check.** The review-by date makes a stale entry fail the eval, but nothing reopens one automatically. East River Park's entry has to be removed by hand when the park reopens.
 - **30 m inside is the threshold.** A route that crosses a strip at a shallow angle could pass it without being caught, or be caught for crossing.
 - **A reported closure's area blocks any edge that touches it** in GraphHopper, including a street crossing the closed stretch at its ends.
 - **Closures don't explain themselves to the runner yet.** A rejected candidate is just gone. The stretch fact "Known gap nearby" (decision 014) still shows near a gap.

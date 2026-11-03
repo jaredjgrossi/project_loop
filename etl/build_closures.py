@@ -1,6 +1,9 @@
-"""Build the corridor-gap closures from the corridor catalog (decision 017).
+"""Build the closures table (decision 017): corridor-gap closures from the corridor catalog, and the curated closures.
 
-    uv run python -m etl.build_closures      (after etl.build_corridors; run by make corridors)
+    uv run python -m etl.build_closures      (after etl.build_corridors; run by make corridors and make closures)
+
+Curated closures (routing/curated_closures.geojson, parsed by api/closures.py) are reloaded every run as applied and
+given to GraphHopper (in_router): each is a real closed area on ways a route would otherwise use.
 
 Only internal gaps can apply: a corridor that is continuous on the map but not on foot, where the missing link is the
 straight line from where the verification route left the corridor to where it came back (the gap's stored geometry
@@ -16,14 +19,16 @@ one), and closing it would close that way: the gap is stored with applied = fals
 the pass-through length, so a doubtful gap is left open rather than closing a real way. Links too short to leave PASS_THROUGH_M of strip
 after trimming (no route could pass the rule there) are stored the same way.
 
-Rebuilds the corridor_gap rows of closures each run; confirmed runner reports (kind 'report') are kept.
+Rebuilds the corridor_gap and curated rows of closures each run; confirmed runner reports (kind 'report') are kept.
 """
 
+import json
 import sys
+from datetime import date
 
 import psycopg
 
-from api.closures import PASS_THROUGH_M
+from api.closures import CURATED_FILE, PASS_THROUGH_M, parse_curated
 from etl.load import SCHEMA_PATH, database_url
 
 STRIP_HALF_WIDTH_M = 10
@@ -89,6 +94,12 @@ SELECT 'corridor_gap',
 FROM gap_links l JOIN gap_walkable w USING (id);
 """
 
+CURATED = """
+INSERT INTO closures (kind, name, reason, source, trust, applied, in_router, curated_id, checked_on, review_by, geom)
+VALUES ('curated', %(name)s, %(reason)s, %(source)s, %(trust)s, true, true, %(id)s, %(checked_on)s, %(review_by)s,
+        ST_SetSRID(ST_GeomFromGeoJSON(%(geometry)s), 4326))
+"""
+
 SUMMARY = """
 SELECT g.kind, count(*), count(*) FILTER (WHERE c.applied),
        count(*) FILTER (WHERE NOT c.applied AND c.not_applied_reason LIKE 'link under%%'),
@@ -105,11 +116,21 @@ def main() -> int:
             return 1
         conn.execute(SCHEMA_PATH.read_text())
         conn.execute(BUILD)
+        curated = parse_curated(json.loads(CURATED_FILE.read_text()))
+        conn.execute("DELETE FROM closures WHERE kind = 'curated'")
+        for c in curated:
+            conn.execute(CURATED, {"id": c.id, "name": c.name, "reason": c.reason, "trust": c.trust,
+                                   "source": "curated: " + " ; ".join(c.sources), "checked_on": c.checked_on,
+                                   "review_by": c.review_by, "geometry": json.dumps(c.geometry)})
         rows = conn.execute(SUMMARY).fetchall()
         reports = conn.execute("SELECT count(*) FROM closures WHERE kind = 'report' AND applied").fetchone()[0]
     for kind, n, applied, short, walkable, between in rows:
         print(f"  {kind:8s} gaps {n:3d}: {applied:3d} applied; not applied: {between:3d} between corridors, "
               f"{walkable:3d} walkable ways along the link, {short:3d} link too short")
+    print(f"  curated closures applied: {len(curated)}")
+    for c in curated:
+        if c.review_by < date.today():
+            print(f"  REVIEW OVERDUE: curated closure {c.id} was due for review by {c.review_by}", file=sys.stderr)
     print(f"  confirmed runner reports applied: {reports}")
     return 0
 

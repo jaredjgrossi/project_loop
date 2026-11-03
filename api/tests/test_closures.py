@@ -1,3 +1,4 @@
+import json
 import math
 
 import pytest
@@ -58,3 +59,42 @@ def test_only_router_closures_go_to_graphhopper_and_their_ids_are_safe():
     assert m["priority"] == [{"if": "in_closure_7", "multiply_by": "0"}]
     assert [f["id"] for f in m["areas"]["features"]] == ["closure_7"]
 
+
+
+# --- curated closures (decision 017) -----------------------------------------------------
+
+
+def curated_feature(**props):
+    base = {"name": "A closed park", "reason": "construction", "sources": ["https://example.org/closure"],
+            "trust": "listed", "checked_on": "2026-11-02", "review_by": "2027-02-01"}
+    return {"type": "Feature", "id": "a_closed_park", "properties": {**base, **props},
+            "geometry": {"type": "Polygon", "coordinates": STRIP}}
+
+
+def test_the_curated_file_parses_and_every_entry_is_complete():
+    from api.closures import CURATED_FILE, parse_curated
+
+    entries = parse_curated(json.loads(CURATED_FILE.read_text()))
+    assert entries, "the curated file has no closures"
+    for e in entries:
+        assert e.sources and all(s.startswith("https://") for s in e.sources)
+        assert e.trust == "listed" and e.checked_on < e.review_by
+
+
+@pytest.mark.parametrize("bad", [{"trust": "probably"}, {"sources": []}, {"sources": ["not a url"]},
+                                 {"review_by": None}, {"checked_on": "2027-03-01"}, {"name": ""}])
+def test_an_incomplete_curated_entry_is_refused(bad):
+    from api.closures import parse_curated
+
+    with pytest.raises(ValueError):
+        parse_curated({"features": [curated_feature(**bad)]})
+
+
+def test_a_curated_entry_needs_a_polygon_and_a_safe_id():
+    from api.closures import parse_curated
+
+    point = {**curated_feature(), "geometry": {"type": "Point", "coordinates": [-73.97, 40.72]}}
+    with pytest.raises(ValueError):
+        parse_curated({"features": [point]})
+    with pytest.raises(ValueError):
+        parse_curated({"features": [{**curated_feature(), "id": "East River Park"}]})
