@@ -319,6 +319,21 @@ def test_routes_through_a_no_go_zone_are_rejected():
     assert all(not touched(c.route.coordinates, [zone]) for c in result.candidates)
 
 
+
+def test_routes_that_pass_through_a_known_closure_are_rejected():
+    # Decision 017. A closure covering the north-east quadrant: every rectangle with a + side runs inside it.
+    from api.closures import Closure, passed
+
+    lat, lon = START
+    big = [[[lon + 0.0005, lat + 0.0005], [lon + 0.1, lat + 0.0005], [lon + 0.1, lat + 0.1], [lon + 0.0005, lat + 0.1],
+            [lon + 0.0005, lat + 0.0005]]]
+    closed = Closure(1, "corridor_gap", "Test link", "no path", "test", "listed", big, in_router=False)
+    result = generate_loops(*START, miles=4.0, grid=GridEstimate(angle_deg=0.0, strength=0.95), route_fn=make_router(),
+                            round_trip_fn=no_round_trips, closures=[closed], top_n=10)
+    assert result.rejected["closure"] > 0
+    assert result.candidates and not any(passed(c.route.coordinates, [closed]) for c in result.candidates)
+
+
 def test_candidates_carry_a_labeled_ranking():
     c = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips).candidates[0]
     assert c.ranking is not None

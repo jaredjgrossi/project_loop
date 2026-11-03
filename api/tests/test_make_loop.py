@@ -192,9 +192,9 @@ def test_lights_setting_reaches_the_router_and_the_context(tmp_path, monkeypatch
     seen = {}
     real = mod.routers_for
 
-    def spy_routers(zones, lights):
+    def spy_routers(zones, lights, closures=()):
         seen["router_lights"] = lights
-        return real(zones, lights)
+        return real(zones, lights, closures)
 
     monkeypatch.setattr(mod, "routers_for", spy_routers)
 
@@ -214,3 +214,28 @@ def test_waiting_runners_get_the_signal_penalty_in_every_request():
     assert waits[0].keywords["custom_model"]["priority"][0]["if"] == "crossing == TRAFFIC_SIGNALS"
     assert waits[1].keywords["custom_model"]["priority"][0]["if"] == "crossing == TRAFFIC_SIGNALS"
     assert zigzags[0].keywords["custom_model"] is None
+
+
+def test_known_closures_reach_the_router_and_the_rules(tmp_path, capsys, monkeypatch):
+    import api.scripts.make_loop as mod
+    from api.closures import Closure
+
+    ring = [[[-73.99, 40.74], [-73.98, 40.74], [-73.98, 40.75], [-73.99, 40.74]]]
+    reported = Closure(7, "report", "a closed stretch", "closed", "runner report #1", "listed", ring, in_router=True)
+    seen = {}
+    real = mod.routers_for
+
+    def spy_routers(zones, lights, closures=()):
+        seen["router"] = list(closures)
+        return real(zones, lights, closures)
+
+    def generate_fn(*a, **kw):
+        seen["rules"] = list(kw["closures"])
+        return fake_generate([candidate()])(*a, **kw)
+
+    monkeypatch.setattr(mod, "routers_for", spy_routers)
+    assert go(tmp_path, generate_fn, closures_fn=lambda lat, lon, miles: [reported]) == 0
+    assert seen["router"] == seen["rules"] == [reported]
+    assert "1 known closures within reach" in capsys.readouterr().out
+    route_fn = real([], "zigzags", [reported])[0]
+    assert route_fn.keywords["custom_model"]["priority"] == [{"if": "in_closure_7", "multiply_by": "0"}]

@@ -161,3 +161,50 @@ CREATE TABLE IF NOT EXISTS crowd_reports (
     hour          smallint    CHECK (hour BETWEEN 0 AND 23),
     weekday       smallint    CHECK (weekday BETWEEN 0 AND 6)   -- Monday = 0
 );
+
+-- "Closed or blocked" reports on a stretch (decision 017), with the stretch's geometry from the route as shown, so a
+-- reviewer can confirm one into closures. A report never closes a path by itself.
+CREATE TABLE IF NOT EXISTS closure_reports (
+    id            serial      PRIMARY KEY,
+    route_id      text        NOT NULL REFERENCES generated_routes(id),
+    reported_at   timestamptz NOT NULL DEFAULT now(),
+    stretch       integer,                        -- NULL: the whole route (can't be confirmed: no place)
+    stretch_name  text,
+    ran_at        timestamptz,
+    note          text,
+    status        text        NOT NULL DEFAULT 'reported' CHECK (status IN ('reported', 'confirmed', 'rejected')),
+    closure_id    integer,                        -- closures.id once confirmed
+    geom          geometry(LineString, 4326)
+);
+
+-- Known closures (decision 017): no route may pass through an applied one (api/closures.py). corridor_gap rows are
+-- rebuilt by etl/build_closures.py from the corridor catalog, including the gaps it did not apply and why; curated rows
+-- are reloaded from routing/curated_closures.geojson; report rows come from confirmed closure_reports and are kept.
+CREATE TABLE IF NOT EXISTS closures (
+    id                 serial      PRIMARY KEY,
+    kind               text        NOT NULL,
+    name               text        NOT NULL,
+    reason             text        NOT NULL,
+    source             text        NOT NULL,
+    trust              text        NOT NULL CHECK (trust IN ('verified', 'listed', 'seasonal_or_closed')),
+    applied            boolean     NOT NULL,
+    not_applied_reason text,
+    in_router          boolean     NOT NULL DEFAULT false,  -- given to GraphHopper as an impassable area
+    corridor_gap_id    integer,                             -- corridor_gaps.id (no FK: the catalog is rebuilt)
+    report_id          integer     REFERENCES closure_reports(id),
+    link_m             double precision,                    -- length of the missing link
+    walkable_along_m   double precision,                    -- longest walkable OSM way inside the strip
+    active_until       date,                                -- NULL: until removed
+    curated_id         text,                                -- routing/curated_closures.geojson feature id
+    checked_on         date,                                -- curated: when the sources were last checked
+    review_by          date,                                -- curated: check again by then (the eval fails after)
+    created_at         timestamptz NOT NULL DEFAULT now(),
+    geom               geometry(Polygon, 4326),             -- NULL when the link is too short to draw
+    CHECK (NOT applied OR geom IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS closures_geom_idx ON closures USING gist (geom);
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS curated_id text;
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS checked_on date;
+ALTER TABLE closures ADD COLUMN IF NOT EXISTS review_by date;
+ALTER TABLE closures DROP CONSTRAINT IF EXISTS closures_kind_check;
+ALTER TABLE closures ADD CONSTRAINT closures_kind_check CHECK (kind IN ('corridor_gap', 'curated', 'report'));

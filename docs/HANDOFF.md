@@ -1,6 +1,8 @@
-# Loop: handoff (Phase 2 in progress)
+# Loop: handoff (Phase 2 core complete except the run-test gate)
 
-As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`016`. Decisions 009–014 are merged into main (PR #1); 013 is a crowd-signal research spike. Decision 015 (lights) and the GPX writer are in PR #2 (`phase2-lights`). Decision 016 (crowds) is on branch `phase2-crowds`, built on `phase2-lights`.
+As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/001`–`017`. Decisions 009–016 and the GPX writer are merged into main (PRs #1–#3); 013 is a crowd-signal research spike. Decision 017 (closures) is in PR #4 (`phase2-closures`).
+
+**Phase 2 core is complete except the reviewer's run-test gate:** running the Kips Bay 3, 4 and 6 mi test routes (`out/run-tests/kips-bay-{3,4,6}mi-{zigzags,waits}.gpx`, with a map image for each; git-ignored) and reporting back. None of them enters a known closure (checked 2026-11-02).
 
 **Where it stands:**
 - Routes are ranked against the runner's preferences, with every dimension labeled `measured`, `estimate` or `not_scored` (decisions 009 and 010).
@@ -29,7 +31,12 @@ As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
   - a crowd level on each stretch;
   - "crowded" reports logged for calibration.
 
-  Paths, Sundays, before 7am and after 8pm are not scored. Eval: Spearman 0.73–0.82 against the held-out DOT round.
+  Paths, Sundays, before 7am and after 8pm are not scored. Only known-busy distance costs a route; no-data distance is neutral. Eval: Spearman 0.73–0.82 against the held-out DOT round.
+- **Decision 017, closures** (hard rule):
+  - a route with 30 m or more inside a known closure is rejected;
+  - the corridor catalog's East Midtown Greenway missing link applies; the other 106 gaps are recorded with the reason (between two corridors, walkable ways along the link, or the link is too short), because treating them as closures closed real paths;
+  - curated closures (`routing/curated_closures.geojson`): checked by hand against public sources, with a `listed` trust label, the date checked and a review-by date; the eval fails once a review-by date passes. First entry: East River Park north of Houston St (East Side Coastal Resiliency, closed since 2025-09-08, reopening projected end of 2027; review by 2027-02-01);
+  - "closed or blocked" stretch reports go to `closure_reports`, and a reviewer confirms one into a closure that GraphHopper routes around.
 - **All weights are provisional.** Turns and retracing in particular are not to be tuned before more calibration.
 
 ## What's built
@@ -57,7 +64,8 @@ As of 2026-11-02. Plan: `PROJECT_PLAN.md`. Reasons for each choice: `decisions/0
 - **Ranking** (`api/ranking.py`):
   - measured: turns, straight runs, loop shape, retracing (loops only), park/water, signals, matches routes you run;
   - estimate: crowds (only with a start date and time, decision 016);
-  - not scored: closures, roadway.
+  - not scored: roadway.
+- **Closures** (`api/closures.py`, `etl/build_closures.py`, `routing/curated_closures.geojson`, table `closures`; `make closures` reloads them): a hard rule, like no-go zones (decision 017).
 - **No-go zones** (`routing/no_go_zones.geojson`, `api/nogo.py`): GraphHopper avoid-areas plus a geometry check. Times Square is a default zone.
 - **Metrics** (`api/shape.py`, `api/route_context.py`): turns (definition revised in decision 011), straight runs, retracing, out-and-back share, closure, width, compactness, park share, waterfront share, crosswalks and signalized crosswalks per mile.
 - **Review loop** (`evals/routes/`):
@@ -154,13 +162,15 @@ Decision 014 changed the 4 mi rows:
 - **Config module:** `make_loop.py` imports `database_url` from `etl.load`; move it to a shared config module.
 
 ## Left for Phase 2
+**The gate:** the reviewer's run test of the Kips Bay files above. Steps 4, 7 and 8 below are still open and are not counted in the core.
+
 Order after decision 011. Each step ends with the review page and `pytest evals/`.
 1. ~~Combined ranking with no-go zones~~ (decision 010). ~~Park and waterfront share~~ and ~~signal counts~~ (decision 011). ~~Park, water and corridor generators; round trips everywhere~~ (decision 012).
 2. ~~Turnarounds by walking distance~~ (decision 014). Next: gaps checked with GraphHopper so walking distance can cross them, and caching for speed.
 3. ~~Lights preference, router side~~ (decision 015). Was: A signal penalty in GraphHopper for runners who wait (needs the `crossing` encoded value and a re-import). An expected-wait estimate, labeled `estimate`, that credits a zig-zagger for turning on a red.
 4. **Roadway share and the bike-lane rule.** Measure the share of a route on a road centerline where a separate sidewalk exists. The bike-lane rule has lower priority, and its purpose is narrow: never send a runner down an on-street lane such as 3rd Ave's because it is emptier. It needs NYC DOT bike-route data.
 5. ~~Crowds~~ (decision 016). Next: calibrate with "crowded" reports, and find a source for paths and greenways (DOT's automated counters cover 21 path ways).
-6. **Closures layer**: known East River gaps first, user reports later.
+6. ~~Closures layer~~ (decision 017), with curated closures. Next: a live closure source (DOT construction closures, Parks), and showing the runner when a closure changed their route.
 7. **Amenities after the ranking**: they annotate the top 3 with trust labels and don't change the order.
 8. **Calibrate, then tune.** Re-run `calibrate.py` after each generator change. Tune turns and retracing only once there are ratings or more runners.
 
