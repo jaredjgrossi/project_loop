@@ -243,6 +243,58 @@ def crossing_counts(coords, crossings: list[Crossing]) -> tuple[int, int]:
     return count, signals
 
 
+PASS_GAP_M = 25.0  # route samples near one crosswalk this far apart along the route are separate crossings
+
+
+def crossing_passes(coords, crossings: list[Crossing]) -> list[tuple[float, bool]]:
+    """(meters along the route, signalized) for every crossing the route makes, in order (decision 020). A crosswalk
+    walked twice, as on an out-and-back, is two crossings. Each pass counts when it covers CROSSING_COVERED of the
+    crosswalk, the test `crossing_counts` applies to the whole route; a crosswalk that only the passes together cover
+    is one crossing. So the count is never below `crossing_counts`, which counts each crosswalk once and stays the
+    ranking's input."""
+    if not crossings:
+        return []
+    frame = _Frame(coords[0][1])
+    route = _SegmentIndex([coords], frame, CROSSING_NEAR_M)
+    pts = _samples(coords, frame)
+    along = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    cell = CROSSING_NEAR_M
+    by_cell: dict[tuple[int, int], list[int]] = {}
+    for k, (x, y) in enumerate(pts):
+        by_cell.setdefault((int(x // cell), int(y // cell)), []).append(k)
+    out = []
+    for c in crossings:
+        cxy = [frame.xy(p) for p in c.coords]
+        if not any_cell(route.grid, cxy, CROSSING_NEAR_M, pad=1):  # as crossing_counts (decision 018)
+            continue
+        cpts = _samples(c.coords, frame, step=1.0)
+        if sum(route.near(p) for p in cpts) / len(cpts) < CROSSING_COVERED:
+            continue
+        segs = list(zip(cxy, cxy[1:])) or [(cxy[0], cxy[0])]
+        near = sorted({k for x, y in cpts for gx in range(int(x // cell) - 1, int(x // cell) + 2)
+                       for gy in range(int(y // cell) - 1, int(y // cell) + 2) for k in by_cell.get((gx, gy), ())
+                       if any(_seg_dist(pts[k], a, b) <= CROSSING_NEAR_M for a, b in segs)})
+        groups: list[list[int]] = []
+        for k in near:
+            if groups and along[k] - along[groups[-1][-1]] <= PASS_GAP_M:
+                groups[-1].append(k)
+            else:
+                groups.append([k])
+        made = []
+        for g in groups:
+            lo, hi = max(0, g[0] - 1), min(len(pts) - 1, g[-1] + 1)
+            part = list(zip(pts[lo:hi], pts[lo + 1:hi + 1]))
+            if sum(any(_seg_dist(p, a, b) <= CROSSING_NEAR_M for a, b in part) for p in cpts) / len(cpts) >= CROSSING_COVERED:
+                made.append(along[g[len(g) // 2]])
+        if not made:
+            mid = cpts[len(cpts) // 2]
+            made = [along[min(range(len(pts)), key=lambda k: math.dist(pts[k], mid))]]
+        out += [(a, c.signals) for a in made]
+    return sorted(out)
+
+
 # --- PostGIS --------------------------------------------------------------------------
 
 _BBOX = "ST_Expand(ST_Envelope(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 0.002)"

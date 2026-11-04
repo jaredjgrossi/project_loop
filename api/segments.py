@@ -104,7 +104,8 @@ def stretch_features(samples: list[list[float]], labels: list[Label], step_m: fl
                 "from_mile": round(s.start * step_m / METERS_PER_MILE, 2),
                 "to_mile": round(min(s.end, len(samples) - 1) * step_m / METERS_PER_MILE, 2),
                 "length_m": round((min(s.end, len(samples) - 1) - s.start) * step_m),
-                "signals": {"value": signals[i], "status": "measured"} if signals else {"value": None, "status": "not_scored"},
+                "signals": ({"value": signals[i], "status": "measured", "counted": SIGNALS_COUNTED} if signals
+                            else {"value": None, "status": "not_scored"}),
                 "elevation_gain_m": ({"value": gains[i], "status": "estimate"} if gains and gains[i] is not None
                                      else {"value": None, "status": "not_scored"}),
                 "crowd": crowds[i] if crowds else {"value": None, "status": "not_scored", "basis": "not computed"},
@@ -116,6 +117,7 @@ def stretch_features(samples: list[list[float]], labels: list[Label], step_m: fl
     return feats
 
 
+SIGNALS_COUNTED = "signalized crossings, each time the route crosses (decision 020)"
 COMPOSITION_SOURCE = ("OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog "
                       "within 15 m (path); the same 5 m samples as the route's shares")
 
@@ -182,7 +184,7 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
     the crowd level (estimate) for a run starting at `start` (decision 016)."""
     from api.crowds import route_crowds, stretch_crowd
     from api.elevation import elevation_profile
-    from api.route_context import _BBOX, composition_by_range, crossing_counts, fetch_context, sample_classes
+    from api.route_context import _BBOX, composition_by_range, crossing_passes, fetch_context, sample_classes
 
     samples = _resample(coords, STEP_M)
     rows = conn.execute(_LABELS, {"lons": [c[0] for c in samples], "lats": [c[1] for c in samples]}).fetchall()
@@ -194,7 +196,9 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
         f"SELECT ST_AsGeoJSON((ST_Dump(geom)).geom) FROM corridors WHERE geom && {_BBOX}",
         (json.dumps({"type": "LineString", "coordinates": coords}),))]
     classes, along = sample_classes(coords, ctx.parks, ctx.shoreline, corridor_lines)
-    compositions = composition_by_range(classes, along, [s.start * STEP_M for s in stretches])
+    bounds = [s.start * STEP_M for s in stretches]
+    compositions = composition_by_range(classes, along, bounds)
+    signal_at = [a for a, signalized in crossing_passes(coords, crossings) if signalized]
     sample_ele = _elevation_at_samples(coords, elevation, samples) if elevation else None
     crowd = route_crowds(conn, coords, start)
     widths = {}
@@ -202,7 +206,7 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
     if ways:
         widths = dict(conn.execute("SELECT way_id, width_ft FROM sidewalk_width WHERE width_ft IS NOT NULL AND way_id = ANY(%s)", (ways,)).fetchall())
     signals, gains, extra, crowds = [], [], [], []
-    for s in stretches:
+    for i, s in enumerate(stretches):
         lo, hi = s.start * STEP_M, s.end * STEP_M
         idx = [k for k, a in enumerate(crowd["along_m"]) if lo <= a < hi]
         crowds.append(stretch_crowd([crowd["levels"][k] for k in idx]))
@@ -210,7 +214,8 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
         part = samples[s.start:min(s.end + 1, len(samples))]
         if len(part) < 2:
             part = samples[max(0, s.start - 1):s.start + 1]
-        signals.append(crossing_counts(part, crossings)[1])
+        end_m = bounds[i + 1] if i + 1 < len(bounds) else math.inf  # the last stretch runs to the route's end
+        signals.append(sum(1 for a in signal_at if bounds[i] <= a < end_m))
         gains.append(elevation_profile(part, sample_ele[s.start:s.start + len(part)])["gain_m"] if sample_ele else None)
         gaps = conn.execute(_GAPS, (json.dumps({"type": "LineString", "coordinates": part}),)).fetchall()
         extra.append([{"text": f"A known {int(m)} m gap in the waterfront or greenway path is nearby",

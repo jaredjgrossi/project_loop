@@ -41,7 +41,8 @@ def test_stretch_features_carry_miles_name_kind_and_facts_with_source_and_trust(
     assert all(f["properties"]["crowd"]["status"] == "not_scored" for f in feats)  # none passed: never assumed quiet
     first, second = (f["properties"] for f in feats)
     assert first["from_mile"] == 0 and second["to_mile"] == pytest.approx(1000 / 1609.344, abs=0.02)
-    assert second["kind"] == "corridor" and second["signals"] == {"value": 0, "status": "measured"}
+    assert second["kind"] == "corridor" and second["signals"]["value"] == 0 and second["signals"]["status"] == "measured"
+    assert "each time" in second["signals"]["counted"]  # every crossing, not each crosswalk once (decision 020)
     assert second["elevation_gain_m"] == {"value": 2.5, "status": "estimate"}
     for f in feats:
         assert f["geometry"]["type"] == "LineString" and len(f["geometry"]["coordinates"]) >= 2

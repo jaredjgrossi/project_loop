@@ -82,7 +82,7 @@ def _context_dimensions(context: ContextScores | None, prefs: dict, w: dict) -> 
                   f"{context.park_or_water_pct:.0f}% in a park or by the water",
                   _clamp(context.park_or_water_pct / 60), w["park_water"]),
         Dimension("signals", CONTEXT_LABELS["signals"], "measured",
-                  f"{context.signals_per_mile:.1f} signalized crosswalks per mile",
+                  f"{context.signals_per_mile:.1f} signalized crosswalks per mile, each counted once",
                   _clamp(1 - context.signals_per_mile / SIGNALS_WORST_PER_MILE), w["signals"]),
     ]
     # Scored for every candidate or for none, decided by the start moment, so no route gains by being scorable.

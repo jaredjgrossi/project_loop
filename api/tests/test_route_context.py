@@ -9,6 +9,7 @@ from api.route_context import (
     Crossing,
     composition_by_range,
     crossing_counts,
+    crossing_passes,
     familiar_share,
     park_or_water_share,
     park_share,
@@ -173,47 +174,29 @@ def test_prefiltered_crossing_counts_match_the_unfiltered_ones(seed):
 
 
 @pytest.mark.parametrize("seed", range(40))
-def test_signal_positions_match_the_unfiltered_ones(seed):
-    import api.lights as lights
-
+def test_every_crossing_is_never_fewer_than_each_crosswalk_once(seed):
     route, crossings, _, _ = _random_case(seed)
-    assert lights.signal_positions(route, crossings) == _reference_signal_positions(route, crossings)
+    made = crossing_passes(route, crossings)
+    count, signals = crossing_counts(route, crossings)
+    assert len(made) >= count and sum(s for _, s in made) >= signals
+    assert [a for a, _ in made] == sorted(a for a, _ in made)
 
 
-def _reference_signal_positions(coords, crossings):
-    """signal_positions as it was before decision 018."""
-    from api.route_context import CROSSING_NEAR_M
+def test_an_out_and_back_crosses_each_crosswalk_twice():
+    # Out 1 km and back on the same line, a 16 m crosswalk on it every 200 m (a crosswalk way runs the way you
+    # walk across the street, so the route covers it lengthwise).
+    route = ll([(0, 0), (1000, 0), (0, 0)])
+    crossings = [Crossing(k, True, ll([(x - 8, 0), (x + 8, 0)])) for k, x in enumerate(range(100, 1000, 200))]
+    made = crossing_passes(route, crossings)
+    assert crossing_counts(route, crossings) == (5, 5)  # the ranking's input: each crosswalk once
+    assert len(made) == 10 and all(s for _, s in made)
+    assert made[0][0] == pytest.approx(100, abs=10) and made[-1][0] == pytest.approx(1900, abs=10)
 
-    frame = _Frame(coords[0][1])
-    pts = _samples(coords, frame, step=5.0)
-    along = [0.0]
-    for a, b in zip(pts, pts[1:]):
-        along.append(along[-1] + math.dist(a, b))
-    grid = {}
-    for k, (x, y) in enumerate(pts):
-        grid.setdefault((int(x // CROSSING_NEAR_M), int(y // CROSSING_NEAR_M)), []).append(k)
 
-    def nearest(p):
-        cx, cy = int(p[0] // CROSSING_NEAR_M), int(p[1] // CROSSING_NEAR_M)
-        best, best_d = None, CROSSING_NEAR_M
-        for gx in (cx - 1, cx, cx + 1):
-            for gy in (cy - 1, cy, cy + 1):
-                for k in grid.get((gx, gy), ()):
-                    d = math.dist(pts[k], p)
-                    if d <= best_d:
-                        best, best_d = k, d
-        return best
-
-    out = []
-    for c in crossings:
-        if not c.signals:
-            continue
-        cpts = _samples(c.coords, frame, step=1.0)
-        hits = [k for k in (nearest(p) for p in cpts) if k is not None]
-        if len(hits) / len(cpts) >= CROSSING_COVERED:
-            hits.sort()
-            out.append(along[hits[len(hits) // 2]])
-    return sorted(out)
+def test_a_route_that_never_comes_back_crosses_each_crosswalk_once():
+    crossings = [Crossing(k, k % 2 == 0, ll([(x - 8, 0), (x + 8, 0)])) for k, x in enumerate(range(100, 1000, 200))]
+    made = crossing_passes(STRAIGHT, crossings)
+    assert len(made) == 5 and sum(s for _, s in made) == 3
 
 
 @pytest.mark.parametrize("seed", range(20))
