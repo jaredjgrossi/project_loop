@@ -317,14 +317,16 @@ def run(
         return 3
 
     rejected = ", ".join(f"{n} {why}" for why, n in result.rejected.items())
-    print(f"Tried:     {result.generated} candidates" + (f" (rejected: {rejected})" if rejected else ""))
+    print(f"Tried:     {result.generated} candidates" + (f" (rejected: {rejected})" if rejected else "")
+          + (f"; best of {result.best_of} distinct routes within the distance limit" if result.best_of else ""))
     tm = result.timing
     if tm.get("first_candidate_s") is not None:
         print(f"Timing:    first candidate {tm['first_candidate_s']:.2f} s, #1 arrived {tm['winner_arrived_s']:.2f} s, "
               f"all done {tm['total_s']:.2f} s")
     if pool_out is not None:
         pool_out.parent.mkdir(parents=True, exist_ok=True)
-        pool_out.write_text(json.dumps({"request": constraints.model_dump(mode="json"), "timing": tm, "pool": result.pool}))
+        pool_out.write_text(json.dumps({"request": constraints.model_dump(mode="json"), "timing": tm,
+                                        "best_of": result.best_of, "pool": result.pool}))
         print(f"Pool:      {len(result.pool)} candidates with metric vectors -> {pool_out}")
     if result.note:
         print(f"Note:      {result.note}")
@@ -348,7 +350,7 @@ def run(
         stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
                      if stretch_fn is not None else [])
         geojson["features"][0]["properties"]["summary"] = route_summary(
-            c, stretches, markers, geojson["features"][0]["properties"]["elevation"])
+            c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=result.best_of)
         geojson["features"] += markers + stretches
         path.write_text(json.dumps(geojson))
         saved.append(path)

@@ -29,7 +29,12 @@ def _not_scored(reason: str) -> dict:
     return {"value": None, "status": "not_scored", "reason": reason}
 
 
-def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elevation: dict) -> dict:
+BEST_OF_SOURCE = ("distinct routes that passed every hard rule within the distance limit, duplicates dropped as "
+                  "for the top 3 (decision 020)")
+
+
+def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elevation: dict,
+                  rank: int | None = None, best_of: int | None = None) -> dict:
     # The geometry's own length, as the mile markers and stretches measure it; GraphHopper's figure differs slightly.
     miles = c.shape.distance_miles
     out = {
@@ -82,4 +87,6 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
     turns = [m["properties"] for m in markers if m["properties"].get("feature") == "turnaround"]
     out["turnarounds"] = [_value(t["along_mi"], "mi", "measured", t["source"], meters=t["along_m"]) for t in turns]
     out["score"] = _value(round(c.score), None, "provisional", "combined ranking; weights not calibrated (decision 010)")
+    out["rank"] = (_value(rank, None, "measured", BEST_OF_SOURCE, of=best_of) if rank is not None and best_of
+                   else _not_scored("no route came within the distance limit"))
     return out

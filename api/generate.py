@@ -112,6 +112,9 @@ class GenerationResult:
     note: str | None = None
     pool: list[dict] = field(default_factory=list)  # every job's outcome with its metric vector (decision 014)
     timing: dict = field(default_factory=dict)  # seconds: first candidate, when the winner arrived, total
+    # "Best of N" (decision 020): distinct routes that passed every hard rule within the distance limit, with
+    # duplicates dropped by the same rule as the top 3. None when no route came within the limit.
+    best_of: int | None = None
 
 
 # --- geometry ------------------------------------------------------------------------
@@ -596,7 +599,9 @@ def generate_loops(
     generated = len(outcomes)
 
     in_tolerance = sorted((c for c in candidates if c.within_tolerance), key=lambda c: -c.score)
+    best_of = None
     if in_tolerance:
+        best_of = len(_dedupe(in_tolerance, len(in_tolerance)))
         chosen = _dedupe(in_tolerance, top_n)
         if shape == "any":
             chosen = _offer_both_kinds(chosen, in_tolerance)
@@ -628,4 +633,5 @@ def generate_loops(
         note=" ".join(notes) or None,
         pool=[_pool_entry(o, s, id(o) in chosen_ids) for o, s in outcomes],
         timing=timing,
+        best_of=best_of,
     )

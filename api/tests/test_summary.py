@@ -88,3 +88,10 @@ def test_missing_data_is_not_scored_with_a_reason_never_zero():
     for key in ("waterfront_pct", "street_pct", "lights_per_mile", "climb", "wait_at_lights", "crowds",
                 "ranking_signals_per_mile"):
         assert s[key]["status"] == "not_scored" and s[key]["value"] is None and s[key]["reason"], key
+
+
+def test_rank_says_best_of_how_many_distinct_routes():
+    c = candidate(CONTEXT)
+    s = route_summary(c, [], [], ELEVATION, rank=1, best_of=41)
+    assert s["rank"]["value"] == 1 and s["rank"]["of"] == 41 and s["rank"]["status"] == "measured"
+    assert route_summary(c, [], [], ELEVATION, rank=1, best_of=None)["rank"]["status"] == "not_scored"
