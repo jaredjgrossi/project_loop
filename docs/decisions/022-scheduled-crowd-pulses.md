@@ -46,7 +46,7 @@ The morning moment is SeaStreak's published 08:00 arrival on a school day, Wedne
 - At 10:30 no Kips Bay top-3 route meets any pulse.
 - On Election Day (remote) there's no school pulse, but the ferries still run.
 
-## Result: the reviewer's Kips Bay 3 mi run test, school day 8am
+## Result: Kips Bay 3 mi, on a school day at SeaStreak's published 08:00 arrival
 | route | busy | pulses met (where) | score (no start time → 8am) |
 |---|---|---|---|
 | #1 out-and-back on the waterfront | 8.9% | SeaStreak 08:00 at East 35th St (E 34th St); UNIS arrival (about E 23rd–25th St); NYC Ferry 08:24 at East 34th St | 83.8 → 85.5 |
