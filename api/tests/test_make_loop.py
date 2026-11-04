@@ -242,3 +242,42 @@ def test_known_closures_reach_the_router_and_the_rules(tmp_path, capsys, monkeyp
     assert "1 known closures within reach" in capsys.readouterr().out
     route_fn = real([], "zigzags", [reported])[0]
     assert route_fn.keywords["custom_model"]["priority"] == [{"if": "in_closure_7", "multiply_by": "0"}]
+
+
+def test_identical_router_requests_in_one_generation_are_sent_once(monkeypatch):
+    # Decision 018: 6-14% of a generation's requests repeat an earlier one exactly; GraphHopper answers them the same.
+    import threading
+
+    import api.scripts.make_loop as mod
+    from api.routing import RoutingError
+
+    sent = []
+    lock = threading.Lock()
+
+    def fake_route(points, custom_model=None):
+        with lock:
+            sent.append(tuple(points))
+        if points[0] == (0.0, 0.0):
+            raise RoutingError("no route")
+        return Route(distance_m=1000.0, time_s=1, coordinates=[[p[1], p[0]] for p in points])
+
+    monkeypatch.setattr(mod, "request_route", fake_route)
+    route_fn, _, area_fn = mod.routers_for([], "zigzags")
+    a = [(40.74, -73.98), (40.75, -73.98)]
+    area = {"type": "Polygon", "coordinates": [[[-73.99, 40.73], [-73.97, 40.73], [-73.97, 40.76], [-73.99, 40.73]]]}
+    threads = [threading.Thread(target=route_fn, args=(list(a),)) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert route_fn(list(a)).distance_m == 1000.0
+    area_fn(list(a), area)
+    area_fn(list(a), area)
+    assert len(sent) == 2  # once plain, once with the feature area
+    for _ in range(2):
+        with pytest.raises(RoutingError):
+            route_fn([(0.0, 0.0), (40.75, -73.98)])
+    assert len(sent) == 3  # a failure is reused too
+    fresh, _, _ = mod.routers_for([], "zigzags")
+    fresh(list(a))
+    assert len(sent) == 4  # a new request's routers start empty

@@ -73,3 +73,148 @@ def test_familiar_share_is_the_route_on_ways_already_run():
     run_before = [ll([(0, 3), (300, 3)])]
     assert familiar_share(STRAIGHT, run_before) == pytest.approx(30.8, abs=1.5)
     assert familiar_share(STRAIGHT, []) == 0
+
+
+# --- decision 018: no crowd sampling without a start time ---------------------------------
+
+
+class _OnlyRegclass:
+    """A connection that answers the crowd table check and fails on anything else."""
+
+    def __init__(self, loaded=True):
+        self.loaded, self.queries = loaded, []
+
+    def execute(self, sql, args=None):
+        self.queries.append(sql)
+        assert "to_regclass('sidewalk_crowd')" in sql, f"unexpected query without a start time: {sql[:80]}"
+        loaded = self.loaded
+
+        class _R:
+            def fetchone(self):
+                return (loaded,)
+
+        return _R()
+
+
+def test_without_a_start_time_crowds_are_not_sampled_and_the_summary_is_unchanged():
+    from api.route_context import _crowd_fields
+
+    coords = [[-73.98, 40.74], [-73.98, 40.75], [-73.97, 40.75]]
+    conn = _OnlyRegclass()
+    assert _crowd_fields(conn, coords, None) == {
+        "crowd_high_pct": 0.0, "crowd_medium_pct": 0.0, "crowd_low_pct": 0.0, "crowd_not_scored_pct": 100.0,
+        "crowd_band": None, "crowd_reason": "no start time given", "crowd_start_band": None}
+    assert len(conn.queries) == 1
+
+
+def test_without_crowd_data_loaded_the_reason_says_so_as_before():
+    from api.route_context import _crowd_fields
+
+    fields = _crowd_fields(_OnlyRegclass(loaded=False), [[-73.98, 40.74], [-73.98, 40.75]], None)
+    assert fields["crowd_reason"] == "crowd data not loaded" and fields["crowd_not_scored_pct"] == 100.0
+
+
+# --- decision 018: prefilters and shared samples give the same numbers ----------------------
+
+import random  # noqa: E402
+
+from api.route_context import (  # noqa: E402
+    CROSSING_COVERED, Crossing, _Frame, _samples, _SegmentIndex, crossing_counts, park_or_water_share, park_share,
+    shares, waterfront_share,
+)
+
+
+def _reference_crossing_counts(coords, crossings):
+    """crossing_counts as it was before decision 018: every crosswalk sampled, no prefilter."""
+    if not crossings:
+        return 0, 0
+    frame = _Frame(coords[0][1])
+    route = _SegmentIndex([coords], frame, 4.0)
+    count = signals = 0
+    for c in crossings:
+        pts = _samples(c.coords, frame, step=1.0)
+        near = [route.near(p) for p in pts]
+        if sum(near) / len(near) >= CROSSING_COVERED:
+            count += 1
+            signals += c.signals
+    return count, signals
+
+
+def _random_case(seed):
+    rnd = random.Random(seed)
+    lon0, lat0 = -73.98, 40.74
+    m = lambda dx, dy: [lon0 + dx / 84_300, lat0 + dy / 110_574]
+    route, x, y = [m(0, 0)], 0.0, 0.0
+    for _ in range(rnd.randint(3, 12)):
+        x, y = x + rnd.uniform(-300, 300), y + rnd.uniform(-300, 300)
+        route.append(m(x, y))
+    crossings = []
+    for k in range(80):
+        if k % 2:  # on or right beside the route: a vertex plus an offset of 0-6 m, so cell edges are exercised
+            a = rnd.choice(route)
+            cx, cy = (a[0] - lon0) * 84_300 + rnd.uniform(-6, 6), (a[1] - lat0) * 110_574 + rnd.uniform(-6, 6)
+        else:
+            cx, cy = rnd.uniform(-1500, 1500), rnd.uniform(-1500, 1500)
+        ang, half = rnd.uniform(0, math.pi), rnd.uniform(3, 12)
+        line = [m(cx - half * math.cos(ang), cy - half * math.sin(ang)), m(cx + half * math.cos(ang), cy + half * math.sin(ang))]
+        crossings.append(Crossing(k, bool(rnd.getrandbits(1)), line))
+    parks = [[[m(-200, -200), m(200, -200), m(200, 200), m(-200, 200), m(-200, -200)]]]
+    shore = [[m(-1000, 150), m(1000, 160)]]
+    return route, crossings, parks, shore
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_prefiltered_crossing_counts_match_the_unfiltered_ones(seed):
+    route, crossings, _, _ = _random_case(seed)
+    assert crossing_counts(route, crossings) == _reference_crossing_counts(route, crossings)
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_signal_positions_match_the_unfiltered_ones(seed):
+    import api.lights as lights
+
+    route, crossings, _, _ = _random_case(seed)
+    assert lights.signal_positions(route, crossings) == _reference_signal_positions(route, crossings)
+
+
+def _reference_signal_positions(coords, crossings):
+    """signal_positions as it was before decision 018."""
+    from api.route_context import CROSSING_NEAR_M
+
+    frame = _Frame(coords[0][1])
+    pts = _samples(coords, frame, step=5.0)
+    along = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    grid = {}
+    for k, (x, y) in enumerate(pts):
+        grid.setdefault((int(x // CROSSING_NEAR_M), int(y // CROSSING_NEAR_M)), []).append(k)
+
+    def nearest(p):
+        cx, cy = int(p[0] // CROSSING_NEAR_M), int(p[1] // CROSSING_NEAR_M)
+        best, best_d = None, CROSSING_NEAR_M
+        for gx in (cx - 1, cx, cx + 1):
+            for gy in (cy - 1, cy, cy + 1):
+                for k in grid.get((gx, gy), ()):
+                    d = math.dist(pts[k], p)
+                    if d <= best_d:
+                        best, best_d = k, d
+        return best
+
+    out = []
+    for c in crossings:
+        if not c.signals:
+            continue
+        cpts = _samples(c.coords, frame, step=1.0)
+        hits = [k for k in (nearest(p) for p in cpts) if k is not None]
+        if len(hits) / len(cpts) >= CROSSING_COVERED:
+            hits.sort()
+            out.append(along[hits[len(hits) // 2]])
+    return sorted(out)
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_shared_samples_give_the_same_three_shares(seed):
+    route, _, parks, shore = _random_case(seed)
+    for p, s in ((parks, shore), ([], shore), (parks, []), ([], [])):
+        assert shares(route, p, s) == (park_share(route, p), waterfront_share(route, s), park_or_water_share(route, p, s))

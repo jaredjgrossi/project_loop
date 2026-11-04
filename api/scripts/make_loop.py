@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import sys
+import threading
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
@@ -120,10 +121,50 @@ def _merged(*models: dict | None) -> dict | None:
     return out
 
 
+class _Reused:
+    """A router function that sends each distinct request once and reuses the answer, a RoutingError included
+    (decision 018: 6-14% of a generation's requests repeat an earlier one exactly, and GraphHopper answers them the
+    same). Thread-safe: a request already in flight is waited for, not sent again. One per request's routers, so
+    nothing is kept between requests."""
+
+    def __init__(self, fn: partial, key: Callable = lambda *a: a):
+        self.fn, self.key = fn, key
+        self.keywords = fn.keywords  # the custom model, as on the plain partial
+        self.lock = threading.Lock()
+        self.done: dict = {}
+
+    def __call__(self, *args):
+        k = self.key(*args)
+        with self.lock:
+            slot = self.done.get(k)
+            if slot is None:
+                slot = self.done[k] = [threading.Event(), None, None]
+                mine = True
+            else:
+                mine = False
+        if mine:
+            try:
+                slot[1] = self.fn(*args)
+            except RoutingError as exc:
+                slot[2] = exc
+            finally:
+                slot[0].set()
+        else:
+            slot[0].wait()
+        if slot[2] is not None:
+            raise slot[2]
+        return slot[1]
+
+
+def _points_key(points, *rest):
+    return (tuple(tuple(p) for p in points), *rest)
+
+
 def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable, Callable]:
     """GraphHopper route and round-trip functions that route around the given no-go zones (plus any extra rules)."""
     model = _merged(custom_model(zones), extra)
-    return partial(request_route, custom_model=model), partial(request_round_trip, custom_model=model)
+    return (_Reused(partial(request_route, custom_model=model), _points_key),
+            _Reused(partial(request_round_trip, custom_model=model)))
 
 
 def routers_for(zones: list[NoGoZone], lights: Lights, closures=()) -> tuple[Callable, Callable, Callable]:
@@ -176,7 +217,14 @@ def area_router(zones: list[NoGoZone], extra: dict | None = None) -> Callable:
         }
         return request_route(points, custom_model=model)
 
-    return route
+    reused = _Reused(partial(route), lambda points, area: (_points_key(points), id(area)))
+    keep: dict = {}  # the areas seen, so an id in the memo can't be reused by another area during the request
+
+    def route_once(points: list[tuple[float, float]], area: dict):
+        keep[id(area)] = area
+        return reused(points, area)
+
+    return route_once
 
 
 def print_candidate(rank: int, c: Candidate) -> None:

@@ -21,7 +21,7 @@ Assumptions behind the estimate (all provisional; stated in decision 015):
 import math
 
 from api.constraints import Lights
-from api.route_context import CROSSING_COVERED, CROSSING_NEAR_M, Crossing, _Frame, _samples
+from api.route_context import CROSSING_COVERED, CROSSING_NEAR_M, Crossing, _Frame, _samples, any_cell
 
 SIGNAL_PRIORITY = 0.2
 CYCLE_S = 90.0
@@ -66,6 +66,10 @@ def signal_positions(coords, crossings: list[Crossing]) -> list[float]:
     out = []
     for c in crossings:
         if not c.signals:
+            continue
+        # nearest() looks one cell around each point: a crosswalk with no route sample within two cells of its box
+        # (one for that, one for rounding at cell edges) can't be walked, so skip sampling it (decision 018).
+        if not any_cell(grid, [frame.xy(p) for p in c.coords], cell, pad=2):
             continue
         cpts = _samples(c.coords, frame, step=1.0)
         hits = [k for k in (nearest(p) for p in cpts) if k is not None]
