@@ -64,7 +64,7 @@ So "corridor" is a caption, not a share. On this route, 524 m of the esplanade s
 |---|---|---|
 | Waterfront, summary / sum of stretches | 60.4% / no stretch shares | 60.44% / 60.44% |
 | Path, street | none | 5.5%, 34.1% |
-| Signalized crossings, summary / sum of stretches | 9 / 18 (by coincidence) | 18 / 18 (5.8 a mile on 3.07 mi) |
+| Signalized crossings, summary / sum of stretches | 9 / 18 (by coincidence) | 18 / 18 (5.9 a mile: 18 over the geometry's 3.07 mi, 4,938 m) |
 | Ranking's signals input | 2.9 a mile | 2.9 a mile, unchanged |
 | Wait at lights for a runner who waits (estimate) | 146 s | 292 s |
 | Turnaround | not in the output | 1.54 mi (2,476 m) |
