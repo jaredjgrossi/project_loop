@@ -1,0 +1,695 @@
+{
+ "_about": "Today's top 3 per review row and lights setting (decision 018), written by evals/routes/time_generation.py --pin. Fingerprints hash the route at about 10 m; no geometry is stored.",
+ "rows": {
+  "kips-bay|3|zigzags": [
+   {
+    "label": "out-and-back on the waterfront, heading 159 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4921,
+    "score": 83.38,
+    "fingerprint": "dd1b5c10daf1"
+   },
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 4735,
+    "score": 80.01,
+    "fingerprint": "d9c059ecdb46"
+   },
+   {
+    "label": "rectangle 1:1, --",
+    "kind": "loop",
+    "distance_m": 4842,
+    "score": 58.73,
+    "fingerprint": "521e2babfb5b"
+   }
+  ],
+  "kips-bay|4|zigzags": [
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 6480,
+    "score": 86.33,
+    "fingerprint": "643c4088b655"
+   },
+   {
+    "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6311,
+    "score": 66.32,
+    "fingerprint": "8375970e3446"
+   },
+   {
+    "label": "rectangle 1.5:1, -+",
+    "kind": "loop",
+    "distance_m": 6205,
+    "score": 65.42,
+    "fingerprint": "d4ad4a8b1435"
+   }
+  ],
+  "kips-bay|6|zigzags": [
+   {
+    "label": "out-and-back on the waterfront, heading 3 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9585,
+    "score": 67.97,
+    "fingerprint": "006d1471c5e3"
+   },
+   {
+    "label": "rectangle 1.5:1, +-",
+    "kind": "loop",
+    "distance_m": 9630,
+    "score": 60.96,
+    "fingerprint": "26c662aca341"
+   },
+   {
+    "label": "rectangle 2.5:1, +-",
+    "kind": "loop",
+    "distance_m": 9468,
+    "score": 60.84,
+    "fingerprint": "dc0bdc35f3ad"
+   }
+  ],
+  "flatiron|3|zigzags": [
+   {
+    "label": "out-and-back on East River Esplanade, heading 141 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4878,
+    "score": 79.66,
+    "fingerprint": "4abb99d40636"
+   },
+   {
+    "label": "out-and-back on East River Esplanade, heading 71 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4940,
+    "score": 76.52,
+    "fingerprint": "277bd2531c64"
+   },
+   {
+    "label": "rectangle 1:1, ++",
+    "kind": "loop",
+    "distance_m": 4909,
+    "score": 66.35,
+    "fingerprint": "a67cec8ead84"
+   }
+  ],
+  "flatiron|4|zigzags": [
+   {
+    "label": "out-and-back on East River Esplanade and beyond, heading 71 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6740,
+    "score": 68.78,
+    "fingerprint": "8af29368f9c9"
+   },
+   {
+    "label": "out-and-back on unnamed waterfront path and beyond, heading 104 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6293,
+    "score": 57.86,
+    "fingerprint": "bef86c15cf43"
+   },
+   {
+    "label": "loop on unnamed waterfront path and beyond, heading 104 degrees",
+    "kind": "loop",
+    "distance_m": 6557,
+    "score": 57.07,
+    "fingerprint": "9d4b2f80a42f"
+   }
+  ],
+  "astor-place|6|zigzags": [
+   {
+    "label": "out-and-back both ways on Hudson River Park Esplanade",
+    "kind": "out_and_back",
+    "distance_m": 9710,
+    "score": 75.63,
+    "fingerprint": "57d3a71fd403"
+   },
+   {
+    "label": "out-and-back on Hudson River Park Esplanade and beyond, heading 320 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9668,
+    "score": 69.78,
+    "fingerprint": "c6e8e86c7134"
+   },
+   {
+    "label": "rectangle 1.5:1, +-",
+    "kind": "loop",
+    "distance_m": 9684,
+    "score": 52.68,
+    "fingerprint": "6f488114190e"
+   }
+  ],
+  "upper-east-side|3|zigzags": [
+   {
+    "label": "out-and-back on Bobby Wagner Walk, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4885,
+    "score": 92.03,
+    "fingerprint": "30b5db1eb01a"
+   },
+   {
+    "label": "loop on a route you run and beyond, heading 27 degrees",
+    "kind": "lollipop",
+    "distance_m": 4901,
+    "score": 82.5,
+    "fingerprint": "5b768fb1a703"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), --",
+    "kind": "loop",
+    "distance_m": 4800,
+    "score": 62.08,
+    "fingerprint": "5ca738509010"
+   }
+  ],
+  "upper-east-side|4|zigzags": [
+   {
+    "label": "out-and-back on Bobby Wagner Walk, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6400,
+    "score": 92.15,
+    "fingerprint": "8f6a8df49681"
+   },
+   {
+    "label": "out-and-back on a route you run and beyond, heading 27 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6509,
+    "score": 83.2,
+    "fingerprint": "6d9f6ed736a6"
+   },
+   {
+    "label": "round trip, seed 6",
+    "kind": "loop",
+    "distance_m": 6551,
+    "score": 70.61,
+    "fingerprint": "6b415629bf81"
+   }
+  ],
+  "upper-east-side|6|zigzags": [
+   {
+    "label": "out-and-back on Bobby Wagner Walk and beyond, heading 45 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9886,
+    "score": 84.53,
+    "fingerprint": "da5fc8b2f967"
+   },
+   {
+    "label": "loop on Bobby Wagner Walk and beyond, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9452,
+    "score": 79.05,
+    "fingerprint": "759d9c454306"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), +-",
+    "kind": "loop",
+    "distance_m": 9776,
+    "score": 67.91,
+    "fingerprint": "0ada730ccc22"
+   }
+  ],
+  "williamsburg|4|zigzags": [
+   {
+    "label": "out-and-back on North 5th Street Pier and Park waterfront and beyond, heading 21 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6321,
+    "score": 53.27,
+    "fingerprint": "aef118cef445"
+   },
+   {
+    "label": "out-and-back on Domino Park waterfront and beyond, heading 204 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6368,
+    "score": 52.92,
+    "fingerprint": "25732c7369c7"
+   },
+   {
+    "label": "rectangle 1:1, -+",
+    "kind": "loop",
+    "distance_m": 6398,
+    "score": 52.2,
+    "fingerprint": "2f1d5f3de65f"
+   }
+  ],
+  "dumbo|3|zigzags": [
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 4731,
+    "score": 65.08,
+    "fingerprint": "25db9be6056c"
+   },
+   {
+    "label": "out-and-back on Brooklyn Bridge Park Greenway and beyond, heading 223 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4933,
+    "score": 59.82,
+    "fingerprint": "8d296390ad91"
+   },
+   {
+    "label": "rectangle 1.5:1, -+",
+    "kind": "loop",
+    "distance_m": 4752,
+    "score": 54.6,
+    "fingerprint": "c5ecd27dd89f"
+   }
+  ],
+  "flushing-meadows|3|zigzags": [
+   {
+    "label": "out-and-back through Flushing Meadows-Corona Park, heading 166 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4721,
+    "score": 75.85,
+    "fingerprint": "4d18b72fe126"
+   },
+   {
+    "label": "loop on Promenade of Industry and beyond, heading 170 degrees",
+    "kind": "lollipop",
+    "distance_m": 4627,
+    "score": 68.66,
+    "fingerprint": "a1393a2b0b71"
+   },
+   {
+    "label": "round trip, seed 2",
+    "kind": "loop",
+    "distance_m": 4656,
+    "score": 67.19,
+    "fingerprint": "91d54d106211"
+   }
+  ],
+  "grand-concourse|4|zigzags": [
+   {
+    "label": "out-and-back on Mosholu-Pelham Greenway, heading 18 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6223,
+    "score": 61.61,
+    "fingerprint": "6e6445b073ea"
+   },
+   {
+    "label": "loop through Aqueduct Walk and beyond, heading 230 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6439,
+    "score": 60.19,
+    "fingerprint": "c52a4ac3f21f"
+   },
+   {
+    "label": "loop on the waterfront, heading 270 degrees",
+    "kind": "loop",
+    "distance_m": 6584,
+    "score": 54.18,
+    "fingerprint": "fc3059ba0d85"
+   }
+  ],
+  "st-george|3|zigzags": [
+   {
+    "label": "out-and-back through North Shore Esplanade and beyond, heading 301 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4800,
+    "score": 72.59,
+    "fingerprint": "6894e7178703"
+   },
+   {
+    "label": "rectangle 2.5:1, --",
+    "kind": "loop",
+    "distance_m": 4828,
+    "score": 60.17,
+    "fingerprint": "275f0f8427a1"
+   },
+   {
+    "label": "loop on the waterfront and beyond, heading 184 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4868,
+    "score": 56.73,
+    "fingerprint": "dae619fc2ae4"
+   }
+  ],
+  "victory-blvd|3|zigzags": [
+   {
+    "label": "out-and-back through Willowbrook Park, heading 155 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4936,
+    "score": 54.99,
+    "fingerprint": "863111652014"
+   },
+   {
+    "label": "out-and-back, heading 185 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4803,
+    "score": 54.71,
+    "fingerprint": "7fff50773ed0"
+   },
+   {
+    "label": "rectangle 2.5:1 (short side along grid), ++",
+    "kind": "loop",
+    "distance_m": 4821,
+    "score": 31.38,
+    "fingerprint": "dfb4e8bc5f52"
+   }
+  ],
+  "kips-bay|3|waits": [
+   {
+    "label": "loop on the waterfront, heading 159 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4958,
+    "score": 79.01,
+    "fingerprint": "8f14e7afca65"
+   },
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 4796,
+    "score": 76.39,
+    "fingerprint": "d6a966a4923d"
+   },
+   {
+    "label": "rectangle 1:1, --",
+    "kind": "loop",
+    "distance_m": 4916,
+    "score": 61.51,
+    "fingerprint": "d6894627f68e"
+   }
+  ],
+  "kips-bay|4|waits": [
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 6542,
+    "score": 83.02,
+    "fingerprint": "d831bda5045c"
+   },
+   {
+    "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6311,
+    "score": 70.11,
+    "fingerprint": "8dcf96ab6678"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), --",
+    "kind": "loop",
+    "distance_m": 6651,
+    "score": 65.35,
+    "fingerprint": "c66f920f2698"
+   }
+  ],
+  "kips-bay|6|waits": [
+   {
+    "label": "out-and-back on the waterfront, heading 3 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9647,
+    "score": 70.45,
+    "fingerprint": "5533a2112e2f"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), +-",
+    "kind": "loop",
+    "distance_m": 9841,
+    "score": 66.07,
+    "fingerprint": "860cbe80eae2"
+   },
+   {
+    "label": "out-and-back on East River Esplanade and beyond, heading 76 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9843,
+    "score": 63.32,
+    "fingerprint": "8cbf5a2f3e34"
+   }
+  ],
+  "flatiron|3|waits": [
+   {
+    "label": "out-and-back on East River Esplanade, heading 141 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4880,
+    "score": 85.29,
+    "fingerprint": "800c48a148dc"
+   },
+   {
+    "label": "out-and-back on East River Esplanade, heading 71 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4893,
+    "score": 82.55,
+    "fingerprint": "9c45cb8e0396"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), ++",
+    "kind": "loop",
+    "distance_m": 4718,
+    "score": 68.52,
+    "fingerprint": "ed4e7afc9166"
+   }
+  ],
+  "flatiron|4|waits": [
+   {
+    "label": "out-and-back on unnamed waterfront path and beyond, heading 104 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6297,
+    "score": 67.66,
+    "fingerprint": "8a7687a5aff3"
+   },
+   {
+    "label": "loop on East River Esplanade and beyond, heading 71 degrees",
+    "kind": "lollipop",
+    "distance_m": 6370,
+    "score": 62.85,
+    "fingerprint": "e3ebdd19358b"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), -+",
+    "kind": "loop",
+    "distance_m": 6564,
+    "score": 57.48,
+    "fingerprint": "a08f2a1de09b"
+   }
+  ],
+  "astor-place|6|waits": [
+   {
+    "label": "out-and-back both ways on Hudson River Park Esplanade",
+    "kind": "out_and_back",
+    "distance_m": 9669,
+    "score": 71.51,
+    "fingerprint": "5daa9c373470"
+   },
+   {
+    "label": "loop on the waterfront and beyond, heading 45 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9532,
+    "score": 67.46,
+    "fingerprint": "9fea883f7c0c"
+   },
+   {
+    "label": "loop on the waterfront, heading 197 degrees",
+    "kind": "loop",
+    "distance_m": 9764,
+    "score": 59.36,
+    "fingerprint": "b90e8b3ce29a"
+   }
+  ],
+  "upper-east-side|3|waits": [
+   {
+    "label": "out-and-back on Bobby Wagner Walk, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4885,
+    "score": 92.51,
+    "fingerprint": "bc2c1e9549a3"
+   },
+   {
+    "label": "out-and-back, heading 29 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4878,
+    "score": 91.4,
+    "fingerprint": "e51db086e6e4"
+   },
+   {
+    "label": "rectangle 2.5:1, +-",
+    "kind": "loop",
+    "distance_m": 4821,
+    "score": 69.36,
+    "fingerprint": "ead871946fa6"
+   }
+  ],
+  "upper-east-side|4|waits": [
+   {
+    "label": "out-and-back on the waterfront, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6400,
+    "score": 93.18,
+    "fingerprint": "65e357e5cc88"
+   },
+   {
+    "label": "out-and-back on a route you run and beyond, heading 27 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6517,
+    "score": 85.91,
+    "fingerprint": "c8053a1321a1"
+   },
+   {
+    "label": "rectangle 1.5:1 (short side along grid), +-",
+    "kind": "loop",
+    "distance_m": 6563,
+    "score": 77.14,
+    "fingerprint": "7ec8c7c2f970"
+   }
+  ],
+  "upper-east-side|6|waits": [
+   {
+    "label": "out-and-back on Bobby Wagner Walk and beyond, heading 45 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9886,
+    "score": 87.41,
+    "fingerprint": "f29557446a8d"
+   },
+   {
+    "label": "out-and-back on Bobby Wagner Walk and beyond, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9724,
+    "score": 84.93,
+    "fingerprint": "65bf6ea9da71"
+   },
+   {
+    "label": "rectangle 1.5:1, +-",
+    "kind": "loop",
+    "distance_m": 9832,
+    "score": 73.46,
+    "fingerprint": "a0c329450f0c"
+   }
+  ],
+  "williamsburg|4|waits": [
+   {
+    "label": "out-and-back, heading 31 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6514,
+    "score": 67.79,
+    "fingerprint": "39f06e42a6ae"
+   },
+   {
+    "label": "loop on Domino Park waterfront and beyond, heading 204 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6384,
+    "score": 67.53,
+    "fingerprint": "d592226b891b"
+   },
+   {
+    "label": "rectangle 1:1, -+",
+    "kind": "loop",
+    "distance_m": 6390,
+    "score": 60.37,
+    "fingerprint": "789b29583f11"
+   }
+  ],
+  "dumbo|3|waits": [
+   {
+    "label": "out-and-back on Brooklyn Bridge Park Greenway and beyond, heading 223 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4931,
+    "score": 77.91,
+    "fingerprint": "892410ca4b67"
+   },
+   {
+    "label": "out-and-back both ways on the waterfront",
+    "kind": "out_and_back",
+    "distance_m": 4731,
+    "score": 72.67,
+    "fingerprint": "25db9be6056c"
+   },
+   {
+    "label": "rectangle 1.5:1, -+",
+    "kind": "loop",
+    "distance_m": 4710,
+    "score": 58.36,
+    "fingerprint": "11c9520f5542"
+   }
+  ],
+  "flushing-meadows|3|waits": [
+   {
+    "label": "out-and-back through Flushing Meadows-Corona Park, heading 166 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4721,
+    "score": 83.14,
+    "fingerprint": "4d18b72fe126"
+   },
+   {
+    "label": "loop on Promenade of Industry and beyond, heading 170 degrees",
+    "kind": "lollipop",
+    "distance_m": 4623,
+    "score": 76.39,
+    "fingerprint": "a1393a2b0b71"
+   },
+   {
+    "label": "round trip, seed 2",
+    "kind": "loop",
+    "distance_m": 4736,
+    "score": 71.14,
+    "fingerprint": "20ea18c7ffc6"
+   }
+  ],
+  "grand-concourse|4|waits": [
+   {
+    "label": "out-and-back on Mosholu-Pelham Greenway, heading 18 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6340,
+    "score": 69.18,
+    "fingerprint": "14b96968cf24"
+   },
+   {
+    "label": "loop on Bronx River Greenway, heading 56 degrees",
+    "kind": "out_and_back",
+    "distance_m": 6494,
+    "score": 64.14,
+    "fingerprint": "07177b18826d"
+   },
+   {
+    "label": "rectangle 2.5:1, +-",
+    "kind": "loop",
+    "distance_m": 6414,
+    "score": 59.99,
+    "fingerprint": "53aee1d1f152"
+   }
+  ],
+  "st-george|3|waits": [
+   {
+    "label": "loop through North Shore Esplanade and beyond, heading 301 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4795,
+    "score": 78.66,
+    "fingerprint": "43b1ee99ee32"
+   },
+   {
+    "label": "rectangle 2.5:1, --",
+    "kind": "loop",
+    "distance_m": 4831,
+    "score": 64.49,
+    "fingerprint": "f10d005dbc8d"
+   },
+   {
+    "label": "out-and-back on the waterfront, heading 180 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4915,
+    "score": 59.67,
+    "fingerprint": "eb7dfd5be70e"
+   }
+  ],
+  "victory-blvd|3|waits": [
+   {
+    "label": "loop through Willowbrook Park, heading 155 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4955,
+    "score": 61.74,
+    "fingerprint": "b51487faa515"
+   },
+   {
+    "label": "out-and-back, heading 95 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4914,
+    "score": 45.45,
+    "fingerprint": "a09feaa4be24"
+   },
+   {
+    "label": "rectangle 2.5:1 (short side along grid), ++",
+    "kind": "loop",
+    "distance_m": 4821,
+    "score": 43.73,
+    "fingerprint": "dfb4e8bc5f52"
+   }
+  ]
+ }
+}
