@@ -78,7 +78,8 @@ def test_the_curated_file_parses_and_every_entry_is_complete():
     assert entries, "the curated file has no closures"
     for e in entries:
         assert e.sources and all(s.startswith("https://") for s in e.sources)
-        assert e.trust == "listed" and e.checked_on < e.review_by
+        assert e.checked_on < e.review_by
+        assert e.trust == "listed" or (e.trust == "verified" and e.ground_check), e.id
 
 
 @pytest.mark.parametrize("bad", [{"trust": "probably"}, {"sources": []}, {"sources": ["not a url"]},
@@ -98,3 +99,30 @@ def test_a_curated_entry_needs_a_polygon_and_a_safe_id():
         parse_curated({"features": [point]})
     with pytest.raises(ValueError):
         parse_curated({"features": [{**curated_feature(), "id": "East River Park"}]})
+
+
+def test_a_dated_ground_check_lets_an_entry_be_verified():
+    from datetime import date
+
+    from api.closures import parse_curated
+
+    (e,) = parse_curated({"features": [curated_feature(trust="verified",
+                                                       ground_check={"by": "the reviewer", "on": "2026-11-04"})]})
+    assert e.trust == "verified" and e.ground_check == ("the reviewer", date(2026, 11, 4))
+
+
+@pytest.mark.parametrize("check", [None, {"by": "the reviewer"}, {"by": "", "on": "2026-11-04"},
+                                   {"by": "the reviewer", "on": "last week"}])
+def test_verified_needs_a_dated_ground_check(check):
+    from api.closures import parse_curated
+
+    props = {"trust": "verified"} if check is None else {"trust": "verified", "ground_check": check}
+    with pytest.raises(ValueError):
+        parse_curated({"features": [curated_feature(**props)]})
+
+
+def test_a_listed_entry_may_also_record_a_ground_check():
+    from api.closures import parse_curated
+
+    (e,) = parse_curated({"features": [curated_feature(ground_check={"by": "the reviewer", "on": "2026-11-04"})]})
+    assert e.trust == "listed" and e.ground_check[0] == "the reviewer"

@@ -79,6 +79,22 @@ So the closure is the **missing link**: the straight line from where the route l
   - **Northern edge:** the reviewer chose E 15th St. Because of the 29° grid, E 15th St's line reaches the river just north of the park's tip. The park polygon lies wholly south of it, at least 81 m away, and between the two are only inland streets (E 13th St, Avenue D, sidewalks). So nothing is added north of the park. The East River Esplanade past Con Ed starts 4 m north of the E 15th line and stays open.
 - **OSM already shows it closed:** the 2026-10-28 snapshot marks the park's paths as `highway=construction`, and only 68 m of walkable footway is left inside. That's why GraphHopper wouldn't route through it even before this entry. The entry guards against mappers reopening paths before the park does, and holds the sources and review date.
 
+**Second entry: the NYU Langone Health driveways between E 33rd and E 34th St, east of First Avenue** (2026-11-04).
+- **Ground truth:** after a run test, the reviewer reported that the Kips Bay routes enter the esplanade at E 33rd St, but on the ground the only entrance there is E 34th St.
+- **What the routes used:** E 33rd St to its dead end past First Avenue, then about 140 m through three OSM ways to E 34th St by the FDR (672581827, 672581830, 1424092636). Those ways are `highway=service`, `service=driveway`, with no access tag. Two of them lie inside OSM's polygon for NYU Langone Health – Tisch Hospital. GraphHopper's foot profile read them as a public walkway. No gate is mapped.
+- **Drawn as:** the three ways merged into one line, 16 m left off each end and 1 m either side. It touches no public sidewalk or street, only two other campus driveways. A first, wider draft (4 m, 8 m trimmed) also touched two E 34th St sidewalks, which GraphHopper would have closed too.
+- **Trust:** `verified`, with the ground check recorded: by the reviewer, 2026-11-04. Its sources are the three ways' OSM pages. Review by 2027-05-04.
+- **Rule change:** an entry may now carry `ground_check: {by, on}`. `verified` requires one; without it an entry is `listed`.
+- **Not done (the reviewer's call):**
+  - removing the ways from the routing extract (a data correction that needs a graph rebuild);
+  - editing OpenStreetMap. `access=private` there would make this entry unnecessary.
+- **Effect on Kips Bay:** all three #1s keep their waterfront route and now reach the esplanade along E 34th St. Before, each walked 249 m through the closure area.
+  - **3 mi:** score 83.4 → 75.1, signals 2.6 → 3.6 per mile, 58% park or water.
+  - **4 mi:** 86.3 → 83.0.
+  - **6 mi:** 68.0 → 66.0.
+
+  The top 3 keeps the same routes at every distance. The six run-test files were regenerated.
+
 ## Eval (`evals/routes/test_closures.py`)
 The route check is PostGIS's own intersection length against every applied closure in the city. It doesn't rely on the generator's sampled length or reach filter.
 - The East Midtown Greenway gap is an applied closure, labeled `listed` with its catalog source.
@@ -87,6 +103,9 @@ The route check is PostGIS's own intersection length against every applied closu
 - A line along the East Midtown missing link is caught; the detour streets around it are not.
 - **No generated route passes through a known closure:** the top 3 at all 15 review rows, for both lights settings (30 cases).
 - **A confirmed report reroutes:** closing a stretch of the Upper East Side 3 mi #1 (15% of its length, buffered like a report) gives a top 3 that doesn't pass through it.
+- **The NYU Langone driveways:**
+  - the closure touches no public sidewalk, crossing or street;
+  - no top-3 route at any of the 15 rows, for both lights settings, walks more than 5 m along their closed middle. The run-test GPX that prompted this walked 114 m there.
 - **Curated closures:**
   - every entry in the file is in the table, applied and in the router, with its trust, sources and dates;
   - none is past its review-by date;
