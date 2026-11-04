@@ -174,6 +174,16 @@ def test_stretches_elevation_and_hour_go_into_the_geojson(tmp_path):
     assert fc["features"][-1]["properties"]["name"] == "East River Esplanade"
 
 
+def test_mile_and_turnaround_points_go_into_the_geojson(tmp_path):
+    # The fake square's geometry is 2.4 mi (its 4 mi distance is only a label): miles 1-2, and no turnaround.
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    feats = json.loads((tmp_path / "loop.geojson").read_text())["features"]
+    miles = [f["properties"] for f in feats if f["properties"].get("feature") == "mile"]
+    assert [m["mile"] for m in miles] == [1, 2]
+    assert all(m["status"] == "measured" for m in miles)
+    assert not any(f["properties"].get("feature") == "turnaround" for f in feats)
+
+
 def test_the_pool_is_written_with_the_request_and_timing(tmp_path):
     pool_file = tmp_path / "pool.json"
 

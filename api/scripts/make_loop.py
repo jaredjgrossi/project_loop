@@ -31,6 +31,7 @@ from api.nogo import NoGoZone, custom_model
 from api.nogo import resolve as resolve_zones
 from api.elevation import elevation_profile
 from api.lights import signal_penalty_model
+from api.markers import marker_features
 from api.route_context import ContextScores, score_context
 from api.segments import route_stretches
 from api.routing import RoutingError, request_round_trip, request_route, route_to_geojson
@@ -342,6 +343,7 @@ def run(
                               "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
                               "start_hour": constraints.start_hour},
         )
+        geojson["features"] += marker_features(c.route.coordinates)
         if stretch_fn is not None:
             geojson["features"] += stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
         path.write_text(json.dumps(geojson))
