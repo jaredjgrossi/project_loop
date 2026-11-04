@@ -1,6 +1,6 @@
 # 018: Generation speed
 
-**Status:** in progress (2026-11-03). Step 2 (the three exact changes) is done. Steps 3 and 4 (simpler feature areas plus parallel context scoring; settling the top 3 early and streaming the rest) are next, after decision 020.
+**Status:** proposed (2026-11-04). Steps 2 and 3 are done. Step 3 covers the plan-order tiebreak, context scoring in processes, the provisional and final top 3, and the measured decision not to simplify feature areas.
 
 ## Target
 - **Full candidate pool** in about 5 s.
@@ -121,3 +121,99 @@ The reviewer approved the profile and the order on 2026-11-03.
 - **Context scoring:** summed time down 35%, from 546–637 s to 379 s across the 30 cases.
 - **Routing:** summed time unchanged. The repeated requests are mostly sent at the same moment by sibling jobs, so the second thread waits for the first. GraphHopper does less work, but the waiting thread's time still counts.
 - **Noise:** the two "before" passes differ by 20% (median 9.4 s against 11.5 s), so the final before/after table will average several passes.
+
+## Step 3 (done): tiebreak, scoring processes, provisional then final
+The base is `66610dc`: the closure, the pulses and the UI-outputs format, with no step-3 changes.
+
+**Re-pinned top 3.** It was re-pinned from that commit, because the NYU Langone closure (decision 017) changed the Kips Bay top 3:
+- Kips Bay 3 mi: a new #1;
+- Kips Bay 4 and 6 mi: the same routes by label, rerouted along E 34th St.
+
+No other case changed from the original pin, so the UI-outputs line changed no other top 3.
+
+1. **Ties broken by plan order.** `_run_prioritized` returns outcomes in plan order: top-level jobs in the order given, an anchor lookup's jobs in the order it returned them. Score ties used to go to whichever thread finished first. The Flushing Meadows pin once failed this way and passed on a rerun.
+   - Two pinned cases changed label only. St. George 3 mi "zigzags" #3 and Upper East Side 4 mi "waits" #1 are the same route with the same score, built by two generators. Plan order puts the corridor source first, so the label is now "loop on unnamed waterfront path" and "out-and-back on Bobby Wagner Walk". Re-pinned.
+2. **Context scoring in worker processes** (`api/scoring_pool.py`). It's the same `score_context`, so results can't change, and a waiting thread doesn't hold the interpreter lock. Each process keeps one autocommit Postgres connection.
+   - **Process pool, not PostGIS:** moving the share, crossing and wait geometry into SQL would be a rewrite that could shift numbers. The pool is exact by construction.
+   - **Configuration:** 5 processes with 6 generator threads, from a sweep on Upper East Side 6 mi "waits", Kips Bay 6 mi "zigzags" and Astor Place 6 mi "waits":
+
+     | scoring | threads | pool (s) | first candidate (s) |
+     |---|---|---|---|
+     | inline | 4 | 26.4 / 21.3 / 14.7 | 0.47 / 1.27 / 1.71 |
+     | 3 processes | 4 | 18.9 / 14.2 / 14.6 | 0.48 / 0.53 / 1.40 |
+     | 3 processes | 6 | 22.8 / 20.2 / 17.8 | 0.37 / 0.42 / 0.83 |
+     | 5 processes | 6 | 16.3 / 14.5 / 14.1 | 0.50 / 0.42 / 0.63 |
+     | 5 processes | 8 | 20.5 / 22.7 / 23.3 | 0.48 / 0.79 / 1.51 |
+
+3. **Simpler feature areas: measured, not done.** Replaying 150 feature-area requests:
+
+   | area | median vertices | GraphHopper per request (alone) | same route |
+   |---|---|---|---|
+   | as built (~10 m) | 12 | 52 ms | 150/150 |
+   | simplified to 25 m | 10 | 49 ms | 91/150 |
+   | simplified to 50 m | 6.5 | 46 ms | 94/150 |
+
+   It saves 6–12% of routing time and changes 40% of area routes. The real routing cost is contention: the same requests take 52 ms alone and about 160 ms in the pool.
+4. **Provisional, then final** (the reviewer's choice, 2026-11-04). `generate_loops(on_top3=...)` streams events:
+   - `top3` whenever the current top 3 changes, computed by the same `_select` as the final one, over the candidates so far in plan order;
+   - `provisional` once, when every anchor lookup and anchored job (tiers 0–2) has finished;
+   - `final` when the pool is done. It's identical to `result.candidates`.
+
+   The result keeps the provisional top 3, `provisional_s`, and how many times #1 changed after the flag.
+
+**Flag tier, measured on all 30 cases:**
+
+| flag after | provisional, median / max | #1 changed after the flag | top 3 already final at the flag |
+|---|---|---|---|
+| tiers 0–2, all anchored (chosen) | 5.2 s / 17.0 s | 0 of 30 | 4 of 30 |
+| tiers 0–1, along-feature anchored only | 2.2 s / 7.6 s | 11 of 30 (up to 4 times) | 1 of 30 |
+
+**Kept: tiers 0–2** (the reviewer, 2026-11-04).
+- **The later flag costs nothing visible.** The app draws the current best route from the first `top3` event.
+- **It has never been wrong about #1.**
+- **How the app uses it:** the `provisional` flag is the moment the route settles. #2, #3 and the final count fill in after it.
+
+**Before and after.** Before is `66610dc`; after is step 3, two passes. Provisional and #1 changes are from the pass with the flag after tiers 0–2.
+
+| row | lights | first candidate (s) before → after | provisional (s) | final, full pool (s) before → after (pass 1 / pass 2) | #1 changes after provisional |
+|---|---|---|---|---|---|
+| Kips Bay 3 mi | zigzags | 0.21 → 0.27 | 3.86 | 9.5 → 5.7 / 5.5 | 0 |
+| Kips Bay 4 mi | zigzags | 0.57 → 0.25 | 4.64 | 11.3 → 7.1 / 7.1 | 0 |
+| Kips Bay 6 mi | zigzags | 0.62 → 0.37 | 9.36 | 17.9 → 12.4 / 12.5 | 0 |
+| Flatiron 3 mi | zigzags | 0.43 → 0.24 | 3.26 | 8.0 → 6.1 / 5.2 | 0 |
+| Flatiron 4 mi | zigzags | 0.37 → 0.19 | 4.69 | 10.7 → 6.6 / 7.1 | 0 |
+| Astor Place 6 mi | zigzags | 0.34 → 0.42 | 8.13 | 15.3 → 9.9 / 13.7 | 0 |
+| Upper East Side 3 mi | zigzags | 0.32 → 0.21 | 5.80 | 15.6 → 7.2 / 10.3 | 0 |
+| Upper East Side 4 mi | zigzags | 0.36 → 0.23 | 8.47 | 16.3 → 10.8 / 15.6 | 0 |
+| Upper East Side 6 mi | zigzags | 0.21 → 0.30 | 11.74 | 26.4 → 16.8 / 27.9 | 0 |
+| Williamsburg 4 mi | zigzags | 0.42 → 0.34 | 4.61 | 8.4 → 7.3 / 9.9 | 0 |
+| DUMBO 3 mi | zigzags | 0.31 → 0.20 | 6.11 | 9.0 → 7.7 / 10.1 | 0 |
+| Flushing Meadows 3 mi | zigzags | 0.26 → 0.12 | 1.98 | 5.1 → 3.4 / 4.4 | 0 |
+| Grand Concourse 4 mi | zigzags | 0.17 → 0.17 | 1.76 | 5.7 → 3.4 / 6.4 | 0 |
+| St. George 3 mi | zigzags | 0.18 → 0.12 | 1.08 | 1.7 → 1.4 / 1.6 | 0 |
+| Victory Blvd 3 mi | zigzags | 0.12 → 0.19 | 0.93 | 2.3 → 1.6 / 2.2 | 0 |
+| Kips Bay 3 mi | waits | 0.13 → 0.29 | 4.30 | 8.1 → 6.9 / 7.5 | 0 |
+| Kips Bay 4 mi | waits | 0.34 → 0.25 | 5.22 | 10.3 → 8.0 / 10.1 | 0 |
+| Kips Bay 6 mi | waits | 0.57 → 0.41 | 10.52 | 20.1 → 14.4 / 17.5 | 0 |
+| Flatiron 3 mi | waits | 0.53 → 0.32 | 5.12 | 11.2 → 7.3 / 7.2 | 0 |
+| Flatiron 4 mi | waits | 0.92 → 0.21 | 5.71 | 15.2 → 8.0 / 10.5 | 0 |
+| Astor Place 6 mi | waits | **2.68 → 0.56** | 10.55 | 20.7 → 13.4 / 17.2 | 0 |
+| Upper East Side 3 mi | waits | 0.34 → 0.50 | 8.93 | 16.0 → 11.4 / 12.5 | 0 |
+| Upper East Side 4 mi | waits | 0.48 → 0.48 | 14.74 | 20.9 → 18.1 / 16.5 | 0 |
+| Upper East Side 6 mi | waits | 0.61 → 0.65 | 16.97 | 25.5 → 23.5 / 24.0 | 0 |
+| Williamsburg 4 mi | waits | 0.46 → 0.35 | 6.70 | 8.4 → 10.4 / 8.3 | 0 |
+| DUMBO 3 mi | waits | 0.24 → 0.50 | 10.46 | 8.0 → 13.4 / 9.1 | 0 |
+| Flushing Meadows 3 mi | waits | 0.23 → 0.53 | 4.16 | 4.9 → 6.5 / 4.3 | 0 |
+| Grand Concourse 4 mi | waits | 0.22 → 0.62 | 3.99 | 5.5 → 6.8 / 5.4 | 0 |
+| St. George 3 mi | waits | 0.14 → 0.19 | 1.56 | 1.5 → 2.2 / 2.0 | 0 |
+| Victory Blvd 3 mi | waits | 0.16 → 0.31 | 1.94 | 2.4 → 2.9 / 2.4 | 0 |
+
+**Against the targets:**
+- **First candidate under 1 s at all 30 cases: met.** Max 0.65 s in pass 1, 0.83 s in pass 2, against 2.68 s before.
+- **Top 3 settled in about 3 s: not met.** The provisional flag comes at a median 5.2 s and a max 17.0 s. The faster flag (tiers 0–1, median 2.2 s) is wrong about #1 in 11 of 30 cases.
+- **Full pool in about 8 s: not met.** Median 9.9 → 7.3 s and 8.7 s over the two passes; max 26.4 → 23.5 s and 27.9 s.
+  - **The runs are noisy.** The same row varies by up to 60% between passes, as Upper East Side 6 mi "zigzags" did (16.8 s and 27.9 s). Another session was running evals against the same GraphHopper at the time.
+  - **The heavy rows** (Upper East Side and 6 mi) stay at 12–28 s, limited by routing contention.
+- **Top 3: unchanged.** The pinned eval passes after the two label re-pins, and the final top 3 is identical to the pin in both passes.
+
+**What's left for about 8 s at the heavy rows:** fewer router calls per job (`_fit` makes about 3.3; a better first guess at scale would cut that), and measuring GraphHopper's own thread and CPU limits while nothing else is running.

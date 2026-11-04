@@ -14,3 +14,6 @@ out/
 # Personal GPS/health data - never commit
 apple_health_export/
 data/
+
+# Claude Code session worktrees (each is its own checkout of a branch)
+.claude/worktrees/

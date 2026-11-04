@@ -1,0 +1,39 @@
+{
+  "_about": "NYC Public Schools calendar 2026-27, transcribed for crowd pulses (decision 022). School pulses run on school days only: weekdays from first_day to last_day, minus no_students days. Early dismissals are listed but not modeled (decision 022, limits).",
+  "source": "https://www.schools.nyc.gov/docs/default-source/sections/calendar/2026-27-school-year-calendar.pdf",
+  "trust": "listed",
+  "checked_on": "2026-11-03",
+  "review_by": "2027-06-28",
+  "first_day": "2026-09-10",
+  "last_day": "2027-06-28",
+  "no_students": {
+    "2026-09-21": "Yom Kippur, schools closed",
+    "2026-10-12": "Italian Heritage/Indigenous Peoples' Day, schools closed",
+    "2026-11-03": "Election Day, school in session remotely",
+    "2026-11-11": "Veterans Day, schools closed",
+    "2026-11-26": "Thanksgiving Recess", "2026-11-27": "Thanksgiving Recess",
+    "2026-12-24": "Winter Recess", "2026-12-25": "Winter Recess", "2026-12-28": "Winter Recess",
+    "2026-12-29": "Winter Recess", "2026-12-30": "Winter Recess", "2026-12-31": "Winter Recess",
+    "2027-01-01": "Winter Recess",
+    "2027-01-18": "Dr. Martin Luther King Jr. Day, schools closed",
+    "2027-02-15": "Midwinter Recess", "2027-02-16": "Midwinter Recess", "2027-02-17": "Midwinter Recess",
+    "2027-02-18": "Midwinter Recess", "2027-02-19": "Midwinter Recess",
+    "2027-03-09": "Eid al-Fitr, schools closed",
+    "2027-03-26": "Good Friday, schools closed",
+    "2027-04-22": "Spring Recess", "2027-04-23": "Spring Recess", "2027-04-26": "Spring Recess",
+    "2027-04-27": "Spring Recess", "2027-04-28": "Spring Recess", "2027-04-29": "Spring Recess",
+    "2027-04-30": "Spring Recess",
+    "2027-05-17": "Eid al-Adha, schools closed",
+    "2027-05-31": "Memorial Day, schools closed",
+    "2027-06-08": "Clerical Day, no classes for 3-K through 8, K-12 and D75 (high schools attend)",
+    "2027-06-10": "Anniversary Day, students do not attend"
+  },
+  "early_dismissal": {
+    "2026-11-05": "elementary schools and Pre-K Centers, three hours early",
+    "2026-11-12": "middle schools and D75, three hours early",
+    "2026-11-20": "high schools, K-12 and 6-12, three hours early",
+    "2027-03-03": "elementary schools and Pre-K Centers, three hours early",
+    "2027-03-04": "middle schools and D75, three hours early",
+    "2027-03-19": "high schools, K-12 and 6-12, three hours early"
+  }
+}

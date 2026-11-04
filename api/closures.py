@@ -5,7 +5,8 @@ Three sources, all in the closures table (etl/sql/schema.sql):
   where no walkable OSM way runs along it (etl/build_closures.py). Nothing routable runs there, so GraphHopper is not
   told; the hard rule is the check below.
 - curated: a closed place checked by hand against public sources (routing/curated_closures.geojson), with its sources,
-  a trust label, the date it was checked and a review-by date. It is a real closed area, so GraphHopper gets it too.
+  a trust label, the date it was checked and a review-by date. An entry is `verified` only with a dated ground check
+  (someone was there); otherwise it is `listed`. It is a real closed area, so GraphHopper gets it too.
 - report: a runner's "closed or blocked" report on a stretch, once a reviewer confirms it (confirm_report). It sits
   on a real way, so GraphHopper gets it as an area with priority 0, like a no-go zone (decision 010).
 
@@ -146,11 +147,13 @@ class CuratedClosure:
     checked_on: date
     review_by: date
     geometry: dict  # GeoJSON Polygon
+    ground_check: tuple | None = None  # (who, date) someone checked it on the ground; required for "verified"
 
 
 def parse_curated(collection: dict) -> list[CuratedClosure]:
     """The entries of routing/curated_closures.geojson, refusing any without a name, a reason, https sources, a trust
-    label, a checked date and a later review-by date, or a polygon."""
+    label, a checked date and a later review-by date, or a polygon, and any labeled verified without a dated ground
+    check ({"by": who, "on": "YYYY-MM-DD"})."""
     out = []
     for f in collection["features"]:
         p, fid = f.get("properties") or {}, f.get("id") or ""
@@ -171,5 +174,17 @@ def parse_curated(collection: dict) -> list[CuratedClosure]:
             raise ValueError(f"curated closure {fid}: review_by must come after checked_on")
         if (f.get("geometry") or {}).get("type") != "Polygon":
             raise ValueError(f"curated closure {fid}: geometry must be a Polygon")
-        out.append(CuratedClosure(fid, p["name"], p["reason"], sources, p["trust"], checked, review, f["geometry"]))
+        ground = None
+        if p.get("ground_check") is not None:
+            g = p["ground_check"]
+            try:
+                ground = (g["by"], date.fromisoformat(g["on"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"curated closure {fid}: ground_check needs 'by' and an 'on' date (YYYY-MM-DD)") from exc
+            if not ground[0]:
+                raise ValueError(f"curated closure {fid}: ground_check needs who checked ('by')")
+        if p["trust"] == "verified" and ground is None:
+            raise ValueError(f"curated closure {fid}: 'verified' needs a dated ground check; otherwise it is 'listed'")
+        out.append(CuratedClosure(fid, p["name"], p["reason"], sources, p["trust"], checked, review, f["geometry"],
+                                  ground))
     return out

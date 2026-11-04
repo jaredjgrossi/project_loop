@@ -1,0 +1,22 @@
+{
+  "_about": "SeaStreak arrivals at the East 35th St landing, transcribed for crowd pulses (decision 022). Weekday times apply Monday-Friday unless a 'days' list narrows them (Monday=0). Holiday and modified schedules (SeaStreak service alerts) are not modeled.",
+  "operator": "SeaStreak",
+  "landing": "East 35th St",
+  "landing_lonlat": [-73.970731, 40.743912],
+  "landing_note": "The East 34th Street ferry landing, where NYC Ferry also calls (NYC Ferry GTFS stop 17); SeaStreak's timetable names it East 35th St.",
+  "sources": {
+    "weekday": "https://media.seastreak.com/wp-content/uploads/2026/09/01173942/Schedule-Effective-September-8-2026-Alert.pdf",
+    "weekend": "https://media.seastreak.com/wp-content/uploads/2026/09/01173942/Schedule-Effective-September-8-2026-Alert.pdf"
+  },
+  "trust": "listed",
+  "checked_on": "2026-11-03",
+  "review_by": "2027-01-15",
+  "weekday_effective": "2026-09-08",
+  "weekend_effective": "2026-09-12",
+  "weekday_arrivals": [
+    {"time": "06:45"}, {"time": "08:00"}, {"time": "08:30"}, {"time": "08:50"}, {"time": "09:15"}, {"time": "10:05"},
+    {"time": "11:10"}, {"time": "13:05"}, {"time": "15:50"}, {"time": "17:00"}, {"time": "17:55"}, {"time": "18:25"},
+    {"time": "19:25"}, {"time": "20:15"}, {"time": "21:40", "days": [0, 1, 2]}, {"time": "22:25", "days": [3, 4]}
+  ],
+  "weekend_arrivals": [{"time": "10:15"}, {"time": "12:45"}, {"time": "15:55"}, {"time": "18:55"}, {"time": "21:05"}]
+}

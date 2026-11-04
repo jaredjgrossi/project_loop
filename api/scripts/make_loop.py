@@ -190,10 +190,11 @@ def db_closures(lat: float, lon: float, miles: float) -> list[Closure]:
 
 def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True, start=None) -> Callable:
     """A context scorer that also estimates the wait at lights for this runner and street grid (decision 015) and the
-    crowds along the route from the start moment (decision 016)."""
+    crowds along the route from the start moment (decision 016). Scored in a worker process (decision 018)."""
+    from api import scoring_pool
+
     def score(coords: list[list[float]]) -> ContextScores:
-        with psycopg.connect(database_url()) as conn:
-            return score_context(conn, coords, use_prior=use_prior, lights=lights, grid=grid, start=start)
+        return scoring_pool.score(coords, use_prior, lights, grid, start)
 
     return score
 

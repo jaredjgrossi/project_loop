@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from api.crowds import band_for, counter_level, sample_times, summarize
+from api.crowds import BANDS, band_for, counter_level, sample_times, summarize
 
 TUE, SAT, SUN = datetime(2026, 11, 3), datetime(2026, 11, 7), datetime(2026, 11, 8)
 
@@ -72,3 +72,28 @@ def test_counter_stretches_name_the_counter_as_their_basis():
 
     c = stretch_crowd([("medium", "DOT automated pedestrian counter X: 120 people/hour", "counter")] * 4)
     assert c["value"] == "medium" and c["band"] == "DOT automated pedestrian counter (hourly)"
+
+
+# --- decision 022: scheduled pulses on paths --------------------------------------------------
+
+
+def test_a_path_sample_inside_a_pulse_window_is_high_and_names_the_cause():
+    from datetime import datetime
+
+    from api.crowds import pulse_level
+    from api.pulses import Window
+
+    w = {7: [Window(datetime(2026, 11, 4, 7, 58), datetime(2026, 11, 4, 8, 8), "SeaStreak arrival 08:00 at East 35th St")]}
+    assert pulse_level(7, False, datetime(2026, 11, 4, 8, 3), w) == ("high", "SeaStreak arrival 08:00 at East 35th St", "pulse")
+    assert pulse_level(7, False, datetime(2026, 11, 4, 8, 20), w) is None  # outside the window: stays not scored
+    assert pulse_level(8, False, datetime(2026, 11, 4, 8, 3), w) is None  # another way
+    assert pulse_level(7, True, datetime(2026, 11, 4, 8, 3), w) is None  # sidewalks keep decision 016's level
+    assert pulse_level(7, False, None, w) is None  # no start time
+
+
+def test_pulse_stretches_and_summaries_say_scheduled_pulse():
+    from api.crowds import PULSE_LABEL, band_labels, stretch_crowd
+
+    s = stretch_crowd([("high", "school arrival at X", "pulse")] * 3)
+    assert s["value"] == "high" and s["band"] == PULSE_LABEL and s["basis"] == "school arrival at X"
+    assert band_labels({"weekday_am", "pulse", "counter"}) == f"{BANDS['weekday_am'][2]}, {PULSE_LABEL}"
