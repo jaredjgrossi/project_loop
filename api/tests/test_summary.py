@@ -25,10 +25,10 @@ def out_and_back():
     return [[LON0 + x / KX, LAT0] for x in list(range(0, 2401, 20)) + list(range(2380, -1, -20))]
 
 
-def candidate(context=None):
+def candidate(context=None, router_m=4800):
     coords = out_and_back()
     shape = shape_metrics(coords)
-    route = Route(distance_m=4800, time_s=3600, coordinates=coords)
+    route = Route(distance_m=router_m, time_s=3600, coordinates=coords)
     return Candidate("water_out_and_back", "test", route, shape, 81.7, -0.6, True, "out_and_back",
                      rank("out_and_back", shape, DEFAULTS, context), context)
 
@@ -95,3 +95,15 @@ def test_rank_says_best_of_how_many_distinct_routes():
     s = route_summary(c, [], [], ELEVATION, rank=1, best_of=41)
     assert s["rank"]["value"] == 1 and s["rank"]["of"] == 41 and s["rank"]["status"] == "measured"
     assert route_summary(c, [], [], ELEVATION, rank=1, best_of=None)["rank"]["status"] == "not_scored"
+
+
+def test_lights_a_mile_divide_by_the_distance_shown_not_the_routers_figure():
+    # Kips Bay 3 mi #1: 18 crossings over the geometry's 3.07 mi (4,938 m) is 5.86, so 5.9. Dividing by
+    # GraphHopper's 4,958 m gave 5.84 and showed 5.8, a number that doesn't follow from the distance shown.
+    c = candidate(CONTEXT, router_m=5200)  # the router's length differs from the geometry's 4,800 m
+    s = route_summary(c, stretches(c.route.coordinates), [], ELEVATION)
+    shown_miles, n = s["distance"]["value"], s["signalized_crossings"]["value"]
+    assert s["distance"]["router_meters"] == 5200 and s["distance"]["meters"] == pytest.approx(4800, abs=2)
+    assert s["lights_per_mile"]["value"] == round(n / (s["distance"]["meters"] / 1609.344), 1)
+    assert s["lights_per_mile"]["value"] == pytest.approx(n / shown_miles, abs=0.05)
+    assert s["lights_per_mile"]["value"] != round(n / (5200 / 1609.344), 1)
