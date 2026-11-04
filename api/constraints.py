@@ -129,25 +129,50 @@ LABELS = {
 }
 
 
-def describe(c: RunConstraints) -> list[str]:
-    """The parsed request in plain words, for the runner to check before routes are built."""
-    lines = [
-        f"Start: {c.start_address or 'your location'}",
-        f"Distance: {c.distance_mi:g} mi (within {c.tolerance_pct:g}%)",
-        f"Shape: {c.shape.replace('_', ' ')}",
-        f"Mode: {c.mode.value.capitalize() if c.mode else 'not set'}",
+SAID, DEFAULT = "you said", "default"
+
+
+def _said(c: RunConstraints, field: str) -> bool:
+    """Whether the request stated this field (passed with a value), rather than leaving the schema default."""
+    return field in c.model_fields_set and getattr(c, field) is not None
+
+
+def request_items(c: RunConstraints) -> list[dict]:
+    """The parsed request, one item per field, each with where it came from (decision 020): "you said", the
+    "<Mode> preset", or "default". `describe` prints these; the UI shows them as chips."""
+    mode_name = c.mode.value.capitalize() if c.mode else ""
+    items = [
+        {"key": "start", "title": "Start", "value": c.start_address or "your location", "origin": SAID},
+        {"key": "distance", "title": "Distance", "value": f"{c.distance_mi:g} mi", "origin": SAID},
+        {"key": "tolerance", "title": "Within", "value": f"{c.tolerance_pct:g}%",
+         "origin": SAID if _said(c, "tolerance_pct") else DEFAULT},
+        {"key": "shape", "title": "Shape", "value": c.shape.replace("_", " "),
+         "origin": SAID if _said(c, "shape") else DEFAULT},
+        {"key": "mode", "title": "Mode", "value": mode_name or "not set", "origin": SAID if c.mode else DEFAULT},
     ]
     prefs = resolve_preferences(c)
-    origin = {"stated": "you said", "preset": f"{c.mode.value.capitalize() if c.mode else ''} preset", "default": "default"}
+    origin = {"stated": SAID, "preset": f"{mode_name} preset", "default": DEFAULT}
     titles = {"familiar": "Matches routes you run"}
     for name in PREFERENCES:
-        title = titles.get(name, name.capitalize())
-        lines.append(f"{title}: {LABELS[name][prefs.values[name]]} ({origin[prefs.sources[name]]})")
+        items.append({"key": name, "title": titles.get(name, name.capitalize()),
+                      "value": LABELS[name][prefs.values[name]], "origin": origin[prefs.sources[name]]})
     if c.avoid_places:
-        lines.append(f"Avoid: {', '.join(c.avoid_places)}")
+        items.append({"key": "avoid", "title": "Avoid", "value": ", ".join(c.avoid_places), "origin": SAID})
     for a in c.amenities:
-        lines.append(f"Stop: {a.kind} near mile {a.at_mile:g} (within {a.within_mi:g} mi)")
+        items.append({"key": "amenity", "title": "Stop", "value": f"{a.kind} near mile {a.at_mile:g} "
+                      f"(within {a.within_mi:g} mi)", "origin": SAID})
     if c.start_time:
-        when = f" on {c.start_date:%A %Y-%m-%d}" if c.start_date else ""
-        lines.append(f"Start time: {c.start_time}{when} (hour {c.start_hour}; sets the crowd band)")
-    return lines
+        items.append({"key": "start_time", "title": "Start time",
+                      "value": f"{c.start_time} (hour {c.start_hour}; sets the crowd band)", "origin": SAID})
+    else:
+        items.append({"key": "start_time", "title": "Start time", "value": "not set, so crowds are not scored",
+                      "origin": DEFAULT})
+    if c.start_date:
+        items.append({"key": "start_date", "title": "Day", "value": f"{c.start_date:%A %Y-%m-%d}",
+                      "origin": SAID if _said(c, "start_date") else DEFAULT})
+    return items
+
+
+def describe(c: RunConstraints) -> list[str]:
+    """The parsed request in plain words, for the runner to check before routes are built."""
+    return [f"{i['title']}: {i['value']} ({i['origin']})" for i in request_items(c)]

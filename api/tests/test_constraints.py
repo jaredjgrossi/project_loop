@@ -116,3 +116,26 @@ def test_start_date_and_time_give_the_start_moment():
     assert c.start_moment() == datetime(2026, 11, 3, 18, 0)
     assert any("Tuesday" in line for line in describe(c))
     assert RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3).start_moment() is None
+
+
+def _origins(c):
+    from api.constraints import request_items
+
+    return {i["key"]: i["origin"] for i in request_items(c)}
+
+
+def test_start_distance_shape_mode_and_time_say_where_they_came_from():
+    # Decision 020: every field, not only the preferences, is labeled you said / preset / default.
+    bare = _origins(RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3))
+    assert bare["start"] == bare["distance"] == "you said"
+    assert bare["shape"] == bare["mode"] == bare["start_time"] == bare["tolerance"] == "default"
+    full = _origins(RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, shape="any", mode=Mode.TRAINING,
+                                   start_time="07:00"))
+    assert full["shape"] == full["mode"] == full["start_time"] == "you said"  # "any" said out loud is not a default
+    assert full["lights"] == "Training preset"
+
+
+def test_describe_lines_carry_the_origin():
+    lines = describe(RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3))
+    assert "Shape: any (default)" in lines and "Distance: 3 mi (you said)" in lines
+    assert "Start time: not set, so crowds are not scored (default)" in lines

@@ -20,7 +20,7 @@ import psycopg
 
 from etl.load import database_url
 
-from api.constraints import Lights, RunConstraints, describe, resolve_preferences
+from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -257,7 +257,7 @@ def run(
     geocode_fn: Callable[[str], GeocodeResult] = geocode,
     grid_fn: Callable[[float, float], GridEstimate] = current_grid,
     generate_fn: Callable[..., GenerationResult] = generate_loops,
-    shape: str = "any",
+    shape: str | None = None,  # None: not stated, so the schema default ("any") applies and is shown as a default
     mode: str | None = None,
     avoid: list[str] | None = None,
     context_fn: Callable | None = None,
@@ -275,9 +275,9 @@ def run(
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
         return 4
-    constraints = RunConstraints(start_address=address, distance_mi=miles, shape=shape, mode=mode,
-                                 avoid_places=avoid or [], start_time=start_time, start_date=start_date,
-                                 lights=lights)
+    stated = {"shape": shape, "mode": mode, "start_time": start_time, "start_date": start_date, "lights": lights}
+    constraints = RunConstraints(start_address=address, distance_mi=miles, avoid_places=avoid or [],
+                                 **{k: v for k, v in stated.items() if v is not None})
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)
@@ -344,7 +344,7 @@ def run(
             c.route, place.lat, place.lon, place.label, miles, c.shape.as_dict(),
             extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score),
                               "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
-                              "start_hour": constraints.start_hour},
+                              "start_hour": constraints.start_hour, "request": request_items(constraints)},
         )
         markers = marker_features(c.route.coordinates)
         stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
@@ -368,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("miles", type=float, help="target distance in miles")
     ap.add_argument("--top", type=int, default=1, help="how many loops to save, best first (default 1)")
     ap.add_argument("--out", type=Path, help="where to write the GeoJSON (default: out/)")
-    ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], default="any", help="route shape (default any)")
+    ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], help="route shape (default any)")
     ap.add_argument("--mode", choices=["training", "exploring"], help="preference preset")
     ap.add_argument("--avoid", action="append", default=[], help="a named no-go place (repeatable)")
     ap.add_argument("--start-time", help="departure time, HH:MM; with --start-date, sets the crowd band")

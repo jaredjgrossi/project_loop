@@ -299,3 +299,12 @@ def test_identical_router_requests_in_one_generation_are_sent_once(monkeypatch):
     fresh, _, _ = mod.routers_for([], "zigzags")
     fresh(list(a))
     assert len(sent) == 4  # a new request's routers start empty
+
+
+def test_shape_left_unset_is_shown_as_a_default_and_the_request_goes_into_the_geojson(tmp_path, capsys):
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    assert "Shape: any (default)" in capsys.readouterr().out
+    request = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]["request"]
+    assert {"key": "shape", "title": "Shape", "value": "any", "origin": "default"} in request
+    assert go(tmp_path, fake_generate([candidate()]), shape="any") == 0
+    assert "Shape: any (you said)" in capsys.readouterr().out
