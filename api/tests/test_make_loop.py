@@ -184,6 +184,14 @@ def test_mile_and_turnaround_points_go_into_the_geojson(tmp_path):
     assert not any(f["properties"].get("feature") == "turnaround" for f in feats)
 
 
+def test_the_route_carries_a_summary_with_trust_labels(tmp_path):
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    summary = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]["summary"]
+    assert summary["distance"]["status"] == "measured" and summary["distance"]["router_meters"] == round(4 * 1609.344)
+    assert summary["waterfront_pct"]["status"] == "not_scored"  # no stretches here, so no shares: never zero
+    assert summary["turnarounds"] == []
+
+
 def test_the_pool_is_written_with_the_request_and_timing(tmp_path):
     pool_file = tmp_path / "pool.json"
 
