@@ -169,3 +169,25 @@ def test_avoiding_crowds_weighs_them_more_and_other_weights_are_unchanged():
     avoid, some = weights_for({**DEFAULTS, "crowds": "avoid"}), weights_for({**DEFAULTS, "crowds": "some"})
     assert avoid["crowds"] > some["crowds"] > weights_for({**DEFAULTS, "crowds": "dont_mind"})["crowds"]
     assert {k: v for k, v in avoid.items() if k != "crowds"} == {k: v for k, v in some.items() if k != "crowds"}
+
+
+def test_counting_each_crosswalk_once_favors_out_and_backs_for_runners_who_wait():
+    # Decision 021 documents this; it does not fix it (the ranking input is unchanged until the ratings say so).
+    # An out-and-back of 3 mi crosses 9 signalized crosswalks on the way out and the same 9 on the way back: the
+    # runner stops at up to 18 lights, 6.0 a mile, but the ranking's input counts each crosswalk once, 3.0 a mile.
+    # A loop of 3 mi that crosses 18 different crosswalks is counted at 6.0 a mile. Same stops, different score.
+    def ctx(per_mile):
+        return ContextScores(park_pct=0.0, waterfront_pct=60.0, park_or_water_pct=60.0,
+                             crossings_per_mile=1.4 * per_mile, signals_per_mile=per_mile, familiar_pct=None)
+
+    gain = {}
+    for lights in (Lights.WAITS, Lights.ZIGZAGS):
+        prefs = {**DEFAULTS, "lights": lights}
+        as_ranked = rank("out_and_back", out_and_back(distance_miles=3.0), prefs, ctx(3.0)).score
+        every_crossing = rank("out_and_back", out_and_back(distance_miles=3.0), prefs, ctx(6.0)).score
+        gain[lights] = as_ranked - every_crossing
+    # The out-and-back scores 5.4 points higher than its stops warrant for a runner who waits, and 2.3 for one who
+    # zig-zags: the signals weight is 4 times as heavy for runners who wait (decision 010).
+    assert gain[Lights.WAITS] == pytest.approx(5.45, abs=0.05)
+    assert gain[Lights.ZIGZAGS] == pytest.approx(2.31, abs=0.05)
+    assert gain[Lights.WAITS] > 2 * gain[Lights.ZIGZAGS]

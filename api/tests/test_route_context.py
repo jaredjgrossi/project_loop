@@ -5,11 +5,16 @@ import math
 import pytest
 
 from api.route_context import (
+    COMPOSITION,
     Crossing,
+    composition_by_range,
     crossing_counts,
+    crossing_passes,
     familiar_share,
     park_or_water_share,
     park_share,
+    pieces_by_range,
+    sample_classes,
     waterfront_share,
 )
 
@@ -170,47 +175,29 @@ def test_prefiltered_crossing_counts_match_the_unfiltered_ones(seed):
 
 
 @pytest.mark.parametrize("seed", range(40))
-def test_signal_positions_match_the_unfiltered_ones(seed):
-    import api.lights as lights
-
+def test_every_crossing_is_never_fewer_than_each_crosswalk_once(seed):
     route, crossings, _, _ = _random_case(seed)
-    assert lights.signal_positions(route, crossings) == _reference_signal_positions(route, crossings)
+    made = crossing_passes(route, crossings)
+    count, signals = crossing_counts(route, crossings)
+    assert len(made) >= count and sum(s for _, s in made) >= signals
+    assert [a for a, _ in made] == sorted(a for a, _ in made)
 
 
-def _reference_signal_positions(coords, crossings):
-    """signal_positions as it was before decision 018."""
-    from api.route_context import CROSSING_NEAR_M
+def test_an_out_and_back_crosses_each_crosswalk_twice():
+    # Out 1 km and back on the same line, a 16 m crosswalk on it every 200 m (a crosswalk way runs the way you
+    # walk across the street, so the route covers it lengthwise).
+    route = ll([(0, 0), (1000, 0), (0, 0)])
+    crossings = [Crossing(k, True, ll([(x - 8, 0), (x + 8, 0)])) for k, x in enumerate(range(100, 1000, 200))]
+    made = crossing_passes(route, crossings)
+    assert crossing_counts(route, crossings) == (5, 5)  # the ranking's input: each crosswalk once
+    assert len(made) == 10 and all(s for _, s in made)
+    assert made[0][0] == pytest.approx(100, abs=10) and made[-1][0] == pytest.approx(1900, abs=10)
 
-    frame = _Frame(coords[0][1])
-    pts = _samples(coords, frame, step=5.0)
-    along = [0.0]
-    for a, b in zip(pts, pts[1:]):
-        along.append(along[-1] + math.dist(a, b))
-    grid = {}
-    for k, (x, y) in enumerate(pts):
-        grid.setdefault((int(x // CROSSING_NEAR_M), int(y // CROSSING_NEAR_M)), []).append(k)
 
-    def nearest(p):
-        cx, cy = int(p[0] // CROSSING_NEAR_M), int(p[1] // CROSSING_NEAR_M)
-        best, best_d = None, CROSSING_NEAR_M
-        for gx in (cx - 1, cx, cx + 1):
-            for gy in (cy - 1, cy, cy + 1):
-                for k in grid.get((gx, gy), ()):
-                    d = math.dist(pts[k], p)
-                    if d <= best_d:
-                        best, best_d = k, d
-        return best
-
-    out = []
-    for c in crossings:
-        if not c.signals:
-            continue
-        cpts = _samples(c.coords, frame, step=1.0)
-        hits = [k for k in (nearest(p) for p in cpts) if k is not None]
-        if len(hits) / len(cpts) >= CROSSING_COVERED:
-            hits.sort()
-            out.append(along[hits[len(hits) // 2]])
-    return sorted(out)
+def test_a_route_that_never_comes_back_crosses_each_crosswalk_once():
+    crossings = [Crossing(k, k % 2 == 0, ll([(x - 8, 0), (x + 8, 0)])) for k, x in enumerate(range(100, 1000, 200))]
+    made = crossing_passes(STRAIGHT, crossings)
+    assert len(made) == 5 and sum(s for _, s in made) == 3
 
 
 @pytest.mark.parametrize("seed", range(20))
@@ -218,3 +205,81 @@ def test_shared_samples_give_the_same_three_shares(seed):
     route, _, parks, shore = _random_case(seed)
     for p, s in ((parks, shore), ([], shore), (parks, []), ([], [])):
         assert shares(route, p, s) == (park_share(route, p), waterfront_share(route, s), park_or_water_share(route, p, s))
+
+
+# --- composition (decision 020) ---
+
+def _composition_scene():
+    # 1 km east: a park over 200-400 m, a catalog path beside 400-600 m, the shore 30 m off from 600 m on, and a
+    # park that is also by the water at 900-1000 m (counted as waterfront, never twice).
+    parks = [[ll([(200, -50), (400, -50), (400, 50), (200, 50), (200, -50)])],
+             [ll([(900, -50), (1000, -50), (1000, 50), (900, 50), (900, -50)])]]
+    shore = [ll([(600, 30), (1200, 30)])]
+    path = [ll([(400, 5), (600, 5)])]
+    return parks, shore, path
+
+
+def test_sample_classes_split_the_route_without_overlap():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    assert len(classes) == len(along) and along[-1] == pytest.approx(1000, abs=1)
+    share = {k: 100 * classes.count(k) / len(classes) for k in COMPOSITION}
+    assert sum(share.values()) == pytest.approx(100)
+    assert share["park"] == pytest.approx(20, abs=1.5)
+    assert share["path"] == pytest.approx(15, abs=2)  # 400-600 m, less the part already within 60 m of the shore
+    assert share["street"] == pytest.approx(20, abs=1.5)
+
+
+def test_waterfront_and_park_classes_match_the_route_shares_exactly():
+    parks, shore, path = _composition_scene()
+    classes, _ = sample_classes(STRAIGHT, parks, shore, path)
+    n = len(classes)
+    assert 100 * classes.count("waterfront") / n == pytest.approx(waterfront_share(STRAIGHT, shore))
+    assert 100 * (classes.count("waterfront") + classes.count("park")) / n == pytest.approx(
+        park_or_water_share(STRAIGHT, parks, shore))
+
+
+def test_stretch_compositions_add_up_to_the_route():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    parts = composition_by_range(classes, along, [0.0, 300.0, 700.0])
+    assert len(parts) == 3
+    total = along[-1]
+    for k in COMPOSITION:
+        assert sum(p[k] for p in parts) == pytest.approx(total * classes.count(k) / len(classes))
+    assert parts[0]["street"] == pytest.approx(200, abs=10) and parts[0]["park"] == pytest.approx(100, abs=10)
+    assert parts[2]["park"] == 0  # the park at 900-1000 m is by the water: waterfront
+
+
+def test_pieces_split_at_every_change_of_class_and_of_range():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    bounds = [0.0, 300.0, 700.0]
+    pieces = pieces_by_range(STRAIGHT, classes, along, bounds)
+    for a, b in zip(pieces, pieces[1:]):
+        assert (a["kind"], a["range"]) != (b["kind"], b["range"])  # neighbors differ in kind or stretch
+        assert a["end_m"] == b["start_m"] and a["range"] <= b["range"]
+    assert pieces[0]["start_m"] == 0 and pieces[-1]["end_m"] == pytest.approx(along[-1])
+    assert [p["kind"] for p in pieces if p["range"] == 0] == ["street", "park"]  # 0-200 street, 200-300 park
+
+
+def test_pieces_add_up_to_the_stretch_compositions_exactly():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    bounds = [0.0, 300.0, 700.0]
+    parts = composition_by_range(classes, along, bounds)
+    pieces = pieces_by_range(STRAIGHT, classes, along, bounds)
+    for i, part in enumerate(parts):
+        for k in COMPOSITION:
+            assert sum(p["length_m"] for p in pieces if p["range"] == i and p["kind"] == k) == pytest.approx(part[k])
+
+
+def test_piece_lines_join_up_and_cover_the_route():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    pieces = pieces_by_range(STRAIGHT, classes, along, [0.0, 300.0, 700.0])
+    assert all(len(p["coordinates"]) >= 2 for p in pieces)
+    for a, b in zip(pieces, pieces[1:]):
+        assert a["coordinates"][-1] == pytest.approx(b["coordinates"][0])
+    assert pieces[0]["coordinates"][0] == pytest.approx(STRAIGHT[0])
+    assert pieces[-1]["coordinates"][-1] == pytest.approx(STRAIGHT[-1])

@@ -174,6 +174,24 @@ def test_stretches_elevation_and_hour_go_into_the_geojson(tmp_path):
     assert fc["features"][-1]["properties"]["name"] == "East River Esplanade"
 
 
+def test_mile_and_turnaround_points_go_into_the_geojson(tmp_path):
+    # The fake square's geometry is 2.4 mi (its 4 mi distance is only a label): miles 1-2, and no turnaround.
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    feats = json.loads((tmp_path / "loop.geojson").read_text())["features"]
+    miles = [f["properties"] for f in feats if f["properties"].get("feature") == "mile"]
+    assert [m["mile"] for m in miles] == [1, 2]
+    assert all(m["status"] == "measured" for m in miles)
+    assert not any(f["properties"].get("feature") == "turnaround" for f in feats)
+
+
+def test_the_route_carries_a_summary_with_trust_labels(tmp_path):
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    summary = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]["summary"]
+    assert summary["distance"]["status"] == "measured" and summary["distance"]["router_meters"] == round(4 * 1609.344)
+    assert summary["waterfront_pct"]["status"] == "not_scored"  # no stretches here, so no shares: never zero
+    assert summary["turnarounds"] == []
+
+
 def test_the_pool_is_written_with_the_request_and_timing(tmp_path):
     pool_file = tmp_path / "pool.json"
 
@@ -281,3 +299,27 @@ def test_identical_router_requests_in_one_generation_are_sent_once(monkeypatch):
     fresh, _, _ = mod.routers_for([], "zigzags")
     fresh(list(a))
     assert len(sent) == 4  # a new request's routers start empty
+
+
+def test_shape_left_unset_is_shown_as_a_default_and_the_request_goes_into_the_geojson(tmp_path, capsys):
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    assert "Shape: any (default)" in capsys.readouterr().out
+    request = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]["request"]
+    assert {"key": "shape", "title": "Shape", "value": "any", "origin": "default"} in request
+    assert go(tmp_path, fake_generate([candidate()]), shape="any") == 0
+    assert "Shape: any (you said)" in capsys.readouterr().out
+
+
+def test_a_start_time_without_a_day_gets_the_next_day_it_comes_round(tmp_path, capsys):
+    from datetime import datetime
+
+    seen = {}
+
+    def factory(lights, grid, start):
+        seen["start"] = start
+        return None
+
+    assert go(tmp_path, fake_generate([candidate()]), start_time="07:00", context_factory=factory,
+              now_fn=lambda: datetime(2026, 11, 3, 21, 0)) == 0
+    assert seen["start"] == datetime(2026, 11, 4, 7, 0)  # 9 pm now: tomorrow, a Wednesday
+    assert "Day: Wednesday 2026-11-04 (default)" in capsys.readouterr().out

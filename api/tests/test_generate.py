@@ -646,3 +646,36 @@ def test_metric_vector_keeps_the_crowd_band_text_and_labels_crowds_an_estimate()
     vec = result.candidates[0].metric_vector()
     assert vec["crowd_band"] == "weekday 4-7pm (a DOT count window)" and vec["crowd_high_pct"] == 12.3
     assert vec["crowd_status"] == "estimate"
+
+
+def test_best_of_counts_distinct_routes_within_the_distance_limit():
+    # Decision 020: "Best of N" counts routes that passed every rule within the limit, without duplicates.
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=3)
+    in_limit = [e for e in result.pool if e["status"] in ("chosen", "ranked")]
+    assert result.best_of is not None
+    assert len(result.candidates) <= result.best_of <= len(in_limit)
+
+
+def test_the_same_route_twice_counts_once_in_best_of():
+    # Two anchor sources that return the same park give identical routes: one route to choose from, not two.
+    one = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                         shape="any", feature_anchor_fn=[lambda *a: [park_east()]], top_n=80)
+    two = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                         shape="any", feature_anchor_fn=[lambda *a: [park_east()],
+                                                         lambda *a: [park_east(source="water", name="waterfront")]],
+                         top_n=80)
+    assert sum(e["status"] in ("chosen", "ranked") for e in two.pool) > sum(
+        e["status"] in ("chosen", "ranked") for e in one.pool)
+    assert two.best_of == one.best_of
+
+
+def test_no_route_within_the_limit_has_no_best_of():
+    base = make_router()
+
+    def stubborn(points):  # always about 30% short, as in the tolerance test above
+        r = base(points)
+        return Route(distance_m=miles_to_meters(4.0) * 0.7, time_s=r.time_s, coordinates=r.coordinates)
+
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=stubborn, round_trip_fn=no_round_trips, top_n=3)
+    assert not result.within_tolerance and result.best_of is None
