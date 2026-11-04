@@ -39,6 +39,9 @@ struct MainScreen: View {
                 .ignoresSafeArea(edges: .bottom)
         }
         .background(Palette.mapLand.color)
+        .fullScreenCover(item: $model.lookAroundTarget) { target in
+            LookAroundScreen(scene: target.scene, title: target.title)
+        }
         .task { await applyLaunchArguments() }
     }
 
@@ -49,6 +52,13 @@ struct MainScreen: View {
             try? await Task.sleep(for: .seconds(1.2))
             model.setSheet(open: true, animated: false)
             model.selectMile(mile)
+            if args.contains("-LoopLookAround") {
+                try? await Task.sleep(for: .seconds(3))
+                if let detail = model.shownDetail, let mark = detail.miles.first(where: { $0.mile == mile }) {
+                    let name = detail.stretch(atMile: mark.alongMi)?.name ?? ""
+                    model.openLookAround(mile: mile, title: CardText.mileChip(mile: mile, stretchName: name))
+                }
+            }
         }
     }
 }

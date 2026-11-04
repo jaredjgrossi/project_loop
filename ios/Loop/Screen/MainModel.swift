@@ -1,4 +1,5 @@
 import Foundation
+import MapKit
 import Observation
 import QuartzCore
 import SwiftUI
@@ -27,6 +28,16 @@ final class MainModel {
 
     // Selection
     var selectedMile: Int?
+
+    // Look Around
+    @ObservationIgnored private let lookAround = LookAroundCache()
+    private var lookAroundVersion = 0
+    struct LookAroundTarget: Identifiable {
+        let scene: MKLookAroundScene
+        let title: String
+        var id: ObjectIdentifier { ObjectIdentifier(scene) }
+    }
+    var lookAroundTarget: LookAroundTarget?
 
     // Camera and projection (set by the map)
     var cameraRequest = CameraRequest()
@@ -70,6 +81,19 @@ final class MainModel {
         guard let mark = shownDetail?.miles.first(where: { $0.mile == mile }) else { return }
         selectedMile = mile
         requestCamera(.focus(mark.point), animated: true)
+        lookAround.fetch(mile: mile, at: mark.point) { [weak self] in self?.lookAroundVersion += 1 }
+    }
+
+    func lookAroundAvailability(mile: Int) -> LookAroundAvailability {
+        _ = lookAroundVersion
+        return lookAround.availability(mile: mile)
+    }
+
+    /// Tapping the chip opens Look Around full screen (only offered when imagery exists).
+    func openLookAround(mile: Int, title: String) {
+        guard case let .available(scene) = lookAroundAvailability(mile: mile) else { return }
+        touch()
+        lookAroundTarget = LookAroundTarget(scene: scene, title: title)
     }
 
     /// Tapping a mile mark on the map opens the sheet on that mile.

@@ -215,6 +215,7 @@ struct RouteMapView: UIViewRepresentable {
 
         @objc private func tick() {
             guard styleReady, let mapView, let map = mapView.mapboxMap else { return }
+            placeOrnaments()
             if let pending = pendingCamera, mapView.bounds.width > 0 {
                 pendingCamera = nil
                 move(pending)
@@ -250,11 +251,21 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         func setBottomInset(_ inset: CGFloat) {
-            guard let mapView, inset != bottomInset || mapView.ornaments.options.logo.margins.y < inset else { return }
             bottomInset = inset
-            // Mapbox's logo and attribution must stay visible: keep them above the sheet.
-            mapView.ornaments.options.logo.margins = CGPoint(x: 12, y: inset + 6)
-            mapView.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: inset + 4)
+            placeOrnaments()
+        }
+
+        private var placedOrnamentsFor: (CGFloat, CGFloat)?
+
+        /// Mapbox's logo and attribution must stay visible: keep them just above the sheet.
+        /// Ornament margins count from the safe area, so the home-indicator inset comes off.
+        private func placeOrnaments() {
+            guard let mapView else { return }
+            let safe = mapView.safeAreaInsets.bottom
+            if let placed = placedOrnamentsFor, placed == (bottomInset, safe) { return }
+            placedOrnamentsFor = (bottomInset, safe)
+            mapView.ornaments.options.logo.margins = CGPoint(x: 12, y: bottomInset + 6 - safe)
+            mapView.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: bottomInset + 4 - safe)
         }
 
         func handle(_ request: CameraRequest) {
