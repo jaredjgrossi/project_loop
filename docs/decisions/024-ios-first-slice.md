@@ -94,6 +94,6 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   (zoomed in) have no setting either. Both go to the custom Mapbox Studio style.
 - Drag stutter (Jared's phone, 2026-11-04): `SheetDragPerfTests` (XCTHitchMetric, 5 drag cycles,
   scheme LoopPerf) on the iPhone measured 0 hitches for the new sheet in Debug and in Release,
-  and also 0 for the previous build, so synthetic drags don't reproduce what was felt. Whether
-  the rework fixed it is for a hand on the device to judge.
+  and also 0 for the previous build, so synthetic drags don't reproduce what was felt. On the
+  device by hand, Jared reports the reworked drag smooth (2026-11-04, Debug build).
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.
