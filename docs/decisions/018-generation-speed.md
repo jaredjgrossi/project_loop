@@ -1,6 +1,6 @@
 # 018: Generation speed
 
-**Status:** profiling done, no engine change yet (2026-11-03). The reviewer reviews the profile below before any change.
+**Status:** in progress (2026-11-03). Step 2 (the three exact changes) is done. Steps 3 and 4 (simpler feature areas plus parallel context scoring; settling the top 3 early and streaming the rest) are next, after decision 020.
 
 ## Target
 - **Full candidate pool** in about 5 s.
@@ -100,3 +100,24 @@ Each one is checked against the pinned top 3 and re-timed.
 6. **Skip context scoring for candidates that can't make the top 3.** That's a candidate whose best possible score, with every context dimension perfect, is below three distinct candidates of its kind already scored. The pool would then hold some unscored candidates, labeled as such.
 
 **Expected:** changes 1–3 alone should cut roughly 30%. Upper East Side 6 mi would drop from about 26 s to about 18 s. Reaching about 5 s there needs 4, 5 or 6.
+
+## Step 2 (done): the three exact changes
+The reviewer approved the profile and the order on 2026-11-03.
+
+1. **No crowd sampling without a start time** (`api/route_context.py: _crowd_fields`). The summary is known without sampling: 100% not scored, "no start time given". Stretches still sample the route, since they need each stretch's reason.
+2. **Prefilters and shared samples:**
+   - `crossing_counts` and `signal_positions` skip any crosswalk whose box touches no grid cell the route occupies, with one or two cells of margin. A crosswalk there can't be walked.
+   - `score_context` computes the park and water shares from one set of samples (`shares`), not three.
+3. **Each distinct router request is sent once per generation** (`api/scripts/make_loop.py: _Reused`). A routing failure is reused too. A request already in flight is waited for, not sent again.
+
+**Checked:**
+- **Same scores:** every candidate route at the 15 rows, both lights settings (2,350 routes), scored with and without a start time: 4,700 `ContextScores` identical to the old code, field by field.
+- **Randomized unit tests:** 100 cases compare the new crossing counts, signal positions and shares against the old algorithms, kept in the tests as references.
+- **Pinned top 3:** 30 of 30.
+
+**Timing (one pass):**
+- **Full pool:** median 8.5 s (from 10.4 s), max 21.5 s (from 28.2 s).
+- **First candidate:** median 0.29 s, max 1.48 s (Astor Place 6 mi, "waits", still over 1 s).
+- **Context scoring:** summed time down 35%, from 546–637 s to 379 s across the 30 cases.
+- **Routing:** summed time unchanged. The repeated requests are mostly sent at the same moment by sibling jobs, so the second thread waits for the first. GraphHopper does less work, but the waiting thread's time still counts.
+- **Noise:** the two "before" passes differ by 20% (median 9.4 s against 11.5 s), so the final before/after table will average several passes.

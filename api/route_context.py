@@ -153,6 +153,28 @@ def park_or_water_share(coords, parks, shoreline, within_m: float = WATERFRONT_M
     return 100 * sum(w or p for w, p in zip(water, in_park)) / len(samples)
 
 
+def shares(coords, parks, shoreline, within_m: float = WATERFRONT_M) -> tuple[float, float, float]:
+    """(park_share, waterfront_share, park_or_water_share) from one set of samples: the same numbers as the three
+    functions, without sampling the route and testing every park three times (decision 018)."""
+    frame = _Frame(coords[0][1])
+    samples = _samples(coords, frame)
+    n = len(samples)
+    water = _near_lines(samples, shoreline, frame, within_m) if shoreline else [False] * n
+    in_park = _in_parks(samples, parks, frame)
+    return (100 * sum(in_park) / n, 100 * sum(water) / n if shoreline else 0.0,
+            100 * sum(w or p for w, p in zip(water, in_park)) / n)
+
+
+def any_cell(grid: dict, xy: list, size: float, pad: int = 0) -> bool:
+    """Whether the grid (cells of `size`) has an entry in any cell under the points' bounding box, widened by `pad`
+    cells. When it has none, no point there can be near anything in the grid, so the exact test can be skipped."""
+    x0, x1 = int(min(x for x, _ in xy) // size) - pad, int(max(x for x, _ in xy) // size) + pad
+    y0, y1 = int(min(y for _, y in xy) // size) - pad, int(max(y for _, y in xy) // size) + pad
+    if (x1 - x0 + 1) * (y1 - y0 + 1) > len(grid):
+        return any(x0 <= gx <= x1 and y0 <= gy <= y1 for gx, gy in grid)
+    return any((gx, gy) in grid for gx in range(x0, x1 + 1) for gy in range(y0, y1 + 1))
+
+
 def familiar_share(coords, familiar_lines) -> float:
     """Percent of the route on ways the runner has run before (within FAMILIAR_NEAR_M of them)."""
     if not familiar_lines:
@@ -170,6 +192,10 @@ def crossing_counts(coords, crossings: list[Crossing]) -> tuple[int, int]:
     route = _SegmentIndex([coords], frame, CROSSING_NEAR_M)
     count = signals = 0
     for c in crossings:
+        # A crosswalk under no cell the route occupies can't be walked: skip sampling it (decision 018). One cell of
+        # margin, so a sample that rounding puts just over a cell edge is still covered.
+        if not any_cell(route.grid, [frame.xy(p) for p in c.coords], CROSSING_NEAR_M, pad=1):
+            continue
         pts = _samples(c.coords, frame, step=1.0)
         near = [route.near(p) for p in pts]
         if sum(near) / len(near) >= CROSSING_COVERED:
@@ -220,10 +246,11 @@ def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None, 
     pts = [frame.xy(c) for c in coords]
     miles = sum(math.dist(a, b) for a, b in zip(pts, pts[1:])) / 1609.344
     crossings, signals = crossing_counts(coords, ctx.crossings)
+    park_pct, waterfront_pct, park_or_water_pct = shares(coords, ctx.parks, ctx.shoreline)
     return ContextScores(
-        park_pct=park_share(coords, ctx.parks),
-        waterfront_pct=waterfront_share(coords, ctx.shoreline),
-        park_or_water_pct=park_or_water_share(coords, ctx.parks, ctx.shoreline),
+        park_pct=park_pct,
+        waterfront_pct=waterfront_pct,
+        park_or_water_pct=park_or_water_pct,
         crossings_per_mile=crossings / miles,
         signals_per_mile=signals / miles,
         familiar_pct=None if ctx.familiar is None else familiar_share(coords, ctx.familiar),
@@ -233,9 +260,15 @@ def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None, 
 
 
 def _crowd_fields(conn, coords, start) -> dict:
-    from api.crowds import route_crowds
+    from api.crowds import band_for, route_crowds, summarize
 
-    c = route_crowds(conn, coords, start)
+    if start is None and conn.execute("SELECT to_regclass('sidewalk_crowd') IS NOT NULL").fetchone()[0]:
+        # Without a start time every sample is not scored for the same reason, so the summary is known without
+        # sampling the route (decision 018). Stretches still sample it, for each stretch's reason.
+        band, reason = band_for(None)
+        c = {**summarize([None]), "band": None, "reason": reason, "start_band": band}
+    else:
+        c = route_crowds(conn, coords, start)
     return {"crowd_high_pct": c["high_pct"], "crowd_medium_pct": c["medium_pct"], "crowd_low_pct": c["low_pct"],
             "crowd_not_scored_pct": c["not_scored_pct"], "crowd_band": c["band"],
             "crowd_reason": c["reason"], "crowd_start_band": c["start_band"]}
