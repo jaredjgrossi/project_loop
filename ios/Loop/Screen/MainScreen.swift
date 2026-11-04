@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainScreen: View {
     @State private var model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(data: LoopData) {
         _model = State(initialValue: MainModel(data: data))
@@ -29,10 +30,18 @@ struct MainScreen: View {
                 .allowsHitTesting(false)
                 .frame(maxHeight: .infinity, alignment: .top)
 
-            HeaderView(request: model.data.request)
+            HeaderView(request: model.data.request, trailing: AnyView(PlayBuildButton(model: model)))
                 .background(GeometryReader { g in
                     Color.clear.onAppear { model.headerBottom = g.frame(in: .global).maxY }
                 })
+
+            if model.betterRouteAvailable {
+                BetterRouteChip { model.acceptBetterRoute() }
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, model.sheetHeight + 10)
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.opacity)
+            }
 
             RouteSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
@@ -42,12 +51,21 @@ struct MainScreen: View {
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
+        .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
         .task { await applyLaunchArguments() }
     }
 
     /// Debug/screenshot hooks: `-LoopMile 1` opens the sheet on mile 1.
     private func applyLaunchArguments() async {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-LoopPlay") {
+            try? await Task.sleep(for: .seconds(1.5))
+            model.play(args.contains("-LoopLate") ? .lateBetterRoute : .standard)
+            if let i = args.firstIndex(of: "-LoopTouchAt"), i + 1 < args.count, let t = Double(args[i + 1]) {
+                try? await Task.sleep(for: .seconds(t))
+                model.touch()
+            }
+        }
         if let i = args.firstIndex(of: "-LoopMile"), i + 1 < args.count, let mile = Int(args[i + 1]) {
             try? await Task.sleep(for: .seconds(1.2))
             model.setSheet(open: true, animated: false)
@@ -60,5 +78,55 @@ struct MainScreen: View {
                 }
             }
         }
+    }
+}
+
+/// Debug: replays a build. Tap for the standard schedule; hold for the late-better-route one.
+struct PlayBuildButton: View {
+    let model: MainModel
+
+    var body: some View {
+        Menu {
+            Button(BuildScript.standard.name) { model.play(.standard) }
+            Button(BuildScript.lateBetterRoute.name) { model.play(.lateBetterRoute) }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill").font(.system(size: 11, weight: .semibold))
+                Text("build").typeStyle(.data)
+            }
+            .foregroundStyle(Palette.inkMuted.color)
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .overlay(Capsule().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
+            .frame(height: Metrics.minTap)
+            .contentShape(Rectangle())
+        } primaryAction: {
+            model.play(.standard)
+        }
+        .accessibilityLabel("Play the build, debug")
+        .accessibilityHint("Replays how a live build arrives. Hold for more.")
+        .padding(.trailing, Metrics.s8)
+    }
+}
+
+/// Shown when a better #1 arrives after the runner touched the route, or after the flag.
+struct BetterRouteChip: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("A better route came in")
+                .typeStyle(.label)
+                .foregroundStyle(Palette.ink.color)
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(Capsule().fill(Palette.surfaceSheet.color))
+                .overlay(Capsule().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
+                .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.10), radius: 7, y: 4)
+                .frame(height: Metrics.minTap)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Switches to the new route")
     }
 }

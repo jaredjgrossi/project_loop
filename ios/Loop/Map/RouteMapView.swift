@@ -63,9 +63,11 @@ struct RouteMapView: UIViewRepresentable {
         private var lastCameraRequestId = -1
         private var pendingCamera: CameraRequest?
         private var lastFrame: RouteFrame?
+        private var lastFrameVersion = -1
+        private var wasAnimating = false
         private var displayLink: CADisplayLink?
         private var roadLabelsOn: Bool?
-        var reduceMotion = false
+        var reduceMotion = false { didSet { if oldValue != reduceMotion { lastFrame = nil; lastFrameVersion = -1 } } }
 
         init(model: MainModel) { self.model = model }
 
@@ -220,7 +222,13 @@ struct RouteMapView: UIViewRepresentable {
                 pendingCamera = nil
                 move(pending)
             }
-            let frame = model.frame(now: CACurrentMediaTime(), reduceMotion: reduceMotion)
+            let now = CACurrentMediaTime()
+            // Idle: nothing changed and nothing is moving, so skip the frame work entirely.
+            if lastFrame != nil, model.frameVersion == lastFrameVersion,
+               !model.isAnimating(now: now, reduceMotion: reduceMotion), !wasAnimating { return }
+            wasAnimating = model.isAnimating(now: now, reduceMotion: reduceMotion)
+            lastFrameVersion = model.frameVersion
+            let frame = model.frame(now: now, reduceMotion: reduceMotion)
             guard frame != lastFrame else { return }
             if frame.lead != lastFrame?.lead {
                 let features: [Feature] = frame.lead.map { seg in

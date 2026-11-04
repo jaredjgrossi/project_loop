@@ -150,6 +150,7 @@ struct CardBlock: View {
             .animation(reduceMotion ? nil : Motion.textArrive, value: model.cardRevealed)
             Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 96, alignment: .top)
     }
 }

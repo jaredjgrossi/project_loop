@@ -10,15 +10,22 @@ import SwiftUI
 final class MainModel {
     let data: LoopData
 
-    // Route
-    var shownRank: Int = 1
-    var otherRanks: [Int] = [2, 3]
-    var cardRevealed = true
-    var showsCount = true
+    // Route: the build replay decides what is shown.
+    private(set) var build: BuildState
+    @ObservationIgnored private var playback: Task<Void, Never>?
+    @ObservationIgnored private var resampled: [Int: [GeoPoint]] = [:]
+    /// Bumped whenever what the map draws changes outside of time-based animation.
+    private(set) var frameVersion = 0
     /// Bumped when the route settles, to send one ring out from the turnaround.
     private(set) var pulseID = 0
     /// How much of the shown route is drawn, 0...1 (markers appear as the line passes them).
     private(set) var drawnFraction: Double = 1
+
+    var shownRank: Int? { build.shownRank }
+    var otherRanks: [Int] { build.otherRanks }
+    var cardRevealed: Bool { build.cardRevealed }
+    var showsCount: Bool { build.showsCount }
+    var betterRouteAvailable: Bool { build.betterRank != nil }
 
     // Sheet
     /// Where the sheet rests (216 or 398); the live height while dragging is `sheetHeight`.
@@ -49,9 +56,10 @@ final class MainModel {
 
     init(data: LoopData) {
         self.data = data
+        build = .settled(top3: data.candidates.map(\.rank))
     }
 
-    var shown: Candidate? { data.candidate(rank: shownRank) }
+    var shown: Candidate? { shownRank.flatMap { data.candidate(rank: $0) } }
     var shownDetail: RouteDetail? { shown?.detail }
 
     var overviewCoordinates: [GeoPoint] { shown?.line.points ?? [] }
@@ -62,8 +70,53 @@ final class MainModel {
 
     // MARK: Interaction
 
-    /// The runner touched the route or the card. (Used by the build replay.)
-    func touch() {}
+    /// The runner touched the route or the card. Before the flag this cancels the settle beat
+    /// and freezes the shown route.
+    func touch() {
+        guard !build.touched, !build.final else { return }
+        build.touch()
+    }
+
+    // MARK: Build replay
+
+    /// Replays a build from the saved file's top 3 on the fake schedule.
+    func play(_ script: BuildScript) {
+        playback?.cancel()
+        selectedMile = nil
+        setSheet(open: false, animated: true)
+        build = BuildState()
+        drawnFraction = 0
+        frameVersion += 1
+        Haptics.prepareSettle()
+        let t0 = CACurrentMediaTime()
+        playback = Task { @MainActor [weak self] in
+            for timed in script.events {
+                let wait = t0 + timed.at - CACurrentMediaTime()
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                guard let self, !Task.isCancelled else { return }
+                self.receive(timed.event, at: t0 + timed.at)
+            }
+        }
+    }
+
+    private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
+        let wasSettled = build.settleAt
+        build.apply(event, at: t)
+        frameVersion += 1
+        if build.settleAt != nil, wasSettled == nil {
+            pulseID += 1
+            Haptics.settle()
+        }
+    }
+
+    /// "A better route came in" → switch, morphing from the route on screen.
+    func acceptBetterRoute() {
+        build.acceptBetterRoute(at: CACurrentMediaTime())
+        frameVersion += 1
+        if let m = selectedMile {
+            if shownDetail?.miles.contains(where: { $0.mile == m }) == true { selectMile(m) } else { selectedMile = nil }
+        }
+    }
 
     func setSheet(open: Bool, animated: Bool) {
         let target = open ? Metrics.sheetOpen : Metrics.sheetCollapsed
@@ -124,11 +177,43 @@ final class MainModel {
         return drawnFraction * len >= alongM - 1
     }
 
-    /// The map frame for this moment.
+    /// True while the route is still drawing or morphing (the map redraws every frame).
+    func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
+        guard !reduceMotion, let shown else { return false }
+        if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
+        return build.drawnFraction(at: now, length: shown.line.length,
+                                   metresPerSecond: Motion.drawMetresPerSecond) < 1
+    }
+
+    private func points(rank: Int) -> [GeoPoint] {
+        if let hit = resampled[rank] { return hit }
+        let pts = data.candidate(rank: rank)?.line.resampled(count: 256) ?? []
+        resampled[rank] = pts
+        return pts
+    }
+
+    /// The map frame for this moment. Constant-speed draw; a new leader before the flag morphs
+    /// point by point from the line on screen (no redraw from scratch). Reduce Motion: drawn whole.
     func frame(now: CFTimeInterval, reduceMotion: Bool) -> RouteFrame {
         var frame = RouteFrame()
-        if let shown { frame.lead = RouteFrame.segments(for: shown, fraction: drawnFraction) }
         frame.others = otherRanks.compactMap { data.candidate(rank: $0)?.line.points }
+        frame.othersOpacity = build.provisional ? 0.5 : 0.3
+        guard let shown else {
+            if drawnFraction != 0 { drawnFraction = 0 }
+            return frame
+        }
+        let fraction = reduceMotion ? 1 : build.drawnFraction(
+            at: now, length: shown.line.length, metresPerSecond: Motion.drawMetresPerSecond)
+        if fraction != drawnFraction { drawnFraction = fraction }
+
+        if !reduceMotion, let p = build.morphProgress(at: now, duration: Motion.morphDuration),
+           let morph = build.morph {
+            let eased = p * p * (3 - 2 * p)
+            frame.lead = RouteFrame.plain(blend(points(rank: morph.from), points(rank: morph.to), eased),
+                                          fraction: fraction)
+        } else {
+            frame.lead = RouteFrame.segments(for: shown, fraction: fraction)
+        }
         return frame
     }
 }

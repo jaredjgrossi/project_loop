@@ -26,10 +26,12 @@ struct MarkerOverlay: View {
                         .position(p)
                     if showDetailMarks { MapLabel(text: "Turn").position(x: p.x, y: p.y + 20) }
                 }
-                if let p = model.screenPoint(detail.start) {
-                    StartDot().position(p)
-                    if showDetailMarks { MapLabel(text: "Start").position(x: p.x, y: p.y - 20) }
-                }
+            }
+            // Every candidate starts at the same place, so the start shows as soon as a route does.
+            if let start = model.shownDetail?.start ?? model.shown?.line.points.first,
+               let p = model.screenPoint(start) {
+                StartDot().position(p)
+                if showDetailMarks { MapLabel(text: "Start").position(x: p.x, y: p.y - 20) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
