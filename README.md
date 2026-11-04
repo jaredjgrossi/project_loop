@@ -1,5 +1,7 @@
 # Loop
 
+[![unit tests](https://github.com/jaredjgrossi/project_loop/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/jaredjgrossi/project_loop/actions/workflows/unit-tests.yml)
+
 Turn a plain-English run request into a real NYC route, scored with NYC data. The full plan is in [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
 
 **Where things stand (Phase 1, data foundation):** one command sets up a local stack, and one script turns an NYC street address and a distance into a running loop you can look at on a map. There is no scoring, Claude, or frontend yet.
