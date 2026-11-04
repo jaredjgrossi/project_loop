@@ -58,3 +58,15 @@ def test_an_unnamed_corridor_stretch_is_named_after_the_nearest_way():
     assert named.name == "East River Esplanade"
     assert unnamed.name == "waterfront path near East 23rd Street" and unnamed.kind == "corridor"
     assert "catalog #89" in unnamed.source
+
+
+def test_stretch_composition_is_measured_meters_by_class():
+    coords = [[LON0 + x / KX, LAT0] for x in range(0, 1001, 20)]
+    labels = [STREET] * 15 + [GREENWAY] * 36
+    comps = [{"waterfront": 0.0, "park": 0.0, "path": 0.0, "street": 300.0},
+             {"waterfront": 600.0, "park": 0.0, "path": 100.0, "street": 0.0}]
+    first, second = (f["properties"]["composition"] for f in stretch_features(coords, labels, step_m=20, compositions=comps))
+    assert first["street_m"] == 300 and second["waterfront_m"] == 600 and second["path_m"] == 100
+    assert first["status"] == second["status"] == "measured" and second["source"]
+    plain = stretch_features(coords, labels, step_m=20)
+    assert plain[0]["properties"]["composition"] == {"status": "not_scored"}

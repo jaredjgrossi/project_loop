@@ -5,11 +5,14 @@ import math
 import pytest
 
 from api.route_context import (
+    COMPOSITION,
     Crossing,
+    composition_by_range,
     crossing_counts,
     familiar_share,
     park_or_water_share,
     park_share,
+    sample_classes,
     waterfront_share,
 )
 
@@ -218,3 +221,47 @@ def test_shared_samples_give_the_same_three_shares(seed):
     route, _, parks, shore = _random_case(seed)
     for p, s in ((parks, shore), ([], shore), (parks, []), ([], [])):
         assert shares(route, p, s) == (park_share(route, p), waterfront_share(route, s), park_or_water_share(route, p, s))
+
+
+# --- composition (decision 020) ---
+
+def _composition_scene():
+    # 1 km east: a park over 200-400 m, a catalog path beside 400-600 m, the shore 30 m off from 600 m on, and a
+    # park that is also by the water at 900-1000 m (counted as waterfront, never twice).
+    parks = [[ll([(200, -50), (400, -50), (400, 50), (200, 50), (200, -50)])],
+             [ll([(900, -50), (1000, -50), (1000, 50), (900, 50), (900, -50)])]]
+    shore = [ll([(600, 30), (1200, 30)])]
+    path = [ll([(400, 5), (600, 5)])]
+    return parks, shore, path
+
+
+def test_sample_classes_split_the_route_without_overlap():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    assert len(classes) == len(along) and along[-1] == pytest.approx(1000, abs=1)
+    share = {k: 100 * classes.count(k) / len(classes) for k in COMPOSITION}
+    assert sum(share.values()) == pytest.approx(100)
+    assert share["park"] == pytest.approx(20, abs=1.5)
+    assert share["path"] == pytest.approx(15, abs=2)  # 400-600 m, less the part already within 60 m of the shore
+    assert share["street"] == pytest.approx(20, abs=1.5)
+
+
+def test_waterfront_and_park_classes_match_the_route_shares_exactly():
+    parks, shore, path = _composition_scene()
+    classes, _ = sample_classes(STRAIGHT, parks, shore, path)
+    n = len(classes)
+    assert 100 * classes.count("waterfront") / n == pytest.approx(waterfront_share(STRAIGHT, shore))
+    assert 100 * (classes.count("waterfront") + classes.count("park")) / n == pytest.approx(
+        park_or_water_share(STRAIGHT, parks, shore))
+
+
+def test_stretch_compositions_add_up_to_the_route():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    parts = composition_by_range(classes, along, [0.0, 300.0, 700.0])
+    assert len(parts) == 3
+    total = along[-1]
+    for k in COMPOSITION:
+        assert sum(p[k] for p in parts) == pytest.approx(total * classes.count(k) / len(classes))
+    assert parts[0]["street"] == pytest.approx(200, abs=10) and parts[0]["park"] == pytest.approx(100, abs=10)
+    assert parts[2]["park"] == 0  # the park at 900-1000 m is by the water: waterfront

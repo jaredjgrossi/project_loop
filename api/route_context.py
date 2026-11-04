@@ -165,6 +165,45 @@ def shares(coords, parks, shoreline, within_m: float = WATERFRONT_M) -> tuple[fl
             100 * sum(w or p for w, p in zip(water, in_park)) / n)
 
 
+CORRIDOR_NEAR_M = 15.0  # as the stretch labels (api/segments.py)
+COMPOSITION = ("waterfront", "park", "path", "street")
+
+
+def sample_classes(coords, parks, shoreline, corridors, within_m: float = WATERFRONT_M) -> tuple[list[str], list[float]]:
+    """A class for every SAMPLE_M sample of the route, and its distance along the route (decision 020). The classes
+    split the route without overlap, from the same samples and tests as `shares`:
+    - waterfront: within `within_m` of the shoreline (so its share is exactly `waterfront_share`);
+    - park: in a park and not by the water (waterfront + park is exactly `park_or_water_share`);
+    - path: within CORRIDOR_NEAR_M of a catalog corridor (a lines list) and neither of those;
+    - street: everything else, streets and their sidewalks, plazas and unnamed paths."""
+    frame = _Frame(coords[0][1])
+    samples = _samples(coords, frame)
+    n = len(samples)
+    water = _near_lines(samples, shoreline, frame, within_m) if shoreline else [False] * n
+    in_park = _in_parks(samples, parks, frame)
+    on_path = _near_lines(samples, corridors, frame, CORRIDOR_NEAR_M) if corridors else [False] * n
+    classes = ["waterfront" if w else "park" if p else "path" if c else "street"
+               for w, p, c in zip(water, in_park, on_path)]
+    along = [0.0]
+    for a, b in zip(samples, samples[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    return classes, along
+
+
+def composition_by_range(classes: list[str], along: list[float], bounds_m: list[float]) -> list[dict]:
+    """Meters of each class in each range [bounds_m[i], bounds_m[i+1]) along the route; the last range runs to the
+    end. Every sample stands for an equal share of the route, so the ranges add up to the route's shares exactly."""
+    total = along[-1]
+    per = total / len(classes) if classes else 0.0
+    out = [{k: 0.0 for k in COMPOSITION} for _ in bounds_m]
+    i = 0
+    for cls, a in zip(classes, along):
+        while i + 1 < len(bounds_m) and a >= bounds_m[i + 1]:
+            i += 1
+        out[i][cls] += per
+    return out
+
+
 def any_cell(grid: dict, xy: list, size: float, pad: int = 0) -> bool:
     """Whether the grid (cells of `size`) has an entry in any cell under the points' bounding box, widened by `pad`
     cells. When it has none, no point there can be near anything in the grid, so the exact test can be skipped."""

@@ -83,8 +83,10 @@ def _resample(coords: list[list[float]], step_m: float) -> list[list[float]]:
 
 def stretch_features(samples: list[list[float]], labels: list[Label], step_m: float = STEP_M,
                      signals: list[int] | None = None, gains: list[float | None] | None = None,
-                     extra_facts: list[list[dict]] | None = None, crowds: list[dict] | None = None) -> list[dict]:
-    """GeoJSON features for the stretches of a route sampled every step_m (samples[i] has labels[i])."""
+                     extra_facts: list[list[dict]] | None = None, crowds: list[dict] | None = None,
+                     compositions: list[dict] | None = None) -> list[dict]:
+    """GeoJSON features for the stretches of a route sampled every step_m (samples[i] has labels[i]). A stretch's
+    composition (meters by class, from api/route_context.sample_classes) is what the route's shares add up from."""
     stretches = merge_stretches(labels, step_m)
     feats = []
     for i, s in enumerate(stretches):
@@ -106,11 +108,16 @@ def stretch_features(samples: list[list[float]], labels: list[Label], step_m: fl
                 "elevation_gain_m": ({"value": gains[i], "status": "estimate"} if gains and gains[i] is not None
                                      else {"value": None, "status": "not_scored"}),
                 "crowd": crowds[i] if crowds else {"value": None, "status": "not_scored", "basis": "not computed"},
+                "composition": ({**{f"{k}_m": round(v, 1) for k, v in compositions[i].items()}, "status": "measured",
+                                 "source": COMPOSITION_SOURCE} if compositions else {"status": "not_scored"}),
                 "facts": facts,
             },
         })
     return feats
 
+
+COMPOSITION_SOURCE = ("OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog "
+                      "within 15 m (path); the same 5 m samples as the route's shares")
 
 FACT_TEXT = {
     "corridor": "On {name}",
@@ -175,13 +182,19 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
     the crowd level (estimate) for a run starting at `start` (decision 016)."""
     from api.crowds import route_crowds, stretch_crowd
     from api.elevation import elevation_profile
-    from api.route_context import crossing_counts, fetch_context
+    from api.route_context import _BBOX, composition_by_range, crossing_counts, fetch_context, sample_classes
 
     samples = _resample(coords, STEP_M)
     rows = conn.execute(_LABELS, {"lons": [c[0] for c in samples], "lats": [c[1] for c in samples]}).fetchall()
     labels = [_label(r) for r in rows]
     stretches = merge_stretches(labels, STEP_M)
-    crossings = fetch_context(conn, coords).crossings
+    ctx = fetch_context(conn, coords)
+    crossings = ctx.crossings
+    corridor_lines = [json.loads(g)["coordinates"] for (g,) in conn.execute(
+        f"SELECT ST_AsGeoJSON((ST_Dump(geom)).geom) FROM corridors WHERE geom && {_BBOX}",
+        (json.dumps({"type": "LineString", "coordinates": coords}),))]
+    classes, along = sample_classes(coords, ctx.parks, ctx.shoreline, corridor_lines)
+    compositions = composition_by_range(classes, along, [s.start * STEP_M for s in stretches])
     sample_ele = _elevation_at_samples(coords, elevation, samples) if elevation else None
     crowd = route_crowds(conn, coords, start)
     widths = {}
@@ -206,7 +219,7 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
         if idx and 2 * len(ws) > len(idx):  # mostly on sidewalks with a measured width
             extra[-1].append({"text": f"Sidewalk about {ws[len(ws) // 2]:.0f} ft wide", "source": WIDTH_SOURCE,
                               "trust": "listed"})
-    return stretch_features(samples, labels, STEP_M, signals, gains, extra, crowds)
+    return stretch_features(samples, labels, STEP_M, signals, gains, extra, crowds, compositions)
 
 
 def _elevation_at_samples(coords, elevation, samples) -> list[float]:
