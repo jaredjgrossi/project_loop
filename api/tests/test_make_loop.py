@@ -135,6 +135,9 @@ def test_main_parses_arguments(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "geocode", lambda q: RESULT)
     monkeypatch.setattr(mod, "current_grid", lambda lat, lon: GRID)
     monkeypatch.setattr(mod, "generate_loops", fake_generate([candidate()]))
+    # main() wires the Postgres-backed closures and stretches; a unit test must not need the database (CI has none).
+    monkeypatch.setattr(mod, "db_closures", lambda lat, lon, miles: [])
+    monkeypatch.setattr(mod, "db_stretches", lambda coords, elevation, start=None: [])
     out = tmp_path / "x.geojson"
     assert main(["11 Madison Ave, Manhattan", "4", "--out", str(out)]) == 0
     assert out.exists()
