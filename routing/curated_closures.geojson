@@ -287,6 +287,199 @@
           ]
         ]
       }
+    },
+    {
+      "type": "Feature",
+      "id": "nyu_langone_driveways_e33",
+      "properties": {
+        "name": "NYU Langone Health driveways between E 33rd and E 34th St, east of First Ave",
+        "reason": "hospital driveways, not a public walkway: there is no way through from the end of E 33rd St to the esplanade; enter at E 34th St",
+        "sources": [
+          "https://www.openstreetmap.org/way/672581827",
+          "https://www.openstreetmap.org/way/672581830",
+          "https://www.openstreetmap.org/way/1424092636"
+        ],
+        "trust": "verified",
+        "ground_check": {
+          "by": "the reviewer",
+          "on": "2026-11-04"
+        },
+        "checked_on": "2026-11-04",
+        "review_by": "2027-05-04",
+        "drawn": "The three OSM ways (highway=service, service=driveway, no access tag; two of them inside the OSM polygon of NYU Langone Health - Tisch Hospital) merged into one line, 16 m left off each end and 1 m either side, so the closure touches no public sidewalk or street, only two other campus driveways (OSM 672581829, 672582010). The E 34th St and First Avenue sidewalks stay open.",
+        "notes": "Routing read the driveways as a public walkway, so the Kips Bay routes cut through from E 33rd St to E 34th St. On the ground the only entrance there is E 34th St. OpenStreetMap is not edited (the reviewer's call); access=private on these ways upstream would make this entry unnecessary."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -73.973385,
+              40.743203
+            ],
+            [
+              -73.97325,
+              40.743388
+            ],
+            [
+              -73.973249,
+              40.74339
+            ],
+            [
+              -73.973247,
+              40.743391
+            ],
+            [
+              -73.973245,
+              40.743392
+            ],
+            [
+              -73.973243,
+              40.743392
+            ],
+            [
+              -73.973241,
+              40.743393
+            ],
+            [
+              -73.973238,
+              40.743393
+            ],
+            [
+              -73.973236,
+              40.743392
+            ],
+            [
+              -73.973234,
+              40.743392
+            ],
+            [
+              -73.972876,
+              40.743244
+            ],
+            [
+              -73.972718,
+              40.743225
+            ],
+            [
+              -73.972673,
+              40.743231
+            ],
+            [
+              -73.972652,
+              40.743259
+            ],
+            [
+              -73.972631,
+              40.74325
+            ],
+            [
+              -73.972656,
+              40.743219
+            ],
+            [
+              -73.972657,
+              40.743217
+            ],
+            [
+              -73.972659,
+              40.743216
+            ],
+            [
+              -73.972661,
+              40.743215
+            ],
+            [
+              -73.972664,
+              40.743214
+            ],
+            [
+              -73.972715,
+              40.743207
+            ],
+            [
+              -73.972718,
+              40.743207
+            ],
+            [
+              -73.97272,
+              40.743207
+            ],
+            [
+              -73.972881,
+              40.743227
+            ],
+            [
+              -73.972883,
+              40.743227
+            ],
+            [
+              -73.972885,
+              40.743228
+            ],
+            [
+              -73.973235,
+              40.743372
+            ],
+            [
+              -73.973367,
+              40.743191
+            ],
+            [
+              -73.973368,
+              40.74319
+            ],
+            [
+              -73.97337,
+              40.743189
+            ],
+            [
+              -73.973372,
+              40.743188
+            ],
+            [
+              -73.973374,
+              40.743187
+            ],
+            [
+              -73.973504,
+              40.743156
+            ],
+            [
+              -73.973506,
+              40.743156
+            ],
+            [
+              -73.973509,
+              40.743156
+            ],
+            [
+              -73.973511,
+              40.743156
+            ],
+            [
+              -73.973513,
+              40.743157
+            ],
+            [
+              -73.973695,
+              40.743231
+            ],
+            [
+              -73.973684,
+              40.743247
+            ],
+            [
+              -73.973506,
+              40.743175
+            ],
+            [
+              -73.973385,
+              40.743203
+            ]
+          ]
+        ]
+      }
     }
   ]
 }

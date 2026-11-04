@@ -15,6 +15,9 @@ out/
 apple_health_export/
 data/
 
+# Claude Code session worktrees (each is its own checkout of a branch)
+.claude/worktrees/
+
 # iOS app (ios/): generated Xcode project, build output, and local secrets
 ios/Loop.xcodeproj/
 ios/build/

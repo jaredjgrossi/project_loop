@@ -11,15 +11,18 @@ import argparse
 import json
 import re
 import sys
+import threading
 from collections.abc import Callable
+from datetime import datetime
 from functools import partial
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import psycopg
 
 from etl.load import database_url
 
-from api.constraints import Lights, RunConstraints, describe, resolve_preferences
+from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences, with_default_date
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -30,12 +33,15 @@ from api.nogo import NoGoZone, custom_model
 from api.nogo import resolve as resolve_zones
 from api.elevation import elevation_profile
 from api.lights import signal_penalty_model
+from api.markers import marker_features
+from api.summary import route_summary
 from api.route_context import ContextScores, score_context
-from api.segments import route_stretches
+from api.segments import route_stretches_and_pieces
 from api.routing import RoutingError, request_round_trip, request_route, route_to_geojson
 from api.streets import grid_at
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "out"
+NEW_YORK = ZoneInfo("America/New_York")
 KIND_LABELS = {"loop": "loop", "out_and_back": "out-and-back", "lollipop": "lollipop"}
 MIN_MILES, MAX_MILES = 0.5, 30.0
 
@@ -103,9 +109,11 @@ DB_FEATURE_ANCHOR_SOURCES = [_on_own_connection(f) for f in (corridor_anchors, p
 
 
 def db_stretches(coords: list[list[float]], elevation: list[float] | None, start=None) -> list[dict]:
-    """Per-stretch GeoJSON features for a route (decision 014), with crowd levels for the start moment (016)."""
+    """Per-stretch GeoJSON features for a route (decision 014), with crowd levels for the start moment (016), then
+    the route cut into pieces by kind (023)."""
     with psycopg.connect(database_url()) as conn:
-        return route_stretches(conn, coords, elevation, start)
+        stretches, pieces = route_stretches_and_pieces(conn, coords, elevation, start)
+    return stretches + pieces
 
 
 def _merged(*models: dict | None) -> dict | None:
@@ -120,10 +128,50 @@ def _merged(*models: dict | None) -> dict | None:
     return out
 
 
+class _Reused:
+    """A router function that sends each distinct request once and reuses the answer, a RoutingError included
+    (decision 018: 6-14% of a generation's requests repeat an earlier one exactly, and GraphHopper answers them the
+    same). Thread-safe: a request already in flight is waited for, not sent again. One per request's routers, so
+    nothing is kept between requests."""
+
+    def __init__(self, fn: partial, key: Callable = lambda *a: a):
+        self.fn, self.key = fn, key
+        self.keywords = fn.keywords  # the custom model, as on the plain partial
+        self.lock = threading.Lock()
+        self.done: dict = {}
+
+    def __call__(self, *args):
+        k = self.key(*args)
+        with self.lock:
+            slot = self.done.get(k)
+            if slot is None:
+                slot = self.done[k] = [threading.Event(), None, None]
+                mine = True
+            else:
+                mine = False
+        if mine:
+            try:
+                slot[1] = self.fn(*args)
+            except RoutingError as exc:
+                slot[2] = exc
+            finally:
+                slot[0].set()
+        else:
+            slot[0].wait()
+        if slot[2] is not None:
+            raise slot[2]
+        return slot[1]
+
+
+def _points_key(points, *rest):
+    return (tuple(tuple(p) for p in points), *rest)
+
+
 def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable, Callable]:
     """GraphHopper route and round-trip functions that route around the given no-go zones (plus any extra rules)."""
     model = _merged(custom_model(zones), extra)
-    return partial(request_route, custom_model=model), partial(request_round_trip, custom_model=model)
+    return (_Reused(partial(request_route, custom_model=model), _points_key),
+            _Reused(partial(request_round_trip, custom_model=model)))
 
 
 def routers_for(zones: list[NoGoZone], lights: Lights, closures=()) -> tuple[Callable, Callable, Callable]:
@@ -142,10 +190,11 @@ def db_closures(lat: float, lon: float, miles: float) -> list[Closure]:
 
 def context_for(lights: Lights, grid: GridEstimate, use_prior: bool = True, start=None) -> Callable:
     """A context scorer that also estimates the wait at lights for this runner and street grid (decision 015) and the
-    crowds along the route from the start moment (decision 016)."""
+    crowds along the route from the start moment (decision 016). Scored in a worker process (decision 018)."""
+    from api import scoring_pool
+
     def score(coords: list[list[float]]) -> ContextScores:
-        with psycopg.connect(database_url()) as conn:
-            return score_context(conn, coords, use_prior=use_prior, lights=lights, grid=grid, start=start)
+        return scoring_pool.score(coords, use_prior, lights, grid, start)
 
     return score
 
@@ -176,7 +225,14 @@ def area_router(zones: list[NoGoZone], extra: dict | None = None) -> Callable:
         }
         return request_route(points, custom_model=model)
 
-    return route
+    reused = _Reused(partial(route), lambda points, area: (_points_key(points), id(area)))
+    keep: dict = {}  # the areas seen, so an id in the memo can't be reused by another area during the request
+
+    def route_once(points: list[tuple[float, float]], area: dict):
+        keep[id(area)] = area
+        return reused(points, area)
+
+    return route_once
 
 
 def print_candidate(rank: int, c: Candidate) -> None:
@@ -207,7 +263,7 @@ def run(
     geocode_fn: Callable[[str], GeocodeResult] = geocode,
     grid_fn: Callable[[float, float], GridEstimate] = current_grid,
     generate_fn: Callable[..., GenerationResult] = generate_loops,
-    shape: str = "any",
+    shape: str | None = None,  # None: not stated, so the schema default ("any") applies and is shown as a default
     mode: str | None = None,
     avoid: list[str] | None = None,
     context_fn: Callable | None = None,
@@ -221,13 +277,15 @@ def run(
     stretch_fn: Callable | None = None,  # (coords, elevation, start) -> stretch features (api/segments.py)
     pool_out: Path | None = None,
     closures_fn: Callable | None = None,  # (lat, lon, miles) -> known closures (decision 017)
+    now_fn: Callable[[], datetime] = lambda: datetime.now(NEW_YORK).replace(tzinfo=None),  # for the default day
 ) -> int:
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
         return 4
-    constraints = RunConstraints(start_address=address, distance_mi=miles, shape=shape, mode=mode,
-                                 avoid_places=avoid or [], start_time=start_time, start_date=start_date,
-                                 lights=lights)
+    stated = {"shape": shape, "mode": mode, "start_time": start_time, "start_date": start_date, "lights": lights}
+    constraints = RunConstraints(start_address=address, distance_mi=miles, avoid_places=avoid or [],
+                                 **{k: v for k, v in stated.items() if v is not None})
+    constraints = with_default_date(constraints, now_fn())
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)
@@ -267,14 +325,16 @@ def run(
         return 3
 
     rejected = ", ".join(f"{n} {why}" for why, n in result.rejected.items())
-    print(f"Tried:     {result.generated} candidates" + (f" (rejected: {rejected})" if rejected else ""))
+    print(f"Tried:     {result.generated} candidates" + (f" (rejected: {rejected})" if rejected else "")
+          + (f"; best of {result.best_of} distinct routes within the distance limit" if result.best_of else ""))
     tm = result.timing
     if tm.get("first_candidate_s") is not None:
         print(f"Timing:    first candidate {tm['first_candidate_s']:.2f} s, #1 arrived {tm['winner_arrived_s']:.2f} s, "
               f"all done {tm['total_s']:.2f} s")
     if pool_out is not None:
         pool_out.parent.mkdir(parents=True, exist_ok=True)
-        pool_out.write_text(json.dumps({"request": constraints.model_dump(mode="json"), "timing": tm, "pool": result.pool}))
+        pool_out.write_text(json.dumps({"request": constraints.model_dump(mode="json"), "timing": tm,
+                                        "best_of": result.best_of, "pool": result.pool}))
         print(f"Pool:      {len(result.pool)} candidates with metric vectors -> {pool_out}")
     if result.note:
         print(f"Note:      {result.note}")
@@ -292,10 +352,14 @@ def run(
             c.route, place.lat, place.lon, place.label, miles, c.shape.as_dict(),
             extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score),
                               "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
-                              "start_hour": constraints.start_hour},
+                              "start_hour": constraints.start_hour, "request": request_items(constraints)},
         )
-        if stretch_fn is not None:
-            geojson["features"] += stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
+        markers = marker_features(c.route.coordinates)
+        stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
+                     if stretch_fn is not None else [])
+        geojson["features"][0]["properties"]["summary"] = route_summary(
+            c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=result.best_of)
+        geojson["features"] += markers + stretches
         path.write_text(json.dumps(geojson))
         saved.append(path)
 
@@ -312,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("miles", type=float, help="target distance in miles")
     ap.add_argument("--top", type=int, default=1, help="how many loops to save, best first (default 1)")
     ap.add_argument("--out", type=Path, help="where to write the GeoJSON (default: out/)")
-    ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], default="any", help="route shape (default any)")
+    ap.add_argument("--shape", choices=["loop", "out_and_back", "any"], help="route shape (default any)")
     ap.add_argument("--mode", choices=["training", "exploring"], help="preference preset")
     ap.add_argument("--avoid", action="append", default=[], help="a named no-go place (repeatable)")
     ap.add_argument("--start-time", help="departure time, HH:MM; with --start-date, sets the crowd band")

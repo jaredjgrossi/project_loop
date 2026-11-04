@@ -120,7 +120,9 @@ def main() -> int:
         conn.execute("DELETE FROM closures WHERE kind = 'curated'")
         for c in curated:
             conn.execute(CURATED, {"id": c.id, "name": c.name, "reason": c.reason, "trust": c.trust,
-                                   "source": "curated: " + " ; ".join(c.sources), "checked_on": c.checked_on,
+                                   "source": "curated: " + " ; ".join(c.sources)
+                                             + (f" ; ground check by {c.ground_check[0]}, {c.ground_check[1]}"
+                                                if c.ground_check else ""), "checked_on": c.checked_on,
                                    "review_by": c.review_by, "geometry": json.dumps(c.geometry)})
         rows = conn.execute(SUMMARY).fetchall()
         reports = conn.execute("SELECT count(*) FROM closures WHERE kind = 'report' AND applied").fetchone()[0]

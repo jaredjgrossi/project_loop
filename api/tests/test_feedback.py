@@ -84,3 +84,20 @@ def test_closed_or_blocked_reports_keep_the_stretch_geometry_and_whole_route_rep
     assert stretch["stretch"] == 1 and stretch["stretch_name"] == "East River Esplanade"
     assert json.loads(stretch["geom"]) == geom
     assert closure_report_rows(RouteFeedback(route_id="r1", ran_it=False, issues=["crowded"]), stretches) == []
+
+
+def test_a_stretch_report_takes_the_stretch_not_a_piece_inside_it():
+    import json
+
+    from api.feedback import closure_report_rows
+
+    whole_line = {"type": "LineString", "coordinates": [[-73.97, 40.74], [-73.97, 40.75]]}
+    piece_line = {"type": "LineString", "coordinates": [[-73.97, 40.745], [-73.97, 40.75]]}
+    fb = RouteFeedback(route_id="r1", ran_it=True, rating=2,
+                       stretch_issues=[{"stretch": 0, "issue": "closed_or_blocked"}])
+    features = [{"properties": {"feature": "stretch", "stretch": 0, "name": "East River Esplanade"},
+                 "geometry": whole_line},
+                {"properties": {"feature": "piece", "piece": 0, "stretch": 0, "kind": "path",
+                                "stretch_name": "East River Esplanade"}, "geometry": piece_line}]
+    (row,) = closure_report_rows(fb, features)
+    assert row["stretch_name"] == "East River Esplanade" and json.loads(row["geom"]) == whole_line

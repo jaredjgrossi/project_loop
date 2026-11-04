@@ -1,5 +1,5 @@
 # Shortcuts. Run `make help` to list them.
-.PHONY: help setup up down data corridors closures crowds test
+.PHONY: help setup up down data corridors closures crowds pulses test
 
 help:
 	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
@@ -9,6 +9,7 @@ help:
 	@echo "make corridors rebuild the corridor catalog from OSM, then its closures (needs GraphHopper running)"
 	@echo "make closures reload the closures (corridor gaps and routing/curated_closures.geojson, decision 017)"
 	@echo "make crowds  precompute crowd levels per sidewalk (needs the downloads in data/crowds/raw, decision 016)"
+	@echo "make pulses  load school and ferry pulse sources (needs the downloads in data/pulses/raw, decision 022)"
 	@echo "make test    run the unit tests"
 
 setup:
@@ -38,6 +39,9 @@ closures:
 
 crowds:
 	uv run python -m etl.load_crowds
+
+pulses:
+	uv run python -m etl.load_pulses
 
 test:
 	uv run pytest

@@ -98,6 +98,7 @@ def run_row(start_id: str, miles: float, lights: str) -> dict:
         "rejected": dict(result.rejected),
         "calls": dict(t.calls), "summed_s": {k: round(v, 3) for k, v in t.seconds.items()},
         "top3": [summary(c) for c in result.candidates],
+        "provisional_top3": [summary(c) for c in result.provisional],
     }
 
 
@@ -127,6 +128,9 @@ def main(argv=None) -> int:
     ap.add_argument("--pin", type=Path, help="write today's top 3 per row for the pinned-top-3 eval")
     ap.add_argument("--label", default="", help="a name for this run, kept in the JSON")
     args = ap.parse_args(argv)
+    from api import scoring_pool
+
+    scoring_pool.warm()  # start the scoring processes, as a server would at startup
     run_row(*rows()[0], LIGHTS[0])  # warm GraphHopper and Postgres caches; not counted
     results = []
     for lights in LIGHTS:

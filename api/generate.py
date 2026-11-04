@@ -17,6 +17,7 @@ by api/ranking.py. If none reaches the distance tolerance, the nearest ones are 
 Pure orchestration: routing is injected, so this module needs no network or database.
 """
 
+import bisect
 import itertools
 import math
 import queue
@@ -112,6 +113,10 @@ class GenerationResult:
     note: str | None = None
     pool: list[dict] = field(default_factory=list)  # every job's outcome with its metric vector (decision 014)
     timing: dict = field(default_factory=dict)  # seconds: first candidate, when the winner arrived, total
+    # "Best of N" (decision 020): distinct routes that passed every hard rule within the distance limit, with
+    # duplicates dropped by the same rule as the top 3. None when no route came within the limit.
+    best_of: int | None = None
+    provisional: list[Candidate] = field(default_factory=list)  # the top N when flagged provisional (decision 018)
 
 
 # --- geometry ------------------------------------------------------------------------
@@ -299,31 +304,88 @@ def _offer_both_kinds(chosen: list[Candidate], ranked: list[Candidate]) -> list[
     return sorted(chosen, key=lambda c: -c.score)
 
 
+def _select(candidates: list[Candidate], top_n: int, shape: str) -> list[Candidate]:
+    """The top N from candidates in plan order: within tolerance by score (ties in plan order), duplicates dropped, and
+    the best of each kind offered for "any"; with none within tolerance, the nearest by distance."""
+    in_tolerance = sorted((c for c in candidates if c.within_tolerance), key=lambda c: -c.score)
+    if not in_tolerance:
+        return _dedupe(sorted(candidates, key=lambda c: abs(c.miss_pct)), top_n)
+    chosen = _dedupe(in_tolerance, top_n)
+    return _offer_both_kinds(chosen, in_tolerance) if shape == "any" else chosen
+
+
 PRIORITY = {"anchors": 0, "anchored": 1, "anchored_straight": 2, "out_and_back": 3, "rectangle": 4, "round_trip": 5}
+# The top 3 is flagged provisional once every anchor lookup and anchored job (along the feature and straight-line) has
+# finished: anchored routes are #1 at most review starts (decision 014). Later tiers keep streaming in (decision 018).
+PROVISIONAL_AFTER = PRIORITY["anchored_straight"]
+
+
+class _TopStream:
+    """The current top N as candidates arrive, in plan order, so the last one sent equals the final top N."""
+
+    def __init__(self, top_n: int, shape: str, send: Callable[[dict], None] | None):
+        self.top_n, self.shape, self.send = top_n, shape, send
+        self.lock = threading.Lock()
+        self.items: list[tuple[tuple, int, Candidate]] = []
+        self.seq = itertools.count()
+        self.shown: list[Candidate] = []
+        self.provisional: list[Candidate] | None = None
+        self.provisional_s: float | None = None
+        self.changes_after = 0  # times #1 changed after the provisional flag
+
+    def _emit(self, event: str, elapsed: float, cands: list[Candidate]) -> None:
+        if self.send is not None:
+            self.send({"event": event, "elapsed_s": round(elapsed, 3), "provisional": self.provisional is not None,
+                       "candidates": list(cands)})
+
+    def add(self, c: Candidate, elapsed: float, key: tuple) -> None:
+        with self.lock:
+            bisect.insort(self.items, (key, next(self.seq), c))
+            top = _select([x[2] for x in self.items], self.top_n, self.shape)
+            if [id(x) for x in top] == [id(x) for x in self.shown]:
+                return
+            if self.provisional is not None and top and (not self.shown or top[0] is not self.shown[0]):
+                self.changes_after += 1
+            self.shown = top
+            self._emit("top3", elapsed, top)
+
+    def flag(self, elapsed: float) -> None:
+        with self.lock:
+            if self.provisional is None:
+                self.provisional, self.provisional_s = list(self.shown), elapsed
+                self._emit("provisional", elapsed, self.shown)
 
 
 def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
-                     on_candidate: Callable[[Candidate, float], None] | None) -> list[tuple[object, float]]:
+                     on_candidate: Callable[[Candidate, float, tuple], None] | None,
+                     tier_max: int | None = None,
+                     on_tier_done: Callable[[float], None] | None = None) -> list[tuple[object, float]]:
     """Run jobs on `workers` threads, lowest priority number first. A job returns a Candidate, a Rejection, or a list
     of further (priority, job) pairs to schedule (an anchor lookup returns the routes built from its anchors).
-    Returns every outcome with the seconds since the start at which it arrived; calls on_candidate as each Candidate
-    arrives, so a caller can stream them."""
+    Returns every outcome with the seconds since the start at which it arrived, in plan order: top-level jobs in the
+    order given, an anchor lookup's jobs in the order it returned them, whatever order they finished in. Score ties are
+    then broken by plan order, not by which thread finished first (decision 018). Calls on_candidate(candidate,
+    seconds, plan key) as each Candidate arrives, so a caller can stream them, and on_tier_done(seconds) once when no
+    job of priority tier_max or lower is queued or running."""
     t0 = time.perf_counter()
     tasks: queue.PriorityQueue = queue.PriorityQueue()
     order = itertools.count()
     lock = threading.Lock()
     pending = [0]
     all_done = threading.Event()
-    outcomes: list[tuple[object, float]] = []
+    outcomes: list[tuple[tuple, object, float]] = []
+    by_tier: Counter = Counter()
+    tier_fired = [tier_max is None or on_tier_done is None]
 
-    def put(priority: int, job: Callable) -> None:
+    def put(priority: int, key: tuple, job: Callable) -> None:
         with lock:
             pending[0] += 1
-        tasks.put((priority, next(order), job))
+            by_tier[priority] += 1
+        tasks.put((priority, next(order), key, job))
 
     def worker() -> None:
         while True:
-            priority, _, job = tasks.get()
+            priority, _, key, job = tasks.get()
             if job is None:
                 return
             try:
@@ -334,33 +396,39 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
                 except Exception as exc:  # anything else is recorded, never left to kill the thread (decision 015)
                     result = Rejection("job", f"{type(exc).__name__}: {exc}"[:120], f"error: {type(exc).__name__}")
                 if isinstance(result, list):
-                    for p, j in result:
-                        put(p, j)
+                    for i, (p, j) in enumerate(result):
+                        put(p, (*key, i), j)
                 else:
                     elapsed = time.perf_counter() - t0
                     with lock:
-                        outcomes.append((result, elapsed))
+                        outcomes.append((key, result, elapsed))
                     if on_candidate is not None and isinstance(result, Candidate):
-                        on_candidate(result, elapsed)
+                        on_candidate(result, elapsed, key)
             finally:
+                fire = False
                 with lock:
                     pending[0] -= 1
+                    by_tier[priority] -= 1
+                    if not tier_fired[0] and sum(n for p, n in by_tier.items() if p <= tier_max) == 0:
+                        tier_fired[0] = fire = True
                     if pending[0] == 0:
                         all_done.set()
+                if fire:
+                    on_tier_done(time.perf_counter() - t0)
 
     if not jobs:
         return []
-    for p, j in jobs:
-        put(p, j)
+    for i, (p, j) in enumerate(jobs):
+        put(p, (i,), j)
     threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, workers))]
     for th in threads:
         th.start()
     all_done.wait()
     for _ in threads:
-        tasks.put((math.inf, next(order), None))
+        tasks.put((math.inf, next(order), (), None))
     for th in threads:
         th.join()
-    return outcomes
+    return [(result, elapsed) for _, result, elapsed in sorted(outcomes, key=lambda o: o[0])]
 
 
 def _pool_entry(outcome, elapsed: float, chosen: bool) -> dict:
@@ -388,7 +456,7 @@ def generate_loops(
     route_fn: RouteFn,
     round_trip_fn: RoundTripFn,
     top_n: int = 3,
-    workers: int = 4,
+    workers: int = 6,  # decision 018: with context scored in worker processes, 6 threads beat 4 and 8
     shape: str = "loop",  # RunConstraints.shape: "loop", "out_and_back" or "any"
     prefs: dict | None = None,  # resolved preferences; neutral defaults when None
     avoid: list[NoGoZone] | tuple[NoGoZone, ...] = (),
@@ -400,6 +468,9 @@ def generate_loops(
     feature_anchor_fn: AnchorFn | Sequence[AnchorFn] | None = None,
     area_route_fn: AreaRouteFn | None = None,  # routes anchored candidates preferring the feature's area, if given
     on_candidate: Callable[[Candidate, float], None] | None = None,  # streaming: each candidate as it passes the rules
+    # Streaming the top N (decision 018): {"event": "top3" | "provisional" | "final", "elapsed_s", "provisional",
+    # "candidates"}. "top3" whenever it changes, "provisional" once the anchored tiers are done, "final" at the end.
+    on_top3: Callable[[dict], None] | None = None,
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
@@ -590,18 +661,22 @@ def generate_loops(
             notes.append(
                 f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable."
             )
-    outcomes = _run_prioritized(jobs, workers, on_candidate)
+    stream = _TopStream(top_n, shape, on_top3)
+
+    def arrived_candidate(c: Candidate, elapsed: float, key: tuple) -> None:
+        stream.add(c, elapsed, key)
+        if on_candidate is not None:
+            on_candidate(c, elapsed)
+
+    outcomes = _run_prioritized(jobs, workers, arrived_candidate, tier_max=PROVISIONAL_AFTER, on_tier_done=stream.flag)
     candidates = [c for c, _ in outcomes if isinstance(c, Candidate)]
     rejected = Counter(r.reason for r, _ in outcomes if isinstance(r, Rejection))
     generated = len(outcomes)
 
     in_tolerance = sorted((c for c in candidates if c.within_tolerance), key=lambda c: -c.score)
-    if in_tolerance:
-        chosen = _dedupe(in_tolerance, top_n)
-        if shape == "any":
-            chosen = _offer_both_kinds(chosen, in_tolerance)
-    else:
-        chosen = _dedupe(sorted(candidates, key=lambda c: abs(c.miss_pct)), top_n)
+    best_of = len(_dedupe(in_tolerance, len(in_tolerance))) if in_tolerance else None
+    chosen = _select(candidates, top_n, shape)
+    if not in_tolerance:
         if chosen:
             notes.append(
                 f"No loop came within {TOLERANCE_PCT:g}% of {miles:g} mi. The nearest is "
@@ -617,7 +692,10 @@ def generate_loops(
         "first_any_s": min((s for c, s in outcomes if isinstance(c, Candidate)), default=None),
         "winner_arrived_s": arrived[id(chosen[0])] if chosen else None,
         "total_s": max((s for _, s in outcomes), default=0.0),
+        "provisional_s": stream.provisional_s,
+        "number1_changes_after_provisional": stream.changes_after,
     }
+    stream._emit("final", timing["total_s"], chosen)
     chosen_ids = {id(c) for c in chosen}
     return GenerationResult(
         candidates=chosen,
@@ -628,4 +706,6 @@ def generate_loops(
         note=" ".join(notes) or None,
         pool=[_pool_entry(o, s, id(o) in chosen_ids) for o, s in outcomes],
         timing=timing,
+        best_of=best_of,
+        provisional=stream.provisional or [],
     )

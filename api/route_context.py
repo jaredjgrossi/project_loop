@@ -153,6 +153,95 @@ def park_or_water_share(coords, parks, shoreline, within_m: float = WATERFRONT_M
     return 100 * sum(w or p for w, p in zip(water, in_park)) / len(samples)
 
 
+def shares(coords, parks, shoreline, within_m: float = WATERFRONT_M) -> tuple[float, float, float]:
+    """(park_share, waterfront_share, park_or_water_share) from one set of samples: the same numbers as the three
+    functions, without sampling the route and testing every park three times (decision 018)."""
+    frame = _Frame(coords[0][1])
+    samples = _samples(coords, frame)
+    n = len(samples)
+    water = _near_lines(samples, shoreline, frame, within_m) if shoreline else [False] * n
+    in_park = _in_parks(samples, parks, frame)
+    return (100 * sum(in_park) / n, 100 * sum(water) / n if shoreline else 0.0,
+            100 * sum(w or p for w, p in zip(water, in_park)) / n)
+
+
+CORRIDOR_NEAR_M = 15.0  # as the stretch labels (api/segments.py)
+COMPOSITION = ("waterfront", "park", "path", "street")
+
+
+def sample_classes(coords, parks, shoreline, corridors, within_m: float = WATERFRONT_M) -> tuple[list[str], list[float]]:
+    """A class for every SAMPLE_M sample of the route, and its distance along the route (decision 020). The classes
+    split the route without overlap, from the same samples and tests as `shares`:
+    - waterfront: within `within_m` of the shoreline (so its share is exactly `waterfront_share`);
+    - park: in a park and not by the water (waterfront + park is exactly `park_or_water_share`);
+    - path: within CORRIDOR_NEAR_M of a catalog corridor (a lines list) and neither of those;
+    - street: everything else, streets and their sidewalks, plazas and unnamed paths."""
+    frame = _Frame(coords[0][1])
+    samples = _samples(coords, frame)
+    n = len(samples)
+    water = _near_lines(samples, shoreline, frame, within_m) if shoreline else [False] * n
+    in_park = _in_parks(samples, parks, frame)
+    on_path = _near_lines(samples, corridors, frame, CORRIDOR_NEAR_M) if corridors else [False] * n
+    classes = ["waterfront" if w else "park" if p else "path" if c else "street"
+               for w, p, c in zip(water, in_park, on_path)]
+    along = [0.0]
+    for a, b in zip(samples, samples[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    return classes, along
+
+
+def composition_by_range(classes: list[str], along: list[float], bounds_m: list[float]) -> list[dict]:
+    """Meters of each class in each range [bounds_m[i], bounds_m[i+1]) along the route; the last range runs to the
+    end. Every sample stands for an equal share of the route, so the ranges add up to the route's shares exactly."""
+    total = along[-1]
+    per = total / len(classes) if classes else 0.0
+    out = [{k: 0.0 for k in COMPOSITION} for _ in bounds_m]
+    i = 0
+    for cls, a in zip(classes, along):
+        while i + 1 < len(bounds_m) and a >= bounds_m[i + 1]:
+            i += 1
+        out[i][cls] += per
+    return out
+
+
+def pieces_by_range(coords, classes: list[str], along: list[float], bounds_m: list[float]) -> list[dict]:
+    """The route line cut wherever the class or the range changes (decision 023): each piece has one class
+    (`kind`), the range it sits in, where it starts and ends along the route, and its line. A piece's `length_m`
+    weighs every sample as `composition_by_range` does, so the pieces add up to the ranges' meters exactly. Each
+    line runs from its first sample to the next piece's first sample, so neighbors join without a gap."""
+    if not classes:
+        return []
+    frame = _Frame(coords[0][1])
+    lonlat = [[x / frame.kx, y / frame.ky] for x, y in _samples(coords, frame)]
+    per = along[-1] / len(classes)
+    ranges, i = [], 0
+    for a in along:
+        while i + 1 < len(bounds_m) and a >= bounds_m[i + 1]:
+            i += 1
+        ranges.append(i)
+    pieces, start = [], 0
+    for k in range(1, len(classes) + 1):
+        if k < len(classes) and (classes[k], ranges[k]) == (classes[start], ranges[start]):
+            continue
+        last = min(k, len(classes) - 1)  # the next piece's first sample, or the route's end
+        line = lonlat[start:last + 1] if last > start else lonlat[max(0, start - 1):start + 1]
+        pieces.append({"kind": classes[start], "range": ranges[start], "start_m": along[start],
+                       "end_m": along[k] if k < len(classes) else along[-1], "length_m": (k - start) * per,
+                       "coordinates": line})
+        start = k
+    return pieces
+
+
+def any_cell(grid: dict, xy: list, size: float, pad: int = 0) -> bool:
+    """Whether the grid (cells of `size`) has an entry in any cell under the points' bounding box, widened by `pad`
+    cells. When it has none, no point there can be near anything in the grid, so the exact test can be skipped."""
+    x0, x1 = int(min(x for x, _ in xy) // size) - pad, int(max(x for x, _ in xy) // size) + pad
+    y0, y1 = int(min(y for _, y in xy) // size) - pad, int(max(y for _, y in xy) // size) + pad
+    if (x1 - x0 + 1) * (y1 - y0 + 1) > len(grid):
+        return any(x0 <= gx <= x1 and y0 <= gy <= y1 for gx, gy in grid)
+    return any((gx, gy) in grid for gx in range(x0, x1 + 1) for gy in range(y0, y1 + 1))
+
+
 def familiar_share(coords, familiar_lines) -> float:
     """Percent of the route on ways the runner has run before (within FAMILIAR_NEAR_M of them)."""
     if not familiar_lines:
@@ -170,12 +259,68 @@ def crossing_counts(coords, crossings: list[Crossing]) -> tuple[int, int]:
     route = _SegmentIndex([coords], frame, CROSSING_NEAR_M)
     count = signals = 0
     for c in crossings:
+        # A crosswalk under no cell the route occupies can't be walked: skip sampling it (decision 018). One cell of
+        # margin, so a sample that rounding puts just over a cell edge is still covered.
+        if not any_cell(route.grid, [frame.xy(p) for p in c.coords], CROSSING_NEAR_M, pad=1):
+            continue
         pts = _samples(c.coords, frame, step=1.0)
         near = [route.near(p) for p in pts]
         if sum(near) / len(near) >= CROSSING_COVERED:
             count += 1
             signals += c.signals
     return count, signals
+
+
+PASS_GAP_M = 25.0  # route samples near one crosswalk this far apart along the route are separate crossings
+
+
+def crossing_passes(coords, crossings: list[Crossing]) -> list[tuple[float, bool]]:
+    """(meters along the route, signalized) for every crossing the route makes, in order (decision 020). A crosswalk
+    walked twice, as on an out-and-back, is two crossings. Each pass counts when it covers CROSSING_COVERED of the
+    crosswalk, the test `crossing_counts` applies to the whole route; a crosswalk that only the passes together cover
+    is one crossing. So the count is never below `crossing_counts`, which counts each crosswalk once and stays the
+    ranking's input."""
+    if not crossings:
+        return []
+    frame = _Frame(coords[0][1])
+    route = _SegmentIndex([coords], frame, CROSSING_NEAR_M)
+    pts = _samples(coords, frame)
+    along = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        along.append(along[-1] + math.dist(a, b))
+    cell = CROSSING_NEAR_M
+    by_cell: dict[tuple[int, int], list[int]] = {}
+    for k, (x, y) in enumerate(pts):
+        by_cell.setdefault((int(x // cell), int(y // cell)), []).append(k)
+    out = []
+    for c in crossings:
+        cxy = [frame.xy(p) for p in c.coords]
+        if not any_cell(route.grid, cxy, CROSSING_NEAR_M, pad=1):  # as crossing_counts (decision 018)
+            continue
+        cpts = _samples(c.coords, frame, step=1.0)
+        if sum(route.near(p) for p in cpts) / len(cpts) < CROSSING_COVERED:
+            continue
+        segs = list(zip(cxy, cxy[1:])) or [(cxy[0], cxy[0])]
+        near = sorted({k for x, y in cpts for gx in range(int(x // cell) - 1, int(x // cell) + 2)
+                       for gy in range(int(y // cell) - 1, int(y // cell) + 2) for k in by_cell.get((gx, gy), ())
+                       if any(_seg_dist(pts[k], a, b) <= CROSSING_NEAR_M for a, b in segs)})
+        groups: list[list[int]] = []
+        for k in near:
+            if groups and along[k] - along[groups[-1][-1]] <= PASS_GAP_M:
+                groups[-1].append(k)
+            else:
+                groups.append([k])
+        made = []
+        for g in groups:
+            lo, hi = max(0, g[0] - 1), min(len(pts) - 1, g[-1] + 1)
+            part = list(zip(pts[lo:hi], pts[lo + 1:hi + 1]))
+            if sum(any(_seg_dist(p, a, b) <= CROSSING_NEAR_M for a, b in part) for p in cpts) / len(cpts) >= CROSSING_COVERED:
+                made.append(along[g[len(g) // 2]])
+        if not made:
+            mid = cpts[len(cpts) // 2]
+            made = [along[min(range(len(pts)), key=lambda k: math.dist(pts[k], mid))]]
+        out += [(a, c.signals) for a in made]
+    return sorted(out)
 
 
 # --- PostGIS --------------------------------------------------------------------------
@@ -220,10 +365,11 @@ def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None, 
     pts = [frame.xy(c) for c in coords]
     miles = sum(math.dist(a, b) for a, b in zip(pts, pts[1:])) / 1609.344
     crossings, signals = crossing_counts(coords, ctx.crossings)
+    park_pct, waterfront_pct, park_or_water_pct = shares(coords, ctx.parks, ctx.shoreline)
     return ContextScores(
-        park_pct=park_share(coords, ctx.parks),
-        waterfront_pct=waterfront_share(coords, ctx.shoreline),
-        park_or_water_pct=park_or_water_share(coords, ctx.parks, ctx.shoreline),
+        park_pct=park_pct,
+        waterfront_pct=waterfront_pct,
+        park_or_water_pct=park_or_water_pct,
         crossings_per_mile=crossings / miles,
         signals_per_mile=signals / miles,
         familiar_pct=None if ctx.familiar is None else familiar_share(coords, ctx.familiar),
@@ -233,9 +379,15 @@ def score_context(conn, coords, use_prior: bool = True, lights=None, grid=None, 
 
 
 def _crowd_fields(conn, coords, start) -> dict:
-    from api.crowds import route_crowds
+    from api.crowds import band_for, route_crowds, summarize
 
-    c = route_crowds(conn, coords, start)
+    if start is None and conn.execute("SELECT to_regclass('sidewalk_crowd') IS NOT NULL").fetchone()[0]:
+        # Without a start time every sample is not scored for the same reason, so the summary is known without
+        # sampling the route (decision 018). Stretches still sample it, for each stretch's reason.
+        band, reason = band_for(None)
+        c = {**summarize([None]), "band": None, "reason": reason, "start_band": band}
+    else:
+        c = route_crowds(conn, coords, start)
     return {"crowd_high_pct": c["high_pct"], "crowd_medium_pct": c["medium_pct"], "crowd_low_pct": c["low_pct"],
             "crowd_not_scored_pct": c["not_scored_pct"], "crowd_band": c["band"],
             "crowd_reason": c["reason"], "crowd_start_band": c["start_band"]}

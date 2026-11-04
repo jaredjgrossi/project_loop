@@ -646,3 +646,95 @@ def test_metric_vector_keeps_the_crowd_band_text_and_labels_crowds_an_estimate()
     vec = result.candidates[0].metric_vector()
     assert vec["crowd_band"] == "weekday 4-7pm (a DOT count window)" and vec["crowd_high_pct"] == 12.3
     assert vec["crowd_status"] == "estimate"
+
+
+def test_best_of_counts_distinct_routes_within_the_distance_limit():
+    # Decision 020: "Best of N" counts routes that passed every rule within the limit, without duplicates.
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=3)
+    in_limit = [e for e in result.pool if e["status"] in ("chosen", "ranked")]
+    assert result.best_of is not None
+    assert len(result.candidates) <= result.best_of <= len(in_limit)
+
+
+def test_the_same_route_twice_counts_once_in_best_of():
+    # Two anchor sources that return the same park give identical routes: one route to choose from, not two.
+    one = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                         shape="any", feature_anchor_fn=[lambda *a: [park_east()]], top_n=80)
+    two = generate_loops(*START, miles=3.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                         shape="any", feature_anchor_fn=[lambda *a: [park_east()],
+                                                         lambda *a: [park_east(source="water", name="waterfront")]],
+                         top_n=80)
+    assert sum(e["status"] in ("chosen", "ranked") for e in two.pool) > sum(
+        e["status"] in ("chosen", "ranked") for e in one.pool)
+    assert two.best_of == one.best_of
+
+
+def test_no_route_within_the_limit_has_no_best_of():
+    base = make_router()
+
+    def stubborn(points):  # always about 30% short, as in the tolerance test above
+        r = base(points)
+        return Route(distance_m=miles_to_meters(4.0) * 0.7, time_s=r.time_s, coordinates=r.coordinates)
+
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=stubborn, round_trip_fn=no_round_trips, top_n=3)
+    assert not result.within_tolerance and result.best_of is None
+
+
+def test_outcomes_come_back_in_plan_order_whatever_order_they_finish_in():
+    # Decision 018: score ties are broken by plan order, so the top 3 doesn't depend on which thread finished first.
+    import time as _time
+
+    from api.generate import Rejection, _run_prioritized
+
+    def finishing_after(seconds, label):
+        def job():
+            _time.sleep(seconds)
+            return Rejection("test", label, "x")
+        return job
+
+    def lookup():  # like an anchor lookup: returns further jobs, which finish in reverse order
+        _time.sleep(0.01)
+        return [(1, finishing_after(0.06, "b0")), (1, finishing_after(0.0, "b1"))]
+
+    jobs = [(0, lookup), (1, finishing_after(0.04, "a")), (1, finishing_after(0.0, "c"))]
+    for _ in range(3):
+        labels = [o.label for o, _ in _run_prioritized(jobs, workers=4, on_candidate=None)]
+        assert labels == ["b0", "b1", "a", "c"]
+
+
+def test_the_tier_callback_fires_once_when_the_early_tiers_are_done():
+    # Decision 018: the provisional top 3 is flagged once every job of priority <= tier_max has finished.
+    import time as _time
+
+    from api.generate import Rejection, _run_prioritized
+
+    done = []
+
+    def job(label, seconds):
+        def run():
+            _time.sleep(seconds)
+            done.append(label)
+            return Rejection("test", label, "x")
+        return run
+
+    fired = []
+    jobs = [(0, lambda: [(1, job("anchored", 0.03))]), (4, job("rectangle", 0.15)), (5, job("round trip", 0.15))]
+    _run_prioritized(jobs, workers=3, on_candidate=None, tier_max=2,
+                     on_tier_done=lambda s: fired.append((s, list(done))))
+    assert len(fired) == 1
+    assert fired[0][1] == ["anchored"]  # the later tiers hadn't finished when the flag fired
+
+
+def test_the_streamed_top3_ends_as_the_final_top3_and_is_sent_only_when_it_changes():
+    events = []
+    result = generate_loops(*START, miles=4.0, grid=STRONG, route_fn=make_router(), round_trip_fn=no_round_trips,
+                            shape="any", top_n=3, on_top3=events.append)
+    kinds = [e["event"] for e in events]
+    assert kinds.count("provisional") == 1 and kinds[-1] == "final"
+    assert [id(c) for c in events[-1]["candidates"]] == [id(c) for c in result.candidates]
+    updates = [e for e in events if e["event"] == "top3"]
+    assert all([id(c) for c in a["candidates"]] != [id(c) for c in b["candidates"]] for a, b in zip(updates, updates[1:]))
+    assert result.timing["provisional_s"] is not None and result.timing["provisional_s"] <= result.timing["total_s"]
+    assert result.timing["number1_changes_after_provisional"] >= 0
+    assert [c.label for c in result.provisional] == [c.label for c in next(e for e in events if e["event"] == "provisional")["candidates"]]

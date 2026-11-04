@@ -14,14 +14,15 @@ Assumptions behind the estimate (all provisional; stated in decision 015):
   grid-aligned L1 distance) and still needs at least one block (BLOCK_M) along both grid axes. Taking the green
   direction then costs no distance. The runner still waits when both directions are red (ALL_RED_FRACTION, the
   clearance interval), so a credited signal costs ALL_RED_WAIT_S.
-- Only signalized crosswalks the route walks (OSM crossing=traffic_signals) count. Crossings on road centerlines
-  have no crosswalk way and are missed (decision 009).
+- Only signalized crosswalks the route walks (OSM crossing=traffic_signals) count, once each time the route crosses
+  them (decision 020: an out-and-back waits at a light on the way out and again on the way back). Crossings on road
+  centerlines have no crosswalk way and are missed (decision 009).
 """
 
 import math
 
 from api.constraints import Lights
-from api.route_context import CROSSING_COVERED, CROSSING_NEAR_M, Crossing, _Frame, _samples
+from api.route_context import Crossing, _Frame, _samples, crossing_passes
 
 SIGNAL_PRIORITY = 0.2
 CYCLE_S = 90.0
@@ -41,38 +42,9 @@ def signal_penalty_model() -> dict:
 
 
 def signal_positions(coords, crossings: list[Crossing]) -> list[float]:
-    """Meters along the route of each signalized crosswalk the route walks, in order."""
-    frame = _Frame(coords[0][1])
-    pts = _samples(coords, frame, step=5.0)
-    along = [0.0]
-    for a, b in zip(pts, pts[1:]):
-        along.append(along[-1] + math.dist(a, b))
-    cell = CROSSING_NEAR_M
-    grid: dict[tuple[int, int], list[int]] = {}
-    for k, (x, y) in enumerate(pts):
-        grid.setdefault((int(x // cell), int(y // cell)), []).append(k)
-
-    def nearest(p):
-        cx, cy = int(p[0] // cell), int(p[1] // cell)
-        best, best_d = None, CROSSING_NEAR_M
-        for gx in (cx - 1, cx, cx + 1):
-            for gy in (cy - 1, cy, cy + 1):
-                for k in grid.get((gx, gy), ()):
-                    d = math.dist(pts[k], p)
-                    if d <= best_d:
-                        best, best_d = k, d
-        return best
-
-    out = []
-    for c in crossings:
-        if not c.signals:
-            continue
-        cpts = _samples(c.coords, frame, step=1.0)
-        hits = [k for k in (nearest(p) for p in cpts) if k is not None]
-        if len(hits) / len(cpts) >= CROSSING_COVERED:
-            hits.sort()
-            out.append(along[hits[len(hits) // 2]])
-    return sorted(out)
+    """Meters along the route of each signalized crossing the route makes, in order: a crosswalk crossed twice is
+    there twice (route_context.crossing_passes)."""
+    return [a for a, signalized in crossing_passes(coords, crossings) if signalized]
 
 
 def _staircase_ahead(pts, along, at: float, grid_deg: float) -> bool:

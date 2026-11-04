@@ -150,3 +150,33 @@ def test_no_generated_route_enters_a_curated_closure(conn, start_id, miles, ligh
         if hit := [f"{name} ({m:.0f} m inside)" for _, name, m in rows if m > ENTERS_M]:
             offenders[rank] = hit
     assert not offenders, f"{start_id} {miles:g} mi: {offenders}"
+
+
+# --- the NYU Langone driveways between E 33rd and E 34th St (curated, ground check 2026-11-04) ----------------
+
+NYU_DRIVEWAYS = (672581827, 672581830, 1424092636)  # highway=service, service=driveway; no public way through
+# Along the closed middle of the driveways (the closure plus 2 m): a cut-through covers most of the 110 m between the
+# trimmed ends; walking the E 34th St sidewalk past the driveway's mouth covers none of it.
+ALONG_DRIVEWAYS = """
+SELECT coalesce(round(ST_Length(ST_Intersection(r.g, ST_Buffer(c.geom::geography, 2)::geometry)::geography)), 0)
+FROM closures c, (SELECT ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) AS g) r
+WHERE c.curated_id = 'nyu_langone_driveways_e33'
+"""
+
+
+def test_the_driveway_closure_leaves_public_sidewalks_and_streets_open(conn):
+    rows = conn.execute(
+        """SELECT w.way_id, w.highway, w.tags->>'footway' FROM closures c JOIN osm_ways w ON ST_Intersects(w.geom, c.geom)
+           WHERE c.curated_id = 'nyu_langone_driveways_e33' AND NOT w.way_id = ANY(%s)
+             AND (w.highway <> 'service' OR w.tags->>'footway' IN ('sidewalk', 'crossing'))""",
+        (list(NYU_DRIVEWAYS),)).fetchall()
+    assert not rows, f"the closure touches public ways: {rows}"
+
+
+@pytest.mark.parametrize("lights", ["zigzags", "waits"])
+@pytest.mark.parametrize(("start_id", "miles"), ROWS, ids=[f"{s}-{m:g}mi" for s, m in ROWS])
+def test_no_generated_route_cuts_through_the_nyu_langone_driveways(conn, start_id, miles, lights):
+    for rank, c in enumerate(top_loops(start_id, miles, TOP, prefs=(("lights", lights),)), 1):
+        line = json.dumps({"type": "LineString", "coordinates": c.route.coordinates})
+        (along,) = conn.execute(ALONG_DRIVEWAYS, (line,)).fetchone()
+        assert along <= 5, f"{start_id} {miles:g} mi #{rank} {c.label}: {along:.0f} m along the closed driveways"

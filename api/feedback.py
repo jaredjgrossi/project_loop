@@ -44,13 +44,20 @@ class RouteFeedback(BaseModel):
         return self
 
 
+def _by_stretch(features: list[dict]) -> dict[int, dict]:
+    """Stretch features by index. Route pieces (decision 023) carry their stretch's index too and are skipped, so a
+    report on a stretch gets the stretch's name and whole line, not one piece's."""
+    return {f["properties"]["stretch"]: f for f in features
+            if f["properties"].get("feature", "stretch") == "stretch" and "stretch" in f["properties"]}
+
+
 def crowd_report_rows(feedback: RouteFeedback, stretches: list[dict], start: datetime | None) -> list[dict]:
     """Rows for crowd_reports (decision 016): each "crowded" report, for the whole route or a stretch, with the crowd
     level the route showed there and the hour it was run (ran_at, else the requested start). Kept to calibrate crowd
     levels later; nothing reads them yet."""
     when = feedback.ran_at or start
     hour, weekday = (when.hour, when.weekday()) if when else (None, None)
-    by_index = {s["properties"]["stretch"]: s["properties"] for s in stretches}
+    by_index = {i: s["properties"] for i, s in _by_stretch(stretches).items()}
     rows = []
     if "crowded" in feedback.issues:
         rows.append({"route_id": feedback.route_id, "stretch": None, "stretch_name": None, "level_shown": None,
@@ -78,8 +85,8 @@ def closure_report_rows(feedback: RouteFeedback, stretches: list[dict]) -> list[
     """Rows for closure_reports (decision 017): each "closed or blocked" report, with the stretch's geometry as the
     route showed it, so a reviewer can confirm it into a closure (api/closures.py: confirm_report). A whole-route
     report has no place and is kept without geometry."""
-    by_index = {s["properties"]["stretch"]: s for s in stretches}
-    base = {"route_id": feedback.route_id, "ran_at": feedback.ran_at, "note": feedback.note}
+    by_index = _by_stretch(stretches)
+    base ={"route_id": feedback.route_id, "ran_at": feedback.ran_at, "note": feedback.note}
     rows = []
     if "closed_or_blocked" in feedback.issues:
         rows.append({**base, "stretch": None, "stretch_name": None, "geom": None})
