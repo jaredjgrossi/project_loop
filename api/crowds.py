@@ -80,6 +80,28 @@ def summarize(levels: list[str | None]) -> dict:
             "not_scored_pct": round(100 * sum(lv is None for lv in levels) / n, 1) if levels else 100.0}
 
 
+PULSE_LABEL = "scheduled crowd pulse (school or ferry, decision 022)"
+
+
+def band_labels(bands: set) -> str | None:
+    """The label for the bands a route's scored samples used; counter samples name their counter instead."""
+    labels = [BANDS[b][2] for b in sorted(b for b in bands if b and b not in ("counter", "pulse"))]
+    if "pulse" in bands:
+        labels.append(PULSE_LABEL)
+    return ", ".join(labels) or None
+
+
+def pulse_level(way_id, sidewalk: bool, at: datetime | None, windows: dict) -> tuple | None:
+    """A path sample inside a scheduled pulse window (decision 022): high, with the cause as its basis. Sidewalks keep
+    decision 016's level; outside the windows a path stays not scored."""
+    if sidewalk or way_id not in windows:
+        return None
+    from api.pulses import hit
+
+    w = hit(at, windows[way_id])
+    return ("high", w.basis, "pulse") if w else None
+
+
 def stretch_crowd(levels: list[tuple]) -> dict:
     """A stretch's crowd level from its samples' (level, basis, band): the most common scored level, an estimate, or
     not_scored with the most common reason when half or more of the stretch has no crowd data."""
@@ -94,7 +116,8 @@ def stretch_crowd(levels: list[tuple]) -> dict:
     band = max(set(bands), key=bands.count)
     bases = [lv[1] for lv in scored if lv[0] == value]
     return {"value": value, "status": "estimate", "basis": max(set(bases), key=bases.count),
-            "band": "DOT automated pedestrian counter (hourly)" if band == "counter" else BANDS[band][2],
+            "band": {"counter": "DOT automated pedestrian counter (hourly)", "pulse": PULSE_LABEL}.get(band)
+                    or BANDS[band][2],
             "high_pct": round(100 * names.count("high") / len(levels), 1)}
 
 
@@ -161,11 +184,18 @@ def route_crowds(conn, coords: list[list[float]], start: datetime | None, step_m
                 "SELECT sensor_id, daytype, hour, per_hour FROM counter_crowd WHERE sensor_id = ANY(%s)", (list(sensors),)):
             per_hour[(sid, dt, hour)] = ph
     th = street_thresholds(conn) if sensors else None
+    windows = {}
+    if start is not None and start_band is not None:  # pulses count only when crowds are scored at all (016)
+        from api.pulses import windows_by_way
+
+        windows = windows_by_way(conn, list({r[1] for r in rows if r[1] is not None and not r[2]}), start.date())
     out = []
     for (ord_, way_id, sidewalk, sensor), t, (band, why) in zip(rows, times, bands):
         if sensor and t is not None and (sensor, daytype(t), t.hour) in per_hour:
             ph = per_hour[(sensor, daytype(t), t.hour)]
             out.append((counter_level(ph, th), f"DOT automated pedestrian counter {sensor}: {ph:.0f} people/hour", "counter"))
+        elif pulse := pulse_level(way_id, bool(sidewalk), t, windows):
+            out.append(pulse)
         elif way_id is None or not sidewalk:
             out.append((None, "no crowd data off mapped sidewalks (paths, greenways, bridges)", None))
         elif band is None:
@@ -174,7 +204,7 @@ def route_crowds(conn, coords: list[list[float]], start: datetime | None, step_m
             lv, basis = levels_by_way.get((way_id, band), (None, None))
             out.append((lv, f"{basis}, {why}" if lv else "no width or flow for this sidewalk", band if lv else None))
     summary = summarize([o[0] for o in out])
-    used = sorted({b for b in (o[2] for o in out) if b and b != "counter"})
-    return {**summary, "band": ", ".join(BANDS[b][2] for b in used) or None,
+    used = {b for b in (o[2] for o in out) if b and b != "counter"}
+    return {**summary, "band": band_labels(used),
             "reason": bands[0][1] if not used else None, "start_band": start_band, "levels": out, "along_m": along,
             "sidewalk_ways": [r[1] if r[2] else None for r in rows]}
