@@ -62,7 +62,9 @@ final class MainModel {
     var shown: Candidate? { shownRank.flatMap { data.candidate(rank: $0) } }
     var shownDetail: RouteDetail? { shown?.detail }
 
-    var overviewCoordinates: [GeoPoint] { shown?.line.points ?? [] }
+    /// The overview frames the shown route only: it is the hero. The faint #2 and #3 may run off
+    /// screen or under the header fade (framing all three made the hero too small).
+    var overviewCoordinates: [GeoPoint] { (data.candidate(rank: 1) ?? shown)?.line.points ?? [] }
 
     var eyebrowText: String {
         CardText.eyebrow(kind: shown?.kindText ?? "", bestOf: showsCount ? data.bestOf : nil)

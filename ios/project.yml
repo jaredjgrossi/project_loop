@@ -67,15 +67,29 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(LOOP_BUNDLE_ID).tests
         GENERATE_INFOPLIST_FILE: YES
+  LoopUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: LoopUITests
+    dependencies:
+      - target: Loop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(LOOP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Loop
 schemes:
   Loop:
     build:
       targets:
         Loop: all
         LoopTests: [test]
+        LoopUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - LoopTests
+        - LoopUITests

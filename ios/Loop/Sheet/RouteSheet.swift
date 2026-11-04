@@ -31,11 +31,16 @@ struct RouteSheet: View {
             CardBlock(model: model)
                 .padding(.top, 12)
 
-            openSection
-                .frame(height: max(0, height - collapsed), alignment: .top)
-                .clipped()
-                .opacity(Double(progress))
-                .accessibilityHidden(progress < 0.5)
+            // Built only while the sheet is above its collapsed height, so a closed sheet has no
+            // hidden stats for VoiceOver to find.
+            Group {
+                if progress > 0 {
+                    openSection.accessibilityHidden(progress < 0.5)
+                }
+            }
+            .frame(height: max(0, height - collapsed), alignment: .top)
+            .clipped()
+            .opacity(Double(progress))
 
             SendButton(confirmed: $sentConfirmed) { model.touch() }
                 .padding(.top, 12)
