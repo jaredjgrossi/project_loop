@@ -130,9 +130,14 @@ enum CardText {
 
     static func distance(_ mi: Double) -> String { String(format: "%.2f", mi) }
 
-    // MARK: Mile chip
+    // MARK: Selection chip
 
-    static func mileChip(mile: Int, stretchName: String) -> String { "Mile \(mile) · \(stretchName)" }
+    /// The selection chip: "East River Esplanade · 1.0 mi · Look around", or without the last
+    /// part where Apple has no Look Around scene.
+    static func selectionChip(stretchName: String, alongMi: Double, lookAround: Bool) -> String {
+        let base = "\(stretchName) · \(oneDecimal(alongMi)) mi"
+        return lookAround ? base + " · Look around" : base
+    }
 
     // MARK: Request
 

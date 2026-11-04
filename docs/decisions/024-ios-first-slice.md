@@ -27,8 +27,21 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Detail follows the zoom.** On the map, runs shorter than 40 pt on screen join their longer
   neighbour, and a path run is dashed only when it fits two full dashes (30 pt); shorter path
   runs are drawn solid in route-path. Recomputed as the camera zooms.
-- **Selected mile.** Other mile labels whose circle would sit under the selected marker or its
-  chip are hidden. Markers never draw over the header.
+- **Selection by tapping the route** (Jared, 2026-11-04). A tap within 22 pt of the line, at any
+  zoom, selects the nearest point on it (ties on an out-and-back go to the outbound leg): a small
+  dot, a selection tick, the strip cursor moves there, and the chip reads "<stretch> · x.x mi ·
+  Look around" with binoculars (stretch and distance only where Apple has no scene). Mile marks
+  select that exact mile (30 pt numbered marker, same chip). Taps only, through Mapbox's tap
+  recognizer, so drags and pans never select; a tap away from the line clears it. The sheet
+  doesn't open on selection; the chip sits beside, above or below the marker and always above
+  the sheet. Opening the sheet with nothing selected still selects mile 1.
+- **Hidden labels.** Mile labels whose circle would sit under the selection marker or its chip
+  are hidden. Markers never draw over the header.
+- **Sheet motion.** The sheet's height is driven frame by frame (its own observable): 1:1 with the
+  finger while dragging, resisting past either end, then a 320 ms cubic-bezier(0.2, 0, 0, 1)
+  settle. The open content is always laid out and only clipped and faded. The map refits only
+  after the sheet settles. The Mapbox logo and attribution ride 8 pt above the sheet on every
+  frame; the attribution button is tinted ink-muted.
 - **Whole-route stats.** The three stats and the crowd line describe the whole route.
   Selecting a mile only moves the marker, the chip and the profile cursor.
 - **Crowd line names stretches** (Jared, 2026-11-04): "Crowds at 7:00 · moderate on E 31st St ·
@@ -61,6 +74,8 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Without a Mapbox token** the app draws on a plain paper background, so layout and route can
   be checked before the account exists.
 - **Mapbox logo and attribution** stay visible just above the sheet (Mapbox terms).
+- **App icon.** Single-size 1024 AppIcon with light, dark and tinted appearances, from the design
+  folder unchanged; `project.yml` names it so `xcodegen` keeps it.
 
 ## Open
 - Apple's MapKit terms for showing Look Around beside a non-Apple map: unchecked. Fine for a build
@@ -77,4 +92,8 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   labels is covered too: bridge decks would disappear (none on this route; the Brooklyn,
   Williamsburg and Queensboro bridges matter for later routes). Standard's white one-way arrows
   (zoomed in) have no setting either. Both go to the custom Mapbox Studio style.
+- Drag stutter (Jared's phone, 2026-11-04): `SheetDragPerfTests` (XCTHitchMetric, 5 drag cycles,
+  scheme LoopPerf) on the iPhone measured 0 hitches for the new sheet in Debug and in Release,
+  and also 0 for the previous build, so synthetic drags don't reproduce what was felt. Whether
+  the rework fixed it is for a hand on the device to judge.
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.

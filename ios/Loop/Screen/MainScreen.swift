@@ -46,13 +46,7 @@ struct MainScreen: View {
                     Color.clear.onAppear { model.headerBottom = g.frame(in: .global).maxY }
                 })
 
-            if model.betterRouteAvailable {
-                BetterRouteChip { model.acceptBetterRoute() }
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, model.sheetHeight + 10)
-                    .ignoresSafeArea(edges: .bottom)
-                    .transition(.opacity)
-            }
+            BetterRouteLayer(model: model)
 
             RouteSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
@@ -62,7 +56,6 @@ struct MainScreen: View {
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
-        .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
         #if DEBUG
         .task { await applyLaunchArguments() }
         #endif
@@ -101,11 +94,14 @@ struct MainScreen: View {
             model.selectMile(mile, pan: false)
             if args.contains("-LoopLookAround") {
                 try? await Task.sleep(for: .seconds(3))
-                if let detail = model.shownDetail, let mark = detail.miles.first(where: { $0.mile == mile }) {
-                    let name = detail.stretch(atMile: mark.alongMi)?.name ?? ""
-                    model.openLookAround(mile: mile, title: CardText.mileChip(mile: mile, stretchName: name))
-                }
+                model.openLookAround()
             }
+        }
+        if let i = args.firstIndex(of: "-LoopSelectAt"), i + 1 < args.count, let mi = Double(args[i + 1]),
+           let d = model.shownDetail {
+            // Same as tapping the route at that distance.
+            try? await Task.sleep(for: .seconds(1.5))
+            model.selectPoint(alongM: mi / d.distanceMi * d.line.length)
         }
     }
     #endif
@@ -123,7 +119,7 @@ struct PlayBuildButton: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill").font(.system(size: 11, weight: .semibold))
-                Text("build").typeStyle(.data)
+                Text("Replay build").typeStyle(.data)
             }
             .foregroundStyle(Palette.inkMuted.color)
             .padding(.horizontal, 12)
@@ -134,7 +130,7 @@ struct PlayBuildButton: View {
         } primaryAction: {
             model.play(.standard)
         }
-        .accessibilityLabel("Play the build, debug")
+        .accessibilityLabel("Replay build, debug")
         .accessibilityHint("Replays how a live build arrives. Hold for more.")
         .padding(.trailing, Metrics.s8)
     }
@@ -161,5 +157,24 @@ struct BetterRouteChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Switches to the new route")
+    }
+}
+
+/// "A better route came in", pinned 10 pt above the sheet; reads the live sheet height.
+private struct BetterRouteLayer: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if model.betterRouteAvailable {
+                BetterRouteChip { model.acceptBetterRoute() }
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, model.sheet.height + 10)
+        .ignoresSafeArea(edges: .bottom)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
     }
 }

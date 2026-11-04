@@ -19,7 +19,7 @@ final class SheetUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["Mile 1 selected"].waitForExistence(timeout: 3))
 
         // Mile 1 is on the East River Esplanade, where Apple has Look Around imagery.
-        let chip = app.buttons["Look at the street at mile 1, East River Esplanade"]
+        let chip = app.buttons["Look around at East River Esplanade · 1.0 mi"]
         XCTAssertTrue(chip.waitForExistence(timeout: 15))
         chip.tap()
         let close = app.buttons["Close street view"]

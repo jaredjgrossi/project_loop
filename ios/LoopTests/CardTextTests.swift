@@ -73,7 +73,10 @@ final class CardTextTests: XCTestCase {
         XCTAssertEqual(Trust("verified").text, "verified")
     }
 
-    func testMileChip() {
-        XCTAssertEqual(CardText.mileChip(mile: 1, stretchName: "East River Esplanade"), "Mile 1 · East River Esplanade")
+    func testSelectionChip() {
+        XCTAssertEqual(CardText.selectionChip(stretchName: "East River Esplanade", alongMi: 1.0, lookAround: true),
+                       "East River Esplanade · 1.0 mi · Look around")
+        XCTAssertEqual(CardText.selectionChip(stretchName: "FDR Drive", alongMi: 0.537, lookAround: false),
+                       "FDR Drive · 0.5 mi")
     }
 }

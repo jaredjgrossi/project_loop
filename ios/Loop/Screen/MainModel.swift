@@ -27,14 +27,19 @@ final class MainModel {
     var showsCount: Bool { build.showsCount }
     var betterRouteAvailable: Bool { build.betterRank != nil }
 
-    // Sheet
-    /// Where the sheet rests (216 or 398); the live height while dragging is `sheetHeight`.
-    var sheetBaseHeight: CGFloat = Metrics.sheetCollapsed
-    var sheetHeight: CGFloat = Metrics.sheetCollapsed
-    var sheetIsOpen: Bool { sheetBaseHeight == Metrics.sheetOpen }
+    // Sheet: its own observable, so only views pinned to it re-render while it moves.
+    let sheet = SheetState()
+    var sheetIsOpen: Bool { sheet.restingOpen }
 
-    // Selection
-    var selectedMile: Int?
+    // Selection: a point on the shown route, from a tap on the line, a mile mark, or the strip.
+    struct RouteSelection: Equatable {
+        /// Along-route metres on the shown route's line.
+        let alongM: Double
+        /// Set when a mile mark was chosen: that exact mile.
+        let mile: Int?
+    }
+    private(set) var selection: RouteSelection?
+    var selectedMile: Int? { selection?.mile }
 
     // Look Around
     @ObservationIgnored private let lookAround = LookAroundCache()
@@ -84,7 +89,7 @@ final class MainModel {
     /// Replays a build from the saved file's top 3 on the fake schedule.
     func play(_ script: BuildScript) {
         playback?.cancel()
-        selectedMile = nil
+        selection = nil
         setSheet(open: false, animated: true)
         build = BuildState()
         drawnFraction = 0
@@ -115,49 +120,109 @@ final class MainModel {
     func acceptBetterRoute() {
         build.acceptBetterRoute(at: CACurrentMediaTime())
         frameVersion += 1
-        if let m = selectedMile {
-            if shownDetail?.miles.contains(where: { $0.mile == m }) == true { selectMile(m) } else { selectedMile = nil }
+        if let m = selectedMile, shownDetail?.miles.contains(where: { $0.mile == m }) == true {
+            selectMile(m, pan: false)
+        } else {
+            selection = nil
         }
     }
+
+    // MARK: Sheet
 
     func setSheet(open: Bool, animated: Bool) {
-        let target = open ? Metrics.sheetOpen : Metrics.sheetCollapsed
-        let changed = sheetBaseHeight != target
-        withAnimation(animated ? Motion.sheetSettle : nil) { sheetBaseHeight = target }
-        // Refit the route to the space the sheet leaves, in both states.
-        if changed { requestCamera(.overview, animated: animated) }
-        if open {
-            if selectedMile == nil, let first = shownDetail?.miles.first { selectMile(first.mile, pan: false) }
-        } else {
-            selectedMile = nil
+        let changed = sheet.restingOpen != open || sheet.height != (open ? SheetState.open : SheetState.collapsed)
+        sheet.settle(open: open, animated: animated) { [weak self] in
+            // Refit the route to the space the sheet leaves, only once it has settled.
+            if changed { self?.requestCamera(.overview, animated: animated) }
         }
+        sheetOpened(open)
     }
 
-    /// Select a mile: moves the marker, the chip and the profile cursor. The map pans only if the
-    /// mile is outside the space between the header and the sheet (after a manual zoom, say).
-    func selectMile(_ mile: Int, pan: Bool = true) {
+    func sheetDragEnded(predictedTranslation: CGFloat, animated: Bool) {
+        let wasOpen = sheet.restingOpen
+        sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { [weak self] open in
+            if open != wasOpen { self?.requestCamera(.overview, animated: animated) }
+        }
+        sheetOpened(sheet.restingOpen)
+    }
+
+    /// Opening the sheet with nothing selected selects mile 1 (the D artboard). Selection stays
+    /// when the sheet closes: the chip shows above the sheet in either state.
+    private func sheetOpened(_ open: Bool) {
+        if open, selection == nil, let first = shownDetail?.miles.first { selectMile(first.mile, pan: false, tick: false) }
+    }
+
+    // MARK: Selection
+
+    /// Select a mile: marker, chip and profile cursor go to that exact mile. The map pans only if
+    /// the mile is outside the space between the header and the sheet.
+    func selectMile(_ mile: Int, pan: Bool = true, tick: Bool = false) {
         guard let mark = shownDetail?.miles.first(where: { $0.mile == mile }) else { return }
-        selectedMile = mile
+        selection = RouteSelection(alongM: mark.alongM, mile: mile)
+        if tick { Haptics.mileTick() }
         if pan { requestCamera(.focus(mark.point), animated: true) }
-        lookAround.fetch(mile: mile, at: mark.point) { [weak self] in self?.lookAroundVersion += 1 }
+        fetchLookAround()
     }
 
-    func lookAroundAvailability(mile: Int) -> LookAroundAvailability {
+    /// A tap within 22 pt of the line selects the nearest point on it: dot, chip, strip cursor
+    /// and a selection tick. No pan, and the sheet stays as it is.
+    func selectPoint(alongM: Double) {
+        guard let line = shown?.line else { return }
+        touch()
+        selection = RouteSelection(alongM: min(max(0, alongM), line.length), mile: nil)
+        Haptics.mileTick()
+        fetchLookAround()
+    }
+
+    func clearSelection() { selection = nil }
+
+    /// Where the selection sits: the file's mile point for a mile, else the point on the line.
+    var selectionPoint: GeoPoint? {
+        guard let sel = selection, let d = shownDetail else { return nil }
+        if let m = sel.mile, let mark = d.miles.first(where: { $0.mile == m }) { return mark.point }
+        return d.line.point(at: sel.alongM)
+    }
+
+    /// The selection's distance along the route in miles (the file's own value for a mile).
+    var selectionAlongMi: Double? {
+        guard let sel = selection, let d = shownDetail else { return nil }
+        if let m = sel.mile, let mark = d.miles.first(where: { $0.mile == m }) { return mark.alongMi }
+        return sel.alongM / d.line.length * d.distanceMi
+    }
+
+    var selectionStretchName: String {
+        guard let mi = selectionAlongMi, let d = shownDetail else { return "" }
+        return d.stretch(atMile: mi)?.name ?? ""
+    }
+
+    // MARK: Look Around
+
+    /// Look Around answers are cached per 10 m of route.
+    private var lookAroundKey: Int? { selection.map { Int(($0.alongM / 10).rounded()) } }
+
+    private func fetchLookAround() {
+        guard let key = lookAroundKey, let p = selectionPoint else { return }
+        lookAround.fetch(key: key, at: p) { [weak self] in self?.lookAroundVersion += 1 }
+    }
+
+    var selectionLookAround: LookAroundAvailability {
         _ = lookAroundVersion
-        return lookAround.availability(mile: mile)
+        guard let key = lookAroundKey else { return .unknown }
+        return lookAround.availability(key: key)
     }
 
     /// Tapping the chip opens Look Around full screen (only offered when imagery exists).
-    func openLookAround(mile: Int, title: String) {
-        guard case let .available(scene) = lookAroundAvailability(mile: mile) else { return }
+    func openLookAround() {
+        guard case let .available(scene) = selectionLookAround, let mi = selectionAlongMi else { return }
         touch()
-        lookAroundTarget = LookAroundTarget(scene: scene, title: title)
+        lookAroundTarget = LookAroundTarget(
+            scene: scene, title: CardText.selectionChip(stretchName: selectionStretchName, alongMi: mi, lookAround: false))
     }
 
-    /// Tapping a mile mark on the map opens the sheet on that mile.
+    /// Tapping a mile mark selects that exact mile, with a selection tick. The sheet stays put.
     func tapMile(_ mile: Int) {
         touch()
-        if sheetIsOpen { selectMile(mile) } else { selectedMile = mile; setSheet(open: true, animated: true); selectMile(mile, pan: false) }
+        selectMile(mile, tick: true)
     }
 
     // MARK: Map

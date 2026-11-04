@@ -1,44 +1,79 @@
 import SwiftUI
 
-/// Where the selected marker and its chip go. Shared with the marker layer so mile labels that
-/// would sit under either are hidden.
+/// Where the selection marker and its chip go. Shared with the marker layer so mile labels that
+/// would sit under either are hidden. A tap on the line gets a small dot; a mile gets the 30 pt
+/// numbered marker (pushed off the line on an out-and-back, like the other mile labels).
 struct SelectionLayout {
-    let mile: Int
+    let mile: Int?
     let place: MarkPlacement
     let title: String
-    let stretchName: String
-    let chipOnRight: Bool
-    let leftRoom: CGFloat
-    let rightRoom: CGFloat
+    let hasLookAround: Bool
+    let side: Side
     let markerRect: CGRect
     let chipRect: CGRect
+    /// True when the chip was lifted to stay above the sheet.
+    let chipLifted: Bool
 
     static let tick: CGFloat = 7
+    static let dot: CGFloat = 10
 
     @MainActor
     static func compute(_ model: MainModel, size: CGSize) -> SelectionLayout? {
-        guard let mile = model.selectedMile, let detail = model.shownDetail,
-              let mark = detail.miles.first(where: { $0.mile == mile }),
-              let place = model.markPlacements()[mile] else { return nil }
+        guard let sel = model.selection, model.shownDetail != nil,
+              let mi = model.selectionAlongMi, let point = model.selectionPoint else { return nil }
+        let place: MarkPlacement
+        if let m = sel.mile, let p = model.markPlacements()[m] {
+            place = p
+        } else if let p = model.screenPoint(point) {
+            place = MarkPlacement(anchor: p, center: p)
+        } else { return nil }
         let p = place.center
-        let marker = Metrics.selectedMileMarker
-        let name = detail.stretch(atMile: mark.alongMi)?.name ?? ""
-        let title = CardText.mileChip(mile: mile, stretchName: name)
+        let marker = sel.mile != nil ? Metrics.selectedMileMarker : dot
+        let hasLookAround: Bool = { if case .available = model.selectionLookAround { return true } else { return false } }()
+        let title = CardText.selectionChip(stretchName: model.selectionStretchName, alongMi: mi, lookAround: hasLookAround)
+
+        let textWidth = (title as NSString).size(withAttributes: [.font: TypeStyle.label.uiFont]).width
+        let chipWidth = ceil(textWidth) + 12 + (hasLookAround ? 8 + 18 + 10 : 12)
         let leftRoom = p.x - marker / 2 - tick - 8
         let rightRoom = size.width - (p.x + marker / 2 + tick) - 8
-        // The chip goes on the label's outer side (away from the line when the label is pushed
-        // off it), flipping if there is no room.
+        // Beside the marker when it fits (outer side of a pushed-off mile label first, else left),
+        // otherwise above it, or below when the header is in the way. Never on top of the marker.
         let prefersRight = place.isOffset && place.center.x > place.anchor.x
-        let right = prefersRight ? rightRoom >= 200 || leftRoom < 200 : leftRoom < 200
-        let hasEye: Bool = { if case .available = model.lookAroundAvailability(mile: mile) { return true } else { return false } }()
-        let textWidth = (title as NSString).size(withAttributes: [.font: TypeStyle.label.uiFont]).width
-        let chipWidth = ceil(textWidth) + 12 + (hasEye ? 8 + 16 + 10 : 12)
-        let chipX = right ? p.x + marker / 2 + tick : p.x - marker / 2 - tick - chipWidth
+        let side: Side
+        if prefersRight && rightRoom >= chipWidth { side = .right }
+        else if leftRoom >= chipWidth { side = .left }
+        else if rightRoom >= chipWidth { side = .right }
+        else if p.y - marker / 2 - tick - 34 >= model.headerBottom + 8 { side = .above }
+        else { side = .below }
+        var chip: CGRect
+        switch side {
+        case .left: chip = CGRect(x: p.x - marker / 2 - tick - chipWidth, y: p.y - 17, width: chipWidth, height: 34)
+        case .right: chip = CGRect(x: p.x + marker / 2 + tick, y: p.y - 17, width: chipWidth, height: 34)
+        case .above: chip = CGRect(x: p.x - chipWidth / 2, y: p.y - marker / 2 - tick - 34, width: chipWidth, height: 34)
+        case .below: chip = CGRect(x: p.x - chipWidth / 2, y: p.y + marker / 2 + tick, width: chipWidth, height: 34)
+        }
+        chip.origin.x = min(max(8, chip.origin.x), size.width - 8 - chipWidth)
+        // The chip always shows above the sheet, whatever state the sheet is in.
+        let lowestTop = size.height - model.sheet.height - 8 - 34
+        let lifted = chip.origin.y > lowestTop
+        if lifted { chip.origin.y = lowestTop }
         return SelectionLayout(
-            mile: mile, place: place, title: title, stretchName: name, chipOnRight: right,
-            leftRoom: leftRoom, rightRoom: rightRoom,
+            mile: sel.mile, place: place, title: title, hasLookAround: hasLookAround, side: side,
             markerRect: CGRect(x: p.x - marker / 2, y: p.y - marker / 2, width: marker, height: marker),
-            chipRect: CGRect(x: chipX, y: p.y - 17, width: chipWidth, height: 34))
+            chipRect: chip, chipLifted: lifted)
+    }
+
+    enum Side { case left, right, above, below }
+
+    /// The tick runs from the marker's edge to the chip's nearest edge.
+    var tickEnds: (CGPoint, CGPoint) {
+        let m = markerRect, c = chipRect
+        switch side {
+        case .left: return (CGPoint(x: m.minX, y: m.midY), CGPoint(x: c.maxX, y: c.midY))
+        case .right: return (CGPoint(x: m.maxX, y: m.midY), CGPoint(x: c.minX, y: c.midY))
+        case .above: return (CGPoint(x: m.midX, y: m.minY), CGPoint(x: min(max(m.midX, c.minX + 17), c.maxX - 17), y: c.maxY))
+        case .below: return (CGPoint(x: m.midX, y: m.maxY), CGPoint(x: min(max(m.midX, c.minX + 17), c.maxX - 17), y: c.minY))
+        }
     }
 
     /// Would a mile label circle at `center` overlap the marker or the chip?
@@ -49,7 +84,7 @@ struct SelectionLayout {
     }
 }
 
-/// The selected mile: a 30 pt marker on the route with a short tick to the chip "Mile 1 · <stretch>".
+/// The selection: dot or mile marker on the route, a short tick, and the chip.
 struct SelectionOverlay: View {
     let model: MainModel
 
@@ -57,65 +92,70 @@ struct SelectionOverlay: View {
         GeometryReader { geo in
             if let layout = SelectionLayout.compute(model, size: geo.size) {
                 let p = layout.place.center
-                let marker = Metrics.selectedMileMarker
-                let tick = SelectionLayout.tick
-                let right = layout.chipOnRight
+                let chip = layout.chipRect
                 ZStack(alignment: .topLeading) {
                     MarkLeader(placement: layout.place)
+                    // Tick from the marker's edge to the chip's near edge.
                     Path { path in
-                        let x0 = right ? p.x + marker / 2 : p.x - marker / 2 - tick
-                        path.move(to: CGPoint(x: x0, y: p.y))
-                        path.addLine(to: CGPoint(x: x0 + tick, y: p.y))
+                        let (a, b) = layout.tickEnds
+                        path.move(to: a)
+                        path.addLine(to: b)
                     }
                     .stroke(Palette.ink.color, lineWidth: 1.5)
 
-                    Text("\(layout.mile)")
-                        .typeStyle(.dataStrong)
-                        .foregroundStyle(Palette.surfaceSheet.color)
-                        .frame(width: marker, height: marker)
-                        .background(Circle().fill(Palette.ink.color))
-                        .overlay(Circle().strokeBorder(Palette.surfaceSheet.color, lineWidth: 2))
-                        .position(p)
-                        .accessibilityLabel("Mile \(layout.mile) selected")
+                    if let mile = layout.mile {
+                        Text("\(mile)")
+                            .typeStyle(.dataStrong)
+                            .foregroundStyle(Palette.surfaceSheet.color)
+                            .frame(width: Metrics.selectedMileMarker, height: Metrics.selectedMileMarker)
+                            .background(Circle().fill(Palette.ink.color))
+                            .overlay(Circle().strokeBorder(Palette.surfaceSheet.color, lineWidth: 2))
+                            .position(p)
+                            .accessibilityLabel("Mile \(mile) selected")
+                    } else {
+                        Circle()
+                            .fill(Palette.ink.color)
+                            .overlay(Circle().strokeBorder(Palette.surfaceSheet.color, lineWidth: 2))
+                            .frame(width: SelectionLayout.dot, height: SelectionLayout.dot)
+                            .position(p)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
 
-                    MileChip(mile: layout.mile, stretchName: layout.stretchName, model: model)
-                        .fixedSize()
-                        .frame(width: max(0, right ? layout.rightRoom : layout.leftRoom), alignment: right ? .leading : .trailing)
-                        .position(x: right ? p.x + marker / 2 + tick + max(0, layout.rightRoom) / 2 : 8 + max(0, layout.leftRoom) / 2,
-                                  y: p.y)
+                    SelectionChip(title: layout.title, hasLookAround: layout.hasLookAround, model: model)
+                        .frame(width: chip.width)
+                        .position(x: chip.midX, y: chip.midY)
                 }
             }
         }
     }
 }
 
-/// "Mile 1 · East River Esplanade". With Apple imagery there, it shows an eye and opens Look Around.
-/// Without it, the chip stays as a plain label (no eye, not a button): never an empty view.
-struct MileChip: View {
-    let mile: Int
-    let stretchName: String
+/// "East River Esplanade · 1.0 mi · Look around" with binoculars; opens Look Around full screen.
+/// Where Apple has no scene: stretch and distance only, and not a button.
+struct SelectionChip: View {
+    let title: String
+    let hasLookAround: Bool
     let model: MainModel
 
     var body: some View {
-        let title = CardText.mileChip(mile: mile, stretchName: stretchName)
-        let availability = model.lookAroundAvailability(mile: mile)
-        let hasImagery: Bool = { if case .available = availability { return true } else { return false } }()
-
-        Button { model.openLookAround(mile: mile, title: title) } label: {
+        Button { model.openLookAround() } label: {
             HStack(spacing: 8) {
                 Text(title)
                     .typeStyle(.label)
                     .foregroundStyle(Palette.ink.color)
                     .lineLimit(1)
-                if hasImagery {
-                    Image(systemName: "eye")
-                        .font(.system(size: 14, weight: .medium))
+                    .fixedSize()
+                if hasLookAround {
+                    Image(systemName: "binoculars")
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Palette.ink.color)
+                        .frame(width: 18)
                         .transition(.opacity)
                 }
             }
             .padding(.leading, 12)
-            .padding(.trailing, hasImagery ? 10 : 12)
+            .padding(.trailing, hasLookAround ? 10 : 12)
             .frame(height: 34)
             .background(Capsule().fill(Palette.surfaceSheet.color))
             .overlay(Capsule().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
@@ -124,17 +164,8 @@ struct MileChip: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!hasImagery)
-        .animation(Motion.textArrive, value: hasImagery)
-        .accessibilityLabel(accessibilityText(availability))
-    }
-
-    private func accessibilityText(_ a: LookAroundAvailability) -> String {
-        let place = "mile \(mile), \(stretchName)"
-        switch a {
-        case .available: return "Look at the street at \(place)"
-        case .none: return "Mile \(mile), \(stretchName). No street imagery here."
-        case .unknown: return "Mile \(mile), \(stretchName)"
-        }
+        .disabled(!hasLookAround)
+        .animation(Motion.textArrive, value: hasLookAround)
+        .accessibilityLabel(hasLookAround ? "Look around at \(title.replacingOccurrences(of: " · Look around", with: ""))" : title)
     }
 }

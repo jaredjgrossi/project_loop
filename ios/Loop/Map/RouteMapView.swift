@@ -46,7 +46,6 @@ struct RouteMapView: UIViewRepresentable {
         let c = context.coordinator
         c.reduceMotion = reduceMotion
         c.setDark(colorScheme == .dark)
-        c.setBottomInset(model.sheetHeight)
         c.handle(model.cameraRequest)
     }
 
@@ -83,6 +82,13 @@ struct RouteMapView: UIViewRepresentable {
             mapView.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 MainActor.assumeIsolated { self?.cameraChanged() }
             }.store(in: &cancelables)
+            // Taps only (Mapbox's tap recognizer): drags and pans never select.
+            mapView.gestures.onMapTap.observe { [weak self] context in
+                MainActor.assumeIsolated { self?.mapTapped(at: context.point) }
+            }.store(in: &cancelables)
+            // Logo and attribution ride 8 pt above the sheet on every frame, outside SwiftUI.
+            model.sheet.onHeightChange = { [weak self] h in self?.setBottomInset(h) }
+            mapView.ornaments.options.attributionButton.tintColor = Palette.inkMuted.uiColor
             model.project = { [weak mapView] p in
                 guard let mapView else { return nil }
                 return mapView.mapboxMap.point(for: p.coordinate)
@@ -308,15 +314,29 @@ struct RouteMapView: UIViewRepresentable {
 
         private var placedOrnamentsFor: (CGFloat, CGFloat)?
 
-        /// Mapbox's logo and attribution must stay visible: keep them just above the sheet.
+        /// Mapbox's logo and attribution must stay visible: 8 pt above the sheet's top, following it.
         /// Ornament margins count from the safe area, so the home-indicator inset comes off.
         private func placeOrnaments() {
             guard let mapView else { return }
             let safe = mapView.safeAreaInsets.bottom
             if let placed = placedOrnamentsFor, placed == (bottomInset, safe) { return }
             placedOrnamentsFor = (bottomInset, safe)
-            mapView.ornaments.options.logo.margins = CGPoint(x: 12, y: bottomInset + 6 - safe)
-            mapView.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: bottomInset + 4 - safe)
+            mapView.ornaments.options.logo.margins = CGPoint(x: 12, y: bottomInset + 8 - safe)
+            mapView.ornaments.options.attributionButton.margins = CGPoint(x: 8, y: bottomInset + 8 - safe)
+        }
+
+        /// A tap within 22 pt of the shown route selects the nearest point on it; elsewhere it
+        /// clears the selection. Mile marks and chips are SwiftUI views above the map, so their
+        /// taps never get here.
+        private func mapTapped(at tap: CGPoint) {
+            guard let map = mapView?.mapboxMap, let line = model.shown?.line, model.shownDetail != nil else { return }
+            let projected = line.points.map { map.point(for: $0.coordinate) }
+            if let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
+               hit.distance <= RouteHit.tolerance {
+                model.selectPoint(alongM: hit.alongM)
+            } else {
+                model.clearSelection()
+            }
         }
 
         func handle(_ request: CameraRequest) {
@@ -337,13 +357,13 @@ struct RouteMapView: UIViewRepresentable {
                 // above the sheet's top (TURN hangs below the ring), in whichever state the sheet rests.
                 let coords = model.overviewCoordinates.map(\.coordinate)
                 let padding = UIEdgeInsets(top: model.headerBottom + 28, left: 44,
-                                           bottom: model.sheetBaseHeight + 40 + 22, right: 44)
+                                           bottom: model.sheet.restingHeight + 40 + 22, right: 44)
                 target = try? map.camera(for: coords, camera: CameraOptions(), coordinatesPadding: padding,
                                          maxZoom: 16, offset: nil)
             case let .focus(point):
                 // Pan only if the point is outside the band between the header and the sheet.
                 let now = map.point(for: point.coordinate)
-                let top = model.headerBottom + 28, bottom = size.height - model.sheetBaseHeight - 40
+                let top = model.headerBottom + 28, bottom = size.height - model.sheet.restingHeight - 40
                 if now.x > 60, now.x < size.width - 60, now.y > top, now.y < bottom { return }
                 let goal = CGPoint(x: size.width * 0.62, y: (top + bottom) / 2)
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)

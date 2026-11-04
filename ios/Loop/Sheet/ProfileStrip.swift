@@ -4,8 +4,10 @@ import SwiftUI
 /// Scrubbing moves the cursor, ticks at each whole mile and selects the nearest mile.
 struct ProfileStrip: View {
     let detail: RouteDetail
-    /// The selected mile (cursor rests here when not scrubbing).
+    /// The selected mile, if a mile mark was chosen (for VoiceOver's adjustable action).
     let selectedMile: Int?
+    /// Where the cursor rests when not scrubbing: the selection's distance in miles.
+    let cursorMile: Double?
     var onScrubStart: () -> Void = {}
     var onSelectMile: (Int) -> Void = { _ in }
 
@@ -30,7 +32,7 @@ struct ProfileStrip: View {
         .frame(height: height)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
-        .accessibilityValue(selectedMile.map { "Mile \($0) selected" } ?? "")
+        .accessibilityValue(cursorMile.map { String(format: "%.1f miles selected", $0) } ?? "")
         .accessibilityAdjustableAction { direction in
             let miles = detail.miles.map(\.mile)
             let current = selectedMile ?? 0
@@ -57,11 +59,7 @@ struct ProfileStrip: View {
         return lineBottom - CGFloat((elevation - lo) / (hi - lo)) * (lineBottom - lineTop)
     }
 
-    private var cursorMile: Double? {
-        if let scrubMile { return scrubMile }
-        guard let m = selectedMile, let mark = detail.miles.first(where: { $0.mile == m }) else { return nil }
-        return mark.alongMi
-    }
+    private var shownCursor: Double? { scrubMile ?? cursorMile }
 
     private func draw(_ ctx: GraphicsContext, width w: CGFloat) {
         let ink = Palette.ink.color
@@ -108,7 +106,7 @@ struct ProfileStrip: View {
         }
 
         // Cursor.
-        if let m = cursorMile {
+        if let m = shownCursor {
             let cx = x(m, w)
             ctx.stroke(Path { $0.move(to: CGPoint(x: cx, y: 8)); $0.addLine(to: CGPoint(x: cx, y: 48)) },
                        with: .color(ink), lineWidth: 1.5)

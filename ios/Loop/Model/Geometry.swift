@@ -103,3 +103,30 @@ func blend(_ a: [GeoPoint], _ b: [GeoPoint], _ t: Double) -> [GeoPoint] {
     precondition(a.count == b.count)
     return zip(a, b).map { GeoPoint.lerp($0, $1, t) }
 }
+
+/// Tap hit-testing against a route drawn on screen.
+enum RouteHit {
+    /// The tap distance that still counts as touching the line, at any zoom.
+    static let tolerance: CGFloat = 22
+
+    /// Nearest point to `tap` on the route as projected to the screen. `projected[i]` is vertex i
+    /// on screen and `cumulative[i]` its along-route metres. Returns the along-route metres of the
+    /// nearest point and its distance from the tap in points. On an out-and-back, where outbound and
+    /// return overlap, a tie goes to the earlier (outbound) segment.
+    static func nearest(to tap: CGPoint, projected: [CGPoint], cumulative: [Double]) -> (alongM: Double, distance: CGFloat)? {
+        guard projected.count >= 2, projected.count == cumulative.count else { return nil }
+        var best: (alongM: Double, distance: CGFloat)?
+        for i in 0..<(projected.count - 1) {
+            let a = projected[i], b = projected[i + 1]
+            let dx = b.x - a.x, dy = b.y - a.y
+            let len2 = dx * dx + dy * dy
+            let t = len2 > 0 ? max(0, min(1, ((tap.x - a.x) * dx + (tap.y - a.y) * dy) / len2)) : 0
+            let p = CGPoint(x: a.x + dx * t, y: a.y + dy * t)
+            let d = hypot(tap.x - p.x, tap.y - p.y)
+            if best == nil || d < best!.distance {
+                best = (cumulative[i] + Double(t) * (cumulative[i + 1] - cumulative[i]), d)
+            }
+        }
+        return best
+    }
+}

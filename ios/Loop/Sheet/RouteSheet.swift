@@ -5,15 +5,15 @@ import SwiftUI
 struct RouteSheet: View {
     @Bindable var model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @GestureState private var dragOffset: CGFloat = 0
     @State private var sentConfirmed = false
 
+    private var sheet: SheetState { model.sheet }
     private let collapsed = Metrics.sheetCollapsed
     private let open = Metrics.sheetOpen
 
     var body: some View {
-        let height = min(open + 24, max(collapsed - 24, model.sheetBaseHeight - dragOffset))
-        let progress = max(0, min(1, (height - collapsed) / (open - collapsed)))
+        let height = sheet.height
+        let progress = sheet.progress
 
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
@@ -32,17 +32,17 @@ struct RouteSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
 
-            // Built only while the sheet is above its collapsed height, so a closed sheet has no
-            // hidden stats for VoiceOver to find.
-            Group {
-                if progress > 0 {
-                    openSection.accessibilityHidden(progress < 0.5)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: max(0, height - collapsed), alignment: .top)
-            .clipped()
-            .opacity(Double(progress))
+            // The open content is always laid out at full size; dragging only clips and fades it,
+            // so nothing is inserted mid-drag. Hidden (still laid out) when fully closed, so
+            // VoiceOver doesn't find it.
+            OpenSection(model: model)
+                .frame(height: open - collapsed, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(Double(progress))
+                .frame(height: max(0, height - collapsed), alignment: .top)
+                .clipped()
+                .accessibilityHidden(progress < 0.5)
+                .hiddenWhen(progress == 0)
 
             SendButton(confirmed: $sentConfirmed) { model.touch() }
                 .padding(.top, 12)
@@ -54,7 +54,6 @@ struct RouteSheet: View {
         .background(sheetBackground)
         .contentShape(Rectangle())
         .gesture(drag)
-        .onChange(of: height) { _, h in model.sheetHeight = h }
     }
 
     private var sheetBackground: some View {
@@ -68,10 +67,37 @@ struct RouteSheet: View {
             .ignoresSafeArea(edges: .bottom)
     }
 
-    @ViewBuilder private var openSection: some View {
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { v in
+                if !sheet.isMoving { model.touch() }
+                sheet.drag(translation: v.translation.height)
+            }
+            .onEnded { v in
+                model.sheetDragEnded(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion)
+            }
+    }
+}
+
+extension View {
+    /// `.hidden()` on a condition, keeping the view laid out either way.
+    @ViewBuilder func hiddenWhen(_ hidden: Bool) -> some View {
+        if hidden { self.hidden() } else { self }
+    }
+}
+
+/// Profile strip, whole-route stats and the crowd line: the open state's content.
+struct OpenSection: View {
+    let model: MainModel
+
+    var body: some View {
+        content
+    }
+
+    @ViewBuilder private var content: some View {
         if let detail = model.shownDetail, model.cardRevealed {
             VStack(alignment: .leading, spacing: 0) {
-                ProfileStrip(detail: detail, selectedMile: model.selectedMile,
+                ProfileStrip(detail: detail, selectedMile: model.selectedMile, cursorMile: model.selectionAlongMi,
                              onScrubStart: { model.touch() },
                              onSelectMile: { model.selectMile($0) })
                     .padding(.top, 12)
@@ -101,15 +127,6 @@ struct RouteSheet: View {
         }
     }
 
-    private var drag: some Gesture {
-        DragGesture(minimumDistance: 6, coordinateSpace: .global)
-            .updating($dragOffset) { v, state, _ in state = v.translation.height }
-            .onEnded { v in
-                model.touch()
-                let predicted = model.sheetBaseHeight - v.predictedEndTranslation.height
-                model.setSheet(open: predicted > (collapsed + open) / 2, animated: !reduceMotion)
-            }
-    }
 }
 
 /// Eyebrow, distance and reason: the 96 pt block shared by both states.

@@ -1,7 +1,7 @@
 import MapKit
 import SwiftUI
 
-/// Whether Apple has Look Around imagery at a mile. Asked once per mile and cached.
+/// Whether Apple has Look Around imagery at a spot on the route. Asked once per spot and cached.
 enum LookAroundAvailability {
     case unknown
     case available(MKLookAroundScene)
@@ -13,16 +13,16 @@ final class LookAroundCache {
     private var results: [Int: LookAroundAvailability] = [:]
     private var inFlight: Set<Int> = []
 
-    func availability(mile: Int) -> LookAroundAvailability { results[mile] ?? .unknown }
+    func availability(key: Int) -> LookAroundAvailability { results[key] ?? .unknown }
 
-    /// Looks up the scene; calls `done` when the answer changes.
-    func fetch(mile: Int, at point: GeoPoint, done: @escaping @MainActor () -> Void) {
-        guard results[mile] == nil, !inFlight.contains(mile) else { return }
-        inFlight.insert(mile)
+    /// Looks up the scene for a spot on the route; calls `done` when the answer arrives.
+    func fetch(key: Int, at point: GeoPoint, done: @escaping @MainActor () -> Void) {
+        guard results[key] == nil, !inFlight.contains(key) else { return }
+        inFlight.insert(key)
         Task { @MainActor in
             let scene = try? await MKLookAroundSceneRequest(coordinate: point.coordinate).scene
-            inFlight.remove(mile)
-            results[mile] = scene.map { .available($0) } ?? .none
+            inFlight.remove(key)
+            results[key] = scene.map { .available($0) } ?? .none
             done()
         }
     }
