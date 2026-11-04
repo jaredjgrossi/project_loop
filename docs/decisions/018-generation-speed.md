@@ -168,6 +168,11 @@ No other case changed from the original pin, so the UI-outputs line changed no o
 | tiers 0–2, all anchored (chosen) | 5.2 s / 17.0 s | 0 of 30 | 4 of 30 |
 | tiers 0–1, along-feature anchored only | 2.2 s / 7.6 s | 11 of 30 (up to 4 times) | 1 of 30 |
 
+**Kept: tiers 0–2** (the reviewer, 2026-11-04).
+- **The later flag costs nothing visible.** The app draws the current best route from the first `top3` event.
+- **It has never been wrong about #1.**
+- **How the app uses it:** the `provisional` flag is the moment the route settles. #2, #3 and the final count fill in after it.
+
 **Before and after.** Before is `66610dc`; after is step 3, two passes. Provisional and #1 changes are from the pass with the flag after tiers 0–2.
 
 | row | lights | first candidate (s) before → after | provisional (s) | final, full pool (s) before → after (pass 1 / pass 2) | #1 changes after provisional |
