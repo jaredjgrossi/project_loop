@@ -48,6 +48,20 @@ struct MainScreen: View {
 
             BetterRouteLayer(model: model)
 
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-LoopPinchTarget") {
+                // Recording aid: a see-through square over the map for UI-test pinches, so both
+                // fingers land on the map (not the sheet). Touches pass through to the map.
+                Color.clear
+                    .frame(width: 220, height: 220)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("pinchTarget")
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .offset(y: -40)
+            }
+            #endif
+
             RouteSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .ignoresSafeArea(edges: .bottom)
@@ -74,6 +88,12 @@ struct MainScreen: View {
     /// Debug/screenshot hooks: `-LoopMile 1` opens the sheet on mile 1.
     private func applyLaunchArguments() async {
         let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-LoopZoomAt"), i + 2 < args.count,
+           let mi = Double(args[i + 1]), let z = Double(args[i + 2]), let d = model.shownDetail {
+            // Center on a distance along the route at a zoom (debug, recordings).
+            try? await Task.sleep(for: .seconds(1.5))
+            model.requestCamera(.at(d.line.point(at: mi / d.distanceMi * d.line.length), zoom: z), animated: false)
+        }
         if args.contains("-LoopZoomEsplanade"), let d = model.shownDetail {
             // Close on the esplanade's path pieces, south of mile 1.
             try? await Task.sleep(for: .seconds(1.5))

@@ -26,7 +26,16 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   route-path; "path" joins the legend only when the route has path).
 - **Detail follows the zoom.** On the map, runs shorter than 40 pt on screen join their longer
   neighbour, and a path run is dashed only when it fits two full dashes (30 pt); shorter path
-  runs are drawn solid in route-path. Recomputed as the camera zooms.
+  runs are drawn solid in route-path. Recomputed as the camera zooms, in the same frame.
+- **One continuous line at every zoom** (bug on Jared's phone, 2026-11-04: a gap below mile 1
+  when zooming out). Cause: Mapbox's `line-dasharray` starts the 9/6 pattern at each run's start
+  and stops at its end, so with butt caps a dashed run could end inside a 6 pt off-gap and show
+  the casing as a hole; the phase changed with zoom. Fix: the casing is one line for the whole
+  drawn route under every run; path dashes are cut as geometry, the pattern stretched or squeezed
+  (at most half a period) so each run starts and ends on a dash; every run reaches 0.5 pt past
+  each join (1 pt overlap, butt caps); casing and runs go in one source update, recomputed in
+  the frame the zoom changes, so no frame shows a run missing. Checked frame by frame on a
+  recorded slow pinch out over mile 1 (`PinchRecordingTests`, recording only).
 - **Selection by tapping the route** (Jared, 2026-11-04). A tap within 22 pt of the line, at any
   zoom, selects the nearest point on it (ties on an out-and-back go to the outbound leg): a small
   dot, a selection tick, the strip cursor moves there, and the chip reads "<stretch> · x.x mi ·

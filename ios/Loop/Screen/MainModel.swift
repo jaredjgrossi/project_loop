@@ -284,9 +284,11 @@ final class MainModel {
             let eased = p * p * (3 - 2 * p)
             frame.lead = RouteFrame.plain(blend(points(rank: morph.from), points(rank: morph.to), eased),
                                           fraction: fraction)
+            frame.casing = frame.lead.first?.points ?? []
         } else {
             let mpp = MapScale.metresPerPoint(zoom: zoom, latitude: shown.line.points[0].lat)
             frame.lead = RouteFrame.segments(for: shown, fraction: fraction, metresPerPoint: mpp)
+            frame.casing = shown.line.slice(from: 0, to: shown.line.length * fraction)
         }
         return frame
     }

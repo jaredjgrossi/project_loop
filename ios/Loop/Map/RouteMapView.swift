@@ -160,7 +160,6 @@ struct RouteMapView: UIViewRepresentable {
             static let others = "loop-others-dots"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
-            static let pathSolid = "loop-route-path-solid"
             static let waterSource = "loop-water"
             static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
@@ -183,37 +182,27 @@ struct RouteMapView: UIViewRepresentable {
             others.slot = slot
             try? map.addLayer(others)
 
+            // The casing is one line for the whole route (feature kind "casing"), under every run.
             var casing = LineLayer(id: Ids.casing, source: Ids.routeSource)
+            casing.filter = Exp(.eq) { Exp(.get) { "kind" }; "casing" }
             casing.lineWidth = .constant(Double(Metrics.routeCasing))
             casing.lineCap = .constant(.round)
             casing.lineJoin = .constant(.round)
             casing.slot = slot
             try? map.addLayer(casing)
 
-            // Street under path under waterfront under the plain lead line.
+            // Street under path under waterfront under the plain lead line. Butt caps: runs meet
+            // edge to edge with a 1 pt overlap, and path dashes are cut as geometry (no dasharray),
+            // so every dashed run starts and ends on a dash at any zoom.
             for kind in [DrawKind.street, .path, .waterfront] {
                 var l = LineLayer(id: Ids.kind(kind), source: Ids.routeSource)
                 l.filter = Exp(.eq) { Exp(.get) { "kind" }; kind.rawValue }
-                l.lineCap = .constant(kind == .path ? .butt : .round)
+                l.lineCap = .constant(.butt)
                 l.lineJoin = .constant(.round)
-                switch kind {
-                case .waterfront: l.lineWidth = .constant(4.5)
-                case .path:
-                    l.lineWidth = .constant(4.5)
-                    l.lineDasharray = .constant([9 / 4.5, 6 / 4.5])   // 9/6 pt, in line widths
-                case .street: l.lineWidth = .constant(3.5)
-                }
+                l.lineWidth = .constant(kind == .street ? 3.5 : 4.5)
                 l.slot = slot
                 try? map.addLayer(l)
             }
-            // Path runs too short for two dashes: same color and width, solid.
-            var pathSolid = LineLayer(id: Ids.pathSolid, source: Ids.routeSource)
-            pathSolid.filter = Exp(.eq) { Exp(.get) { "kind" }; "pathSolid" }
-            pathSolid.lineWidth = .constant(4.5)
-            pathSolid.lineCap = .constant(.round)
-            pathSolid.lineJoin = .constant(.round)
-            pathSolid.slot = slot
-            try? map.addLayer(pathSolid)
 
             var lead = LineLayer(id: Ids.lead, source: Ids.routeSource)
             lead.filter = Exp(.eq) { Exp(.get) { "kind" }; "lead" }
@@ -248,12 +237,11 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
             }
             // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
-            for id in [Ids.casing, Ids.lead, Ids.others, Ids.pathSolid] + DrawKind.allCases.map(Ids.kind) {
+            for id in [Ids.casing, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
             set(Ids.lead, "line-color", Palette.routeWater)
-            set(Ids.pathSolid, "line-color", Palette.routePath)
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
             set(Ids.others, "line-color", Palette.routeStreet)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
@@ -279,8 +267,15 @@ struct RouteMapView: UIViewRepresentable {
             lastZoomKey = zoomKey
             let frame = model.frame(now: now, reduceMotion: reduceMotion)
             guard frame != lastFrame else { return }
-            if frame.lead != lastFrame?.lead {
-                let features: [Feature] = frame.lead.map { seg in
+            // Casing and runs go in one source update, so no frame shows one without the other.
+            if frame.lead != lastFrame?.lead || frame.casing != lastFrame?.casing {
+                var features: [Feature] = []
+                if frame.casing.count >= 2 {
+                    var c = Feature(geometry: LineString(frame.casing.map(\.coordinate)))
+                    c.properties = ["kind": .string("casing")]
+                    features.append(c)
+                }
+                features += frame.lead.map { seg in
                     var f = Feature(geometry: LineString(seg.points.map(\.coordinate)))
                     f.properties = ["kind": .string(seg.layerKind)]
                     return f

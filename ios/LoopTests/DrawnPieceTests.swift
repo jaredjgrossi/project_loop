@@ -75,23 +75,55 @@ final class ZoomDetailTests: XCTestCase {
 
     func testOverviewMergesShortRunsAndKeepsRulesOnScreen() {
         let mpp = MapScale.metresPerPoint(zoom: 13.5, latitude: 40.74)
-        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp)
-        XCTAssertLessThan(segs.count, candidate.detail!.drawn.count)
         let runs = DrawnPiece.merged(candidate.detail!.drawn.map { ($0.kind, $0.lengthM) },
                                      lineLength: candidate.line.length, minimum: 40 * mpp)
+        XCTAssertLessThan(runs.count, candidate.detail!.drawn.count)
         for r in runs.dropLast() { XCTAssertGreaterThanOrEqual(r.lengthM / mpp, 40) }
-        for (seg, run) in zip(segs, runs) where seg.kind == .path {
-            XCTAssertEqual(seg.dashed, run.lengthM / mpp >= 30)
-        }
+        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp)
+        let dashedRuns = runs.filter { $0.kind == .path && $0.lengthM / mpp >= 30 }
+        XCTAssertEqual(segs.contains { $0.isDash }, !dashedRuns.isEmpty)
     }
 
-    func testShortPathRunDrawsSolid() {
-        // A route without pieces draws as one plain line; a short path segment goes to the solid layer.
+    func testDashesStartAndEndOnADash() {
+        let mpp = 0.8
+        let dashes = RouteFrame.fittedDashes(from: 100, to: 100 + 47 * mpp, mpp: mpp)  // 47 pt run
+        XCTAssertGreaterThanOrEqual(dashes.count, 2)
+        XCTAssertEqual(dashes.first!.0, 100, accuracy: 1e-9, "starts on a dash")
+        XCTAssertEqual(dashes.last!.1, 100 + 47 * mpp, accuracy: 1e-9, "ends on a dash")
+        let lengths = dashes.map { $0.1 - $0.0 }
+        for l in lengths { XCTAssertEqual(l, lengths[0], accuracy: 1e-9) }
+        // Stretch stays within half a period of the 9/6 pattern.
+        XCTAssertEqual(lengths[0] / mpp, 9, accuracy: 9 * 0.5)
+    }
+
+    func testRunsOverlapByAboutOnePointAtJoins() {
+        let mpp = MapScale.metresPerPoint(zoom: 18, latitude: 40.74)
+        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp)
+        // The first run reaches 0.5 pt past its end; the second 0.5 pt past both ends.
+        let runs = candidate.detail!.drawn
+        let first = segs[0]
+        XCTAssertEqual(Polyline(first.points).length, runs[0].lengthM + 0.5 * mpp, accuracy: 0.01)
+        XCTAssertEqual(segs.first { !$0.isDash && $0.kind == runs[1].kind }.map { Polyline($0.points).length } ?? 0,
+                       runs[1].lengthM + 1.0 * mpp, accuracy: 0.01)
+    }
+
+    func testCasingIsOneLineForTheWholeRoute() async throws {
+        let data = try LoopData(file: RouteFile.loadBundled())
+        let frame = await MainActor.run { () -> RouteFrame in
+            let model = MainModel(data: data)
+            return model.frame(now: 0, reduceMotion: true)
+        }
+        XCTAssertEqual(Polyline(frame.casing).length, candidate.line.length, accuracy: 0.01)
+    }
+
+    func testShortPathRunDrawsSolidAndRouteWithoutPiecesIsOneLine() {
         let one = Candidate(rank: 9, line: candidate.line, distanceMi: 3, distanceTrust: nil, kindText: "", detail: nil)
-        XCTAssertEqual(RouteFrame.segments(for: one, fraction: 1, metresPerPoint: 1).first?.layerKind, "lead")
-        let seg = RouteFrame.Segment(kind: .path, points: [], dashed: false)
-        XCTAssertEqual(seg.layerKind, "pathSolid")
-        XCTAssertEqual(RouteFrame.Segment(kind: .path, points: []).layerKind, "path")
+        XCTAssertEqual(RouteFrame.segments(for: one, fraction: 1, metresPerPoint: 1).map(\.layerKind), ["lead"])
+        // At overview scale the esplanade's ~150 m path runs are under 30 pt: solid, no dashes.
+        let mpp = MapScale.metresPerPoint(zoom: 14.6, latitude: 40.74)
+        for seg in RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp) where seg.kind == .path {
+            XCTAssertFalse(seg.isDash && Polyline(seg.points).length / mpp < 1, "no sliver dashes")
+        }
     }
 }
 
