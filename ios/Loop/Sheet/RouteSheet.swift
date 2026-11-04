@@ -15,7 +15,7 @@ struct RouteSheet: View {
         let height = min(open + 24, max(collapsed - 24, model.sheetBaseHeight - dragOffset))
         let progress = max(0, min(1, (height - collapsed) / (open - collapsed)))
 
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Capsule()
                 .fill(Palette.grabber.color)
                 .frame(width: 36, height: 4)
@@ -29,6 +29,7 @@ struct RouteSheet: View {
                 .accessibilityAction { model.touch(); model.setSheet(open: !model.sheetIsOpen, animated: !reduceMotion) }
 
             CardBlock(model: model)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
 
             // Built only while the sheet is above its collapsed height, so a closed sheet has no
@@ -38,6 +39,7 @@ struct RouteSheet: View {
                     openSection.accessibilityHidden(progress < 0.5)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: max(0, height - collapsed), alignment: .top)
             .clipped()
             .opacity(Double(progress))
@@ -75,16 +77,21 @@ struct RouteSheet: View {
                     .padding(.top, 12)
                 StatRow(stats: CardText.stats(detail.summary))
                     .padding(.top, 10)
-                VStack(alignment: .leading, spacing: 2) {
+                let crowd = CardText.crowdLine(detail, startTime: model.data.request.startHourText)
+                VStack(alignment: .leading, spacing: 0) {
                     Text(CardText.signalsLine(detail.summary))
-                    Text(CardText.crowdLine(detail.summary, startTime: model.data.request.startHourText))
+                    // 11 pt mono fits about 50 characters across the sheet; wrap only at " · ".
+                    ForEach(Array(CardText.wrapAtSeparators(crowd, maxChars: 50).prefix(2).enumerated()), id: \.offset) {
+                        Text($0.element)
+                    }
                 }
                 .typeStyle(.data)
                 .foregroundStyle(Palette.inkMuted.color)
                 .lineLimit(1)
-                .frame(height: 32, alignment: .topLeading)
+                .frame(height: Metrics.dataLinesHeight, alignment: .topLeading)
                 .padding(.top, 8)
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(CardText.signalsLine(detail.summary)). \(crowd)")
             }
         } else if model.cardRevealed {
             Text("Details for this route aren't in the saved file.")
@@ -130,14 +137,18 @@ struct CardBlock: View {
                             Text("mi")
                                 .typeStyle(.unit)
                                 .foregroundStyle(Palette.unitInk.color)
-                            Text(shown.detail?.distanceTrust.text ?? "measured")
-                                .typeStyle(.data)
-                                .foregroundStyle(Palette.inkMuted.color)
+                            // Only the file's own label; the top 3 outlines carry none yet.
+                            if let trust = shown.detail?.distanceTrust {
+                                Text(trust.text)
+                                    .typeStyle(.data)
+                                    .foregroundStyle(Palette.inkMuted.color)
+                            }
                         }
                         .frame(height: 56)
                         .padding(.top, 2)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(CardText.distance(shown.distanceMi)) miles, \(shown.detail?.distanceTrust.text ?? "measured")")
+                        .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.detail?.distanceTrust.text]
+                            .compactMap { $0 }.joined(separator: ", "))
 
                         if let detail = shown.detail {
                             Text(CardText.reason(detail.summary))

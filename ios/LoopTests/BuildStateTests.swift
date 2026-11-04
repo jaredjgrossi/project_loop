@@ -69,6 +69,15 @@ final class BuildStateTests: XCTestCase {
         XCTAssertEqual(s.betterRank, 1)
     }
 
+    func testOutlinesFadeAfterTheFlag() {
+        let before = run(.standard, until: 2.0)
+        XCTAssertEqual(before.outlineOpacity(at: 2.0, peak: 0.3, fade: 0.5), 0.3)
+        let after = run(.standard, until: 3.0)
+        XCTAssertEqual(after.outlineOpacity(at: 3.25, peak: 0.3, fade: 0.5), 0.15, accuracy: 1e-9)
+        XCTAssertEqual(after.outlineOpacity(at: 3.6, peak: 0.3, fade: 0.5), 0)
+        XCTAssertEqual(BuildState.settled(top3: [1, 2, 3]).outlineOpacity(at: 0, peak: 0.3, fade: 0.5), 0)
+    }
+
     func testSettledLaunchState() {
         let s = BuildState.settled(top3: [1, 2, 3])
         XCTAssertEqual(s.shownRank, 1)

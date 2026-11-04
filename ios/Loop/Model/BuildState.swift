@@ -56,6 +56,8 @@ struct BuildState: Equatable {
     private(set) var touched = false
     private(set) var provisional = false
     private(set) var final = false
+    /// When the provisional flag arrived (candidate outlines fade out from here).
+    private(set) var provisionalAt: TimeInterval?
     /// When the settle beat (ring pulse + light haptic) fires; nil if skipped.
     private(set) var settleAt: TimeInterval?
     /// A better #1 the runner hasn't taken yet: shows the quiet chip.
@@ -70,6 +72,7 @@ struct BuildState: Equatable {
         s.shownRank = top3.first
         s.drawStart = -.greatestFiniteMagnitude
         s.provisional = true
+        s.provisionalAt = -.greatestFiniteMagnitude
         s.final = true
         return s
     }
@@ -88,6 +91,7 @@ struct BuildState: Equatable {
         case .provisional:
             guard !provisional else { return }
             provisional = true
+            provisionalAt = t
             if !touched { settleAt = t }
         case let .final(ranks):
             receive(ranks, at: t)
@@ -129,6 +133,13 @@ struct BuildState: Equatable {
     func drawnFraction(at t: TimeInterval, length: Double, metresPerSecond: Double) -> Double {
         guard let start = drawStart, length > 0 else { return 0 }
         return min(1, max(0, (t - start) * metresPerSecond / length))
+    }
+
+    /// Opacity of the other candidates' faint outlines: `peak` while building, fading to 0 over
+    /// `fade` seconds from the provisional flag. None are visible once settled.
+    func outlineOpacity(at t: TimeInterval, peak: Double, fade: TimeInterval) -> Double {
+        guard let flag = provisionalAt else { return peak }
+        return peak * max(0, 1 - (t - flag) / fade)
     }
 
     /// Morph progress 0...1 at `t`, or nil when not morphing.

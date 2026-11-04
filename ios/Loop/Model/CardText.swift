@@ -63,11 +63,65 @@ enum CardText {
         return "\(n) signal crossing\(n == 1 ? "" : "s") · \(Trust(s.signalizedCrossings.status).text)"
     }
 
-    /// "Crowds 7:00 · 5% busy · 58% not scored · estimate"
-    static func crowdLine(_ s: RouteFile.Summary, startTime: String) -> String {
-        let busy = Int(s.crowds.value.rounded())
-        let unscored = Int(s.crowds.notScoredPct.rounded())
-        return "Crowds \(startTime) · \(busy)% busy · \(unscored)% not scored · \(Trust(s.crowds.status).text)"
+    /// "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate"
+    /// Names stretches, not percentages. Only the busiest band present is named (high "busy",
+    /// medium "moderate", low "quiet"), then the stretches with no crowd data, longest first,
+    /// at most two names per part. Out-and-back repeats of a street count once.
+    static func crowdLine(_ d: RouteDetail, startTime: String) -> String {
+        func names(_ stretches: [Stretch]) -> [String] {
+            var total: [String: Double] = [:]
+            var order: [String] = []
+            for s in stretches {
+                let n = shortName(s.name)
+                if total[n] == nil { order.append(n) }
+                total[n, default: 0] += s.lengthM
+            }
+            return order.sorted { total[$0]! > total[$1]! }
+        }
+        func list(_ n: [String]) -> String {
+            let shown = Array(n.prefix(2))
+            let rest = n.count - shown.count
+            let joined = shown.joined(separator: " and ")
+            return rest > 0 ? "\(joined) and \(rest) more" : joined
+        }
+        var parts = ["Crowds at \(startTime)"]
+        let scored = d.stretches.filter { $0.crowd != nil }
+        for (band, word) in [("high", "busy"), ("medium", "moderate"), ("low", "quiet")] {
+            let hits = scored.filter { $0.crowd == band }
+            if !hits.isEmpty { parts.append("\(word) on \(list(names(hits)))"); break }
+        }
+        let unscored = d.stretches.filter { $0.crowd == nil }
+        if !unscored.isEmpty { parts.append("not scored on \(list(names(unscored)))") }
+        parts.append(Trust(d.summary.crowds.status).text)
+        return parts.joined(separator: " · ")
+    }
+
+    /// Breaks a " · " line into lines of at most `maxChars`, only at the separators.
+    static func wrapAtSeparators(_ line: String, maxChars: Int) -> [String] {
+        var lines: [String] = []
+        var current = ""
+        for part in line.components(separatedBy: " · ") {
+            let candidate = current.isEmpty ? part : current + " · " + part
+            if candidate.count <= maxChars || current.isEmpty { current = candidate }
+            else { lines.append(current); current = part }
+        }
+        if !current.isEmpty { lines.append(current) }
+        return lines
+    }
+
+    /// Short street names for data lines: "East 31st Street" → "E 31st St", "FDR Drive" → "FDR Dr",
+    /// "East River Esplanade" → "the esplanade".
+    static func shortName(_ name: String) -> String {
+        var words = name.split(separator: " ").map(String.init)
+        guard let last = words.last else { return name }
+        let features = ["Esplanade", "Greenway", "Promenade", "Park", "Pier", "Path", "Bridge", "Bikeway"]
+        if features.contains(last) { return "the \(last.lowercased())" }
+        let suffix = ["Street": "St", "Avenue": "Ave", "Drive": "Dr", "Boulevard": "Blvd",
+                      "Place": "Pl", "Road": "Rd", "Parkway": "Pkwy"]
+        if let short = suffix[last] { words[words.count - 1] = short }
+        let compass = ["East": "E", "West": "W", "North": "N", "South": "S"]
+        if words.count >= 2, let c = compass[words[0]], words[1].first?.isNumber == true { words[0] = c }
+        return words.joined(separator: " ")
     }
 
     static func distance(_ mi: Double) -> String { String(format: "%.2f", mi) }

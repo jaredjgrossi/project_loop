@@ -28,7 +28,8 @@ enum MapStyle {
         func c(_ t: Palette.Token) -> String { t.hex(dark: dark) }
         return [
             "theme": "default",
-            // "day" keeps the colors flat in both themes; the night preset relights the map.
+            // "day" in both themes, so the map shows our token colors as given; the night preset
+            // darkens everything well below the Night tokens.
             "lightPreset": "day",
             "show3dObjects": false,
             "showPointOfInterestLabels": false,
@@ -37,7 +38,9 @@ enum MapStyle {
             "showLandmarkIconLabels": false,
             "showAdminBoundaries": false,
             "showPedestrianRoads": true,
-            "showPlaceLabels": true,
+            // Night: no basemap labels. Under "day" their halos stay cream (Standard has no halo
+            // color setting), and the "night" preset turns our Night land #1C1915 into ~#020304.
+            "showPlaceLabels": !dark,
             "colorLand": c(Palette.mapLand),
             "colorWater": c(Palette.mapWater),
             "colorGreenspace": c(Palette.mapLawn),

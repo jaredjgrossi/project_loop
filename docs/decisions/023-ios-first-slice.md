@@ -24,10 +24,29 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   Drive). A later slice can split stretches by their 5 m samples.
 - **Whole-route stats.** Stats, the signals line and the crowd line describe the whole route.
   Selecting a mile only moves the marker, the chip and the profile cursor.
+- **Crowd line names stretches** (Jared, 2026-11-04): "Crowds at 7:00 · moderate on E 31st St ·
+  not scored on the esplanade and FDR Dr · estimate". Only the busiest band present is named
+  (high "busy", medium "moderate", low "quiet"), then the stretches without crowd data, longest
+  first, two names at most per part. It needs two lines under the signals line, so the open
+  sheet is 412 pt (the mockup's 398 plus one 14 pt data line), wrapped only at " · ".
+- **No trust label the file doesn't give.** The #2 and #3 distances show none until the file
+  carries one.
+- **Map framing.** The route is fitted below the provenance line and at least 40 pt above the
+  sheet's top, refitted when the sheet opens or closes. Candidate outlines show only while
+  building and fade out within 500 ms of the provisional flag.
+- **Out-and-back mile labels.** When two marks land within 24 pt, each label moves off the line
+  to the left of its direction of travel (outbound one side, return the other), with a leader
+  and a dot at the exact point.
+- **Debug only.** The "build" replay button and the launch-argument hooks exist only in Debug builds.
 - **Build replay.** `BuildState` is a pure state machine over the three messages of decision 018.
   The route may change under the runner only before the provisional flag and only if they haven't
   touched the route or the card. Otherwise a "better route" chip appears; a new #1 after the flag
   also goes to the chip.
+- **Night basemap.** Mapbox Standard runs on its "day" light preset in both themes so the map
+  shows our token colors as given ("night" turns the Night land #1C1915 into about #020304).
+  Under "day" the basemap's label halos stay cream and Standard has no halo color setting, so
+  Night shows no basemap labels (neighborhood or street names). Our route layers ignore the
+  basemap lighting.
 - **Without a Mapbox token** the app draws on a plain paper background, so layout and route can
   be checked before the account exists.
 - **Mapbox logo and attribution** stay visible just above the sheet (Mapbox terms).
@@ -39,6 +58,7 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   2026-11-04). The page doesn't define how mobile users are counted.
 - Night values for the four mockup-only colors (control border, request rule, grabber, unit ink)
   are first picks.
-- The top 3 outlines for #2 and #3 carry a distance but no trust label in the file; the card
-  shows "measured" for them, which the file doesn't state.
+- Night has no neighborhood or street labels (see above). Getting them back needs a custom
+  Mapbox Studio style or a halo color control in Standard.
+- Basemap neighborhood labels can sit under the Mapbox logo (East Village, with the sheet open).
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.

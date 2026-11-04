@@ -122,20 +122,23 @@ final class MainModel {
 
     func setSheet(open: Bool, animated: Bool) {
         let target = open ? Metrics.sheetOpen : Metrics.sheetCollapsed
+        let changed = sheetBaseHeight != target
         withAnimation(animated ? Motion.sheetSettle : nil) { sheetBaseHeight = target }
+        // Refit the route to the space the sheet leaves, in both states.
+        if changed { requestCamera(.overview, animated: animated) }
         if open {
-            if selectedMile == nil, let first = shownDetail?.miles.first { selectMile(first.mile) }
-        } else if selectedMile != nil {
+            if selectedMile == nil, let first = shownDetail?.miles.first { selectMile(first.mile, pan: false) }
+        } else {
             selectedMile = nil
-            requestCamera(.overview, animated: animated)
         }
     }
 
-    /// Select a mile: moves the marker, the chip and the profile cursor; pans so it sits above the sheet.
-    func selectMile(_ mile: Int) {
+    /// Select a mile: moves the marker, the chip and the profile cursor. The map pans only if the
+    /// mile is outside the space between the header and the sheet (after a manual zoom, say).
+    func selectMile(_ mile: Int, pan: Bool = true) {
         guard let mark = shownDetail?.miles.first(where: { $0.mile == mile }) else { return }
         selectedMile = mile
-        requestCamera(.focus(mark.point), animated: true)
+        if pan { requestCamera(.focus(mark.point), animated: true) }
         lookAround.fetch(mile: mile, at: mark.point) { [weak self] in self?.lookAroundVersion += 1 }
     }
 
@@ -154,8 +157,7 @@ final class MainModel {
     /// Tapping a mile mark on the map opens the sheet on that mile.
     func tapMile(_ mile: Int) {
         touch()
-        selectMile(mile)
-        if !sheetIsOpen { setSheet(open: true, animated: true) }
+        if sheetIsOpen { selectMile(mile) } else { selectedMile = mile; setSheet(open: true, animated: true); selectMile(mile, pan: false) }
     }
 
     // MARK: Map
@@ -182,6 +184,7 @@ final class MainModel {
     /// True while the route is still drawing or morphing (the map redraws every frame).
     func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
         guard !reduceMotion, let shown else { return false }
+        if build.outlineOpacity(at: now, peak: 1, fade: Motion.outlineFade) > 0, build.provisional { return true }
         if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
         return build.drawnFraction(at: now, length: shown.line.length,
                                    metresPerSecond: Motion.drawMetresPerSecond) < 1
@@ -198,8 +201,11 @@ final class MainModel {
     /// point by point from the line on screen (no redraw from scratch). Reduce Motion: drawn whole.
     func frame(now: CFTimeInterval, reduceMotion: Bool) -> RouteFrame {
         var frame = RouteFrame()
-        frame.others = otherRanks.compactMap { data.candidate(rank: $0)?.line.points }
-        frame.othersOpacity = build.provisional ? 0.5 : 0.3
+        let outline = reduceMotion
+            ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
+            : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)
+        frame.othersOpacity = outline
+        frame.others = outline > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
         guard let shown else {
             if drawnFraction != 0 { drawnFraction = 0 }
             return frame

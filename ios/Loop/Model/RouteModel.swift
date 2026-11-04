@@ -39,6 +39,10 @@ struct Stretch: Equatable {
     let fromM: Double
     let toM: Double
     let composition: Composition
+    /// The file's crowd band for this stretch ("low", "medium", "high"), nil when not scored.
+    let crowd: String?
+    let crowdTrust: Trust
+    var lengthM: Double { toM - fromM }
 
     struct Composition: Equatable {
         let waterfrontM, pathM, parkM, streetM: Double
@@ -136,7 +140,8 @@ struct LoopData {
                 fromMile: from, toMile: to,
                 fromM: line.length * from / totalMi, toM: line.length * to / totalMi,
                 composition: .init(waterfrontM: comp.waterfrontM, pathM: comp.pathM,
-                                   parkM: comp.parkM, streetM: comp.streetM))
+                                   parkM: comp.parkM, streetM: comp.streetM),
+                crowd: p.crowd?.value, crowdTrust: Trust(p.crowd?.status ?? "not_scored"))
         }.sorted { $0.index < $1.index }
 
         let miles: [MileMark] = features.compactMap { f in

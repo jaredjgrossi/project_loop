@@ -11,13 +11,13 @@ struct MarkerOverlay: View {
             if let detail = model.shownDetail {
                 // Mile marks (the selected one is drawn by the selection layer instead).
                 if showDetailMarks {
+                    let placements = model.markPlacements()
                     ForEach(detail.miles, id: \.mile) { m in
-                        // A mile mark within 80 m of the start would sit on the start dot: skip it.
                         if m.mile != model.selectedMile, model.isDrawn(alongM: m.alongM),
-                           m.point.distance(to: detail.start) > 80,
-                           let p = model.screenPoint(m.point) {
+                           let place = placements[m.mile] {
+                            MarkLeader(placement: place)
                             MileMarkButton(mile: m.mile) { model.tapMile(m.mile) }
-                                .position(p)
+                                .position(place.center)
                         }
                     }
                 }
@@ -112,5 +112,66 @@ struct MapLabel: View {
             .fixedSize()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// Where a mile mark sits on screen. `anchor` is the exact point on the route; `center` is where
+/// the numbered label goes. On an out-and-back the outbound and return marks can land within a few
+/// points of each other, so when two marks are within 24 pt each label moves off the line to the
+/// left of its direction of travel: outbound on one side, return on the other.
+struct MarkPlacement: Equatable {
+    let anchor: CGPoint
+    let center: CGPoint
+    var isOffset: Bool { anchor != center }
+}
+
+extension MainModel {
+    static let markCrowdingDistance: CGFloat = 24
+
+    func markPlacements() -> [Int: MarkPlacement] {
+        guard let detail = shownDetail else { return [:] }
+        let line = detail.line
+        var anchors: [Int: CGPoint] = [:]
+        for m in detail.miles { anchors[m.mile] = screenPoint(m.point) }
+        let startAnchor = screenPoint(detail.start)
+
+        var out: [Int: MarkPlacement] = [:]
+        for m in detail.miles {
+            guard let a = anchors[m.mile] else { continue }
+            let others = anchors.filter { $0.key != m.mile }.map(\.value) + [startAnchor].compactMap { $0 }
+            let crowded = others.contains { hypot($0.x - a.x, $0.y - a.y) < Self.markCrowdingDistance }
+            guard crowded,
+                  let p0 = screenPoint(line.point(at: m.alongM - 15)),
+                  let p1 = screenPoint(line.point(at: m.alongM + 15)) else {
+                out[m.mile] = MarkPlacement(anchor: a, center: a)
+                continue
+            }
+            let dx = p1.x - p0.x, dy = p1.y - p0.y
+            let len = max(0.001, hypot(dx, dy))
+            // Left of travel in screen space (y points down).
+            let n = CGPoint(x: dy / len, y: -dx / len)
+            let distance: CGFloat = m.mile == selectedMile ? Metrics.selectedMileMarker / 2 + 9 : 19
+            out[m.mile] = MarkPlacement(anchor: a, center: CGPoint(x: a.x + n.x * distance, y: a.y + n.y * distance))
+        }
+        return out
+    }
+}
+
+/// The short leader from the exact route point to a label pushed off the line, with a dot on the route.
+struct MarkLeader: View {
+    let placement: MarkPlacement
+    var body: some View {
+        if placement.isOffset {
+            ZStack(alignment: .topLeading) {
+                Path { p in p.move(to: placement.anchor); p.addLine(to: placement.center) }
+                    .stroke(Palette.ink.color, lineWidth: 1)
+                Circle().fill(Palette.ink.color)
+                    .overlay(Circle().strokeBorder(Palette.routeCasing.color, lineWidth: 1))
+                    .frame(width: 6, height: 6)
+                    .position(placement.anchor)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
     }
 }

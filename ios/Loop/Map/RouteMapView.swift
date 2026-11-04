@@ -137,7 +137,7 @@ struct RouteMapView: UIViewRepresentable {
 
         private func updateRoadLabels() {
             guard MapStyle.hasToken, let map = mapView?.mapboxMap else { return }
-            let on = map.cameraState.zoom >= MapStyle.roadLabelMinZoom
+            let on = !dark && map.cameraState.zoom >= MapStyle.roadLabelMinZoom
             guard on != roadLabelsOn else { return }
             roadLabelsOn = on
             try? map.setStyleImportConfigProperty(for: "basemap", config: "showRoadLabels", value: on)
@@ -206,6 +206,10 @@ struct RouteMapView: UIViewRepresentable {
         private func recolorRouteLayers(_ map: MapboxMap) {
             func set(_ id: String, _ prop: String, _ token: Palette.Token) {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
+            }
+            // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
+            for id in [Ids.casing, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
+                try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
             set(Ids.lead, "line-color", Palette.routeWater)
@@ -290,17 +294,20 @@ struct RouteMapView: UIViewRepresentable {
             let target: CameraOptions?
             switch request.kind {
             case .overview:
+                // Clear of the header (START sits above the dot), and the route at least 40 pt
+                // above the sheet's top (TURN hangs below the ring), in whichever state the sheet rests.
                 let coords = model.overviewCoordinates.map(\.coordinate)
-                let padding = UIEdgeInsets(top: model.headerBottom + 44, left: 44,
-                                           bottom: Metrics.sheetCollapsed + 36, right: 44)
+                let padding = UIEdgeInsets(top: model.headerBottom + 28, left: 44,
+                                           bottom: model.sheetBaseHeight + 40 + 22, right: 44)
                 target = try? map.camera(for: coords, camera: CameraOptions(), coordinatesPadding: padding,
                                          maxZoom: 16, offset: nil)
             case let .focus(point):
-                // Put the point at (62% of the width, 64 pt above the open sheet), same zoom,
-                // which keeps the chip clear of the Mapbox logo just above the sheet.
-                let goal = CGPoint(x: size.width * 0.62, y: size.height - Metrics.sheetOpen - 64)
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                // Pan only if the point is outside the band between the header and the sheet.
                 let now = map.point(for: point.coordinate)
+                let top = model.headerBottom + 28, bottom = size.height - model.sheetBaseHeight - 40
+                if now.x > 60, now.x < size.width - 60, now.y > top, now.y < bottom { return }
+                let goal = CGPoint(x: size.width * 0.62, y: (top + bottom) / 2)
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let shifted = CGPoint(x: center.x + (now.x - goal.x), y: center.y + (now.y - goal.y))
                 target = CameraOptions(center: map.coordinate(for: shifted))
             }

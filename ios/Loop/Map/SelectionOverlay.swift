@@ -8,19 +8,23 @@ struct SelectionOverlay: View {
         GeometryReader { geo in
             if let mile = model.selectedMile, let detail = model.shownDetail,
                let mark = detail.miles.first(where: { $0.mile == mile }),
-               let p = model.screenPoint(mark.point) {
+               let place = model.markPlacements()[mile] {
+                let p = place.center
                 let name = detail.stretch(atMile: mark.alongMi)?.name ?? ""
                 let marker = Metrics.selectedMileMarker
                 let tick: CGFloat = 7
-                // Chip sits left of the marker; if there's no room, it flips to the right.
+                // The chip goes on the label's outer side (away from the line when the label is
+                // pushed off it), flipping if there is no room.
                 let leftRoom = p.x - marker / 2 - tick - 8
-                let flip = leftRoom < 200
+                let rightRoom = geo.size.width - (p.x + marker / 2 + tick) - 8
+                let prefersRight = place.isOffset && place.center.x > place.anchor.x
+                let right = prefersRight ? rightRoom >= 200 || leftRoom < 200 : leftRoom < 200
                 ZStack(alignment: .topLeading) {
+                    MarkLeader(placement: place)
                     Path { path in
-                        let y = p.y
-                        let x0 = flip ? p.x + marker / 2 : p.x - marker / 2 - tick
-                        path.move(to: CGPoint(x: x0, y: y))
-                        path.addLine(to: CGPoint(x: x0 + tick, y: y))
+                        let x0 = right ? p.x + marker / 2 : p.x - marker / 2 - tick
+                        path.move(to: CGPoint(x: x0, y: p.y))
+                        path.addLine(to: CGPoint(x: x0 + tick, y: p.y))
                     }
                     .stroke(Palette.ink.color, lineWidth: 1.5)
 
@@ -35,9 +39,8 @@ struct SelectionOverlay: View {
 
                     MileChip(mile: mile, stretchName: name, model: model)
                         .fixedSize()
-                        .frame(width: flip ? geo.size.width - (p.x + marker / 2 + tick) - 8 : max(0, leftRoom),
-                               alignment: flip ? .leading : .trailing)
-                        .position(x: flip ? (p.x + marker / 2 + tick + geo.size.width - 8) / 2 : 8 + max(0, leftRoom) / 2,
+                        .frame(width: max(0, right ? rightRoom : leftRoom), alignment: right ? .leading : .trailing)
+                        .position(x: right ? p.x + marker / 2 + tick + max(0, rightRoom) / 2 : 8 + max(0, leftRoom) / 2,
                                   y: p.y)
                 }
             }

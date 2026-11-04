@@ -103,7 +103,11 @@ enum Metrics {
     static let s24: CGFloat = 24, s32: CGFloat = 32, s52: CGFloat = 52
     static let radiusBar: CGFloat = 3, radiusThumb: CGFloat = 8, radiusButton: CGFloat = 14, radiusSheet: CGFloat = 24
     static let sheetCollapsed: CGFloat = 216
-    static let sheetOpen: CGFloat = 398
+    /// 398 in the mockup, plus one 14 pt data line: the crowd sentence names stretches and
+    /// needs two lines under the signals line.
+    static let sheetOpen: CGFloat = 412
+    /// Signals line + two crowd lines at the data style's 14 pt line height.
+    static let dataLinesHeight: CGFloat = 42
     static let selectedMileMarker: CGFloat = 30
     static let routeCasing: CGFloat = 10
     static let minTap: CGFloat = 44
@@ -119,4 +123,7 @@ enum Motion {
     /// Route draw speed, metres of route per second (constant, linear).
     static let drawMetresPerSecond: Double = 2_500
     static let morphDuration: TimeInterval = 0.6
+    /// Candidate outlines: faint while building, gone 500 ms after the provisional flag.
+    static let outlinePeakOpacity: Double = 0.3
+    static let outlineFade: TimeInterval = 0.5
 }

@@ -37,14 +37,32 @@ final class CardTextTests: XCTestCase {
             .init(value: "8 m", label: "climb", trust: Trust("estimate")),
         ])
         XCTAssertEqual(CardText.signalsLine(s), "11 signal crossings · measured")
-        XCTAssertEqual(CardText.crowdLine(s, startTime: data.request.startHourText),
-                       "Crowds 7:00 · 5% busy · 58% not scored · estimate")
+        XCTAssertEqual(CardText.crowdLine(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),
+                       "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate")
     }
 
     func testRequestCard() throws {
         let data = try LoopData(file: RouteFile.loadBundled())
         XCTAssertEqual(data.request.text, "3 miles from the Kips Bay Library at 7 am.")
         XCTAssertEqual(data.request.provenance, "3 mi · 7:00 am you said · Training preset")
+    }
+
+    func testWrapAtSeparators() {
+        let line = "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate"
+        XCTAssertEqual(CardText.wrapAtSeparators(line, maxChars: 50), [
+            "Crowds at 7:00 · moderate on E 31st St",
+            "not scored on the esplanade and FDR Dr · estimate",
+        ])
+        XCTAssertEqual(CardText.wrapAtSeparators("a · b", maxChars: 50), ["a · b"])
+    }
+
+    func testShortNames() {
+        XCTAssertEqual(CardText.shortName("East 31st Street"), "E 31st St")
+        XCTAssertEqual(CardText.shortName("FDR Drive"), "FDR Dr")
+        XCTAssertEqual(CardText.shortName("East River Esplanade"), "the esplanade")
+        XCTAssertEqual(CardText.shortName("Hudson River Greenway"), "the greenway")
+        XCTAssertEqual(CardText.shortName("East End Avenue"), "East End Ave", "compass word kept before a name")
+        XCTAssertEqual(CardText.shortName("Broadway"), "Broadway")
     }
 
     func testTrustText() {
