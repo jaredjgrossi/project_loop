@@ -1,0 +1,7 @@
+// Shared build settings. Personal values (the Mapbox token, the signing team) live in
+// Secrets.xcconfig, which is git-ignored. Copy Secrets.example.xcconfig to start one.
+MAPBOX_ACCESS_TOKEN =
+DEVELOPMENT_TEAM =
+LOOP_BUNDLE_ID = com.jaredgrossi.loop
+
+#include? "Secrets.xcconfig"

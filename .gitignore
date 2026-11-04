@@ -14,3 +14,8 @@ out/
 # Personal GPS/health data - never commit
 apple_health_export/
 data/
+
+# iOS app (ios/): generated Xcode project, build output, and local secrets
+ios/Loop.xcodeproj/
+ios/build/
+ios/Config/Secrets.xcconfig

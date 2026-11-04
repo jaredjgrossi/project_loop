@@ -1,0 +1,3906 @@
+{
+ "about": {
+  "generated_at": "2026-11-04T11:13",
+  "commit": "66610dc",
+  "branch": "driveway-closure",
+  "start": "Kips Bay Library, a public stand-in for the reviewer's home area (decision 011)",
+  "settings": "3 mi, 7:00, Training preset; generated without the reviewer's runs, as the review page is",
+  "closures": "known closures applied, including the curated NYU Langone driveways between E 33rd and E 34th St (decision 017)"
+ },
+ "request": [
+  {
+   "key": "start",
+   "title": "Start",
+   "value": "446 3rd Ave, 10016",
+   "origin": "you said"
+  },
+  {
+   "key": "distance",
+   "title": "Distance",
+   "value": "3 mi",
+   "origin": "you said"
+  },
+  {
+   "key": "tolerance",
+   "title": "Within",
+   "value": "5%",
+   "origin": "default"
+  },
+  {
+   "key": "shape",
+   "title": "Shape",
+   "value": "any",
+   "origin": "default"
+  },
+  {
+   "key": "mode",
+   "title": "Mode",
+   "value": "Training",
+   "origin": "you said"
+  },
+  {
+   "key": "lights",
+   "title": "Lights",
+   "value": "waits for the light",
+   "origin": "Training preset"
+  },
+  {
+   "key": "crowds",
+   "title": "Crowds",
+   "value": "avoid",
+   "origin": "Training preset"
+  },
+  {
+   "key": "scenery",
+   "title": "Scenery",
+   "value": "some",
+   "origin": "Training preset"
+  },
+  {
+   "key": "surface",
+   "title": "Surface",
+   "value": "any",
+   "origin": "Training preset"
+  },
+  {
+   "key": "turns",
+   "title": "Turns",
+   "value": "fewer",
+   "origin": "Training preset"
+  },
+  {
+   "key": "familiar",
+   "title": "Matches routes you run",
+   "value": "favor routes you run",
+   "origin": "Training preset"
+  },
+  {
+   "key": "start_time",
+   "title": "Start time",
+   "value": "07:00 (hour 7; sets the crowd band)",
+   "origin": "you said"
+  },
+  {
+   "key": "start_date",
+   "title": "Day",
+   "value": "Thursday 2026-11-05",
+   "origin": "default"
+  }
+ ],
+ "route": {
+  "type": "FeatureCollection",
+  "features": [
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.979889,
+       40.743909
+      ],
+      [
+       -73.97719,
+       40.742768
+      ],
+      [
+       -73.97751,
+       40.742341
+      ],
+      [
+       -73.977408,
+       40.742281
+      ],
+      [
+       -73.97739,
+       40.742264
+      ],
+      [
+       -73.97541,
+       40.741425
+      ],
+      [
+       -73.975154,
+       40.741287
+      ],
+      [
+       -73.973227,
+       40.740448
+      ],
+      [
+       -73.973079,
+       40.740803
+      ],
+      [
+       -73.973059,
+       40.740879
+      ],
+      [
+       -73.97302,
+       40.740863
+      ],
+      [
+       -73.972842,
+       40.741896
+      ],
+      [
+       -73.972735,
+       40.742242
+      ],
+      [
+       -73.972675,
+       40.742401
+      ],
+      [
+       -73.972516,
+       40.74276
+      ],
+      [
+       -73.972397,
+       40.742984
+      ],
+      [
+       -73.97207,
+       40.743178
+      ],
+      [
+       -73.971975,
+       40.743052
+      ],
+      [
+       -73.972086,
+       40.743078
+      ],
+      [
+       -73.9722,
+       40.742828
+      ],
+      [
+       -73.972316,
+       40.742503
+      ],
+      [
+       -73.97242,
+       40.741977
+      ],
+      [
+       -73.972331,
+       40.741954
+      ],
+      [
+       -73.972065,
+       40.741917
+      ],
+      [
+       -73.972334,
+       40.740716
+      ],
+      [
+       -73.97237,
+       40.740677
+      ],
+      [
+       -73.972435,
+       40.74066
+      ],
+      [
+       -73.972461,
+       40.740532
+      ],
+      [
+       -73.972491,
+       40.740483
+      ],
+      [
+       -73.972566,
+       40.7401
+      ],
+      [
+       -73.972507,
+       40.740092
+      ],
+      [
+       -73.972499,
+       40.740047
+      ],
+      [
+       -73.972504,
+       40.739965
+      ],
+      [
+       -73.972624,
+       40.739516
+      ],
+      [
+       -73.97281,
+       40.738961
+      ],
+      [
+       -73.972858,
+       40.738973
+      ],
+      [
+       -73.972931,
+       40.738993
+      ],
+      [
+       -73.973103,
+       40.738684
+      ],
+      [
+       -73.973238,
+       40.738484
+      ],
+      [
+       -73.973389,
+       40.738283
+      ],
+      [
+       -73.97347,
+       40.738066
+      ],
+      [
+       -73.973618,
+       40.737862
+      ],
+      [
+       -73.973572,
+       40.737844
+      ],
+      [
+       -73.974083,
+       40.737137
+      ],
+      [
+       -73.974337,
+       40.736771
+      ],
+      [
+       -73.974419,
+       40.73663
+      ],
+      [
+       -73.974454,
+       40.736589
+      ],
+      [
+       -73.974522,
+       40.736384
+      ],
+      [
+       -73.974573,
+       40.736148
+      ],
+      [
+       -73.974551,
+       40.735518
+      ],
+      [
+       -73.974567,
+       40.735505
+      ],
+      [
+       -73.974643,
+       40.735499
+      ],
+      [
+       -73.974677,
+       40.735298
+      ],
+      [
+       -73.974572,
+       40.734914
+      ],
+      [
+       -73.974337,
+       40.734702
+      ],
+      [
+       -73.974315,
+       40.734661
+      ],
+      [
+       -73.974177,
+       40.734062
+      ],
+      [
+       -73.974178,
+       40.73401
+      ],
+      [
+       -73.974195,
+       40.733936
+      ],
+      [
+       -73.974138,
+       40.733891
+      ],
+      [
+       -73.974114,
+       40.733856
+      ],
+      [
+       -73.974098,
+       40.733806
+      ],
+      [
+       -73.973876,
+       40.732909
+      ],
+      [
+       -73.973869,
+       40.732787
+      ],
+      [
+       -73.973886,
+       40.732715
+      ],
+      [
+       -73.973849,
+       40.732585
+      ],
+      [
+       -73.974042,
+       40.73255
+      ],
+      [
+       -73.974061,
+       40.732627
+      ],
+      [
+       -73.974305,
+       40.732592
+      ],
+      [
+       -73.974519,
+       40.732532
+      ],
+      [
+       -73.974493,
+       40.732433
+      ],
+      [
+       -73.974519,
+       40.732532
+      ],
+      [
+       -73.974305,
+       40.732592
+      ],
+      [
+       -73.974061,
+       40.732627
+      ],
+      [
+       -73.974042,
+       40.73255
+      ],
+      [
+       -73.973849,
+       40.732585
+      ],
+      [
+       -73.973886,
+       40.732715
+      ],
+      [
+       -73.973869,
+       40.732787
+      ],
+      [
+       -73.973876,
+       40.732909
+      ],
+      [
+       -73.974098,
+       40.733806
+      ],
+      [
+       -73.974114,
+       40.733856
+      ],
+      [
+       -73.974138,
+       40.733891
+      ],
+      [
+       -73.974195,
+       40.733936
+      ],
+      [
+       -73.974178,
+       40.73401
+      ],
+      [
+       -73.974177,
+       40.734062
+      ],
+      [
+       -73.974315,
+       40.734661
+      ],
+      [
+       -73.974337,
+       40.734702
+      ],
+      [
+       -73.974572,
+       40.734914
+      ],
+      [
+       -73.974677,
+       40.735298
+      ],
+      [
+       -73.974643,
+       40.735499
+      ],
+      [
+       -73.974567,
+       40.735505
+      ],
+      [
+       -73.974551,
+       40.735518
+      ],
+      [
+       -73.974573,
+       40.736148
+      ],
+      [
+       -73.974522,
+       40.736384
+      ],
+      [
+       -73.974454,
+       40.736589
+      ],
+      [
+       -73.974419,
+       40.73663
+      ],
+      [
+       -73.974337,
+       40.736771
+      ],
+      [
+       -73.974083,
+       40.737137
+      ],
+      [
+       -73.973572,
+       40.737844
+      ],
+      [
+       -73.973618,
+       40.737862
+      ],
+      [
+       -73.97347,
+       40.738066
+      ],
+      [
+       -73.973389,
+       40.738283
+      ],
+      [
+       -73.973238,
+       40.738484
+      ],
+      [
+       -73.973103,
+       40.738684
+      ],
+      [
+       -73.972931,
+       40.738993
+      ],
+      [
+       -73.972858,
+       40.738973
+      ],
+      [
+       -73.97281,
+       40.738961
+      ],
+      [
+       -73.972624,
+       40.739516
+      ],
+      [
+       -73.972504,
+       40.739965
+      ],
+      [
+       -73.972499,
+       40.740047
+      ],
+      [
+       -73.972507,
+       40.740092
+      ],
+      [
+       -73.972566,
+       40.7401
+      ],
+      [
+       -73.972491,
+       40.740483
+      ],
+      [
+       -73.972461,
+       40.740532
+      ],
+      [
+       -73.972435,
+       40.74066
+      ],
+      [
+       -73.97237,
+       40.740677
+      ],
+      [
+       -73.972334,
+       40.740716
+      ],
+      [
+       -73.972065,
+       40.741917
+      ],
+      [
+       -73.972331,
+       40.741954
+      ],
+      [
+       -73.97242,
+       40.741977
+      ],
+      [
+       -73.972316,
+       40.742503
+      ],
+      [
+       -73.9722,
+       40.742828
+      ],
+      [
+       -73.972086,
+       40.743078
+      ],
+      [
+       -73.971975,
+       40.743052
+      ],
+      [
+       -73.97207,
+       40.743178
+      ],
+      [
+       -73.972397,
+       40.742984
+      ],
+      [
+       -73.972516,
+       40.74276
+      ],
+      [
+       -73.972675,
+       40.742401
+      ],
+      [
+       -73.972735,
+       40.742242
+      ],
+      [
+       -73.972842,
+       40.741896
+      ],
+      [
+       -73.97302,
+       40.740863
+      ],
+      [
+       -73.973059,
+       40.740879
+      ],
+      [
+       -73.973079,
+       40.740803
+      ],
+      [
+       -73.973227,
+       40.740448
+      ],
+      [
+       -73.975154,
+       40.741287
+      ],
+      [
+       -73.97541,
+       40.741425
+      ],
+      [
+       -73.97739,
+       40.742264
+      ],
+      [
+       -73.977408,
+       40.742281
+      ],
+      [
+       -73.97751,
+       40.742341
+      ],
+      [
+       -73.97719,
+       40.742768
+      ],
+      [
+       -73.979889,
+       40.743909
+      ]
+     ]
+    },
+    "properties": {
+     "name": "Loop route",
+     "requested_miles": 3,
+     "actual_miles": 3.042,
+     "percent_off": 1.4,
+     "estimated_minutes_walking_pace": 59,
+     "seed": 0,
+     "profile": "foot",
+     "turns": 10,
+     "turns_per_mile": 3.3,
+     "longest_straight_m": 1208,
+     "pct_in_long_runs": 54,
+     "retraced_pct": 95,
+     "mean_width_m": 0,
+     "compactness": 0.0,
+     "out_and_back_pct": 100,
+     "closure_m": 0,
+     "rank": 1,
+     "method": "corridor_out_and_back",
+     "kind": "out_and_back",
+     "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
+     "score": 80,
+     "elevation": {
+      "status": "estimate",
+      "source": "GraphHopper Skadi elevation (AWS Terrain Tiles; USGS data in the US)",
+      "profile": [
+       {
+        "mile": 0.0,
+        "elevation_m": 9.5
+       },
+       {
+        "mile": 0.1,
+        "elevation_m": 9.2
+       },
+       {
+        "mile": 0.2,
+        "elevation_m": 9.0
+       },
+       {
+        "mile": 0.3,
+        "elevation_m": 7.4
+       },
+       {
+        "mile": 0.4,
+        "elevation_m": 3.4
+       },
+       {
+        "mile": 0.5,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 0.6,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 0.7,
+        "elevation_m": 0.2
+       },
+       {
+        "mile": 0.8,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 0.9,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.0,
+        "elevation_m": 0.3
+       },
+       {
+        "mile": 1.1,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 1.2,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.3,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.4,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.5,
+        "elevation_m": 0.3
+       },
+       {
+        "mile": 1.6,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.7,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.8,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 1.9,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 2.0,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 2.1,
+        "elevation_m": 0.5
+       },
+       {
+        "mile": 2.2,
+        "elevation_m": 0.0
+       },
+       {
+        "mile": 2.3,
+        "elevation_m": 0.6
+       },
+       {
+        "mile": 2.4,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 2.5,
+        "elevation_m": 1.0
+       },
+       {
+        "mile": 2.6,
+        "elevation_m": 2.0
+       },
+       {
+        "mile": 2.7,
+        "elevation_m": 6.5
+       },
+       {
+        "mile": 2.8,
+        "elevation_m": 8.5
+       },
+       {
+        "mile": 2.9,
+        "elevation_m": 9.1
+       },
+       {
+        "mile": 3.0,
+        "elevation_m": 9.4
+       }
+      ],
+      "gain_m": 8.0,
+      "loss_m": 8.5,
+      "min_m": 0.0,
+      "max_m": 9.5,
+      "max_grade_pct": 2.9
+     },
+     "start_hour": 7,
+     "request": [
+      {
+       "key": "start",
+       "title": "Start",
+       "value": "446 3rd Ave, 10016",
+       "origin": "you said"
+      },
+      {
+       "key": "distance",
+       "title": "Distance",
+       "value": "3 mi",
+       "origin": "you said"
+      },
+      {
+       "key": "tolerance",
+       "title": "Within",
+       "value": "5%",
+       "origin": "default"
+      },
+      {
+       "key": "shape",
+       "title": "Shape",
+       "value": "any",
+       "origin": "default"
+      },
+      {
+       "key": "mode",
+       "title": "Mode",
+       "value": "Training",
+       "origin": "you said"
+      },
+      {
+       "key": "lights",
+       "title": "Lights",
+       "value": "waits for the light",
+       "origin": "Training preset"
+      },
+      {
+       "key": "crowds",
+       "title": "Crowds",
+       "value": "avoid",
+       "origin": "Training preset"
+      },
+      {
+       "key": "scenery",
+       "title": "Scenery",
+       "value": "some",
+       "origin": "Training preset"
+      },
+      {
+       "key": "surface",
+       "title": "Surface",
+       "value": "any",
+       "origin": "Training preset"
+      },
+      {
+       "key": "turns",
+       "title": "Turns",
+       "value": "fewer",
+       "origin": "Training preset"
+      },
+      {
+       "key": "familiar",
+       "title": "Matches routes you run",
+       "value": "favor routes you run",
+       "origin": "Training preset"
+      },
+      {
+       "key": "start_time",
+       "title": "Start time",
+       "value": "07:00 (hour 7; sets the crowd band)",
+       "origin": "you said"
+      },
+      {
+       "key": "start_date",
+       "title": "Day",
+       "value": "Thursday 2026-11-05",
+       "origin": "default"
+      }
+     ],
+     "stroke": "#e8590c",
+     "stroke-width": 4,
+     "summary": {
+      "distance": {
+       "value": 3.03,
+       "status": "measured",
+       "source": "route geometry (GraphHopper)",
+       "meters": 4878,
+       "router_meters": 4896,
+       "unit": "mi"
+      },
+      "kind": "out_and_back",
+      "waterfront_pct": {
+       "value": 51.2,
+       "status": "measured",
+       "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares",
+       "unit": "%"
+      },
+      "park_pct": {
+       "value": 0.0,
+       "status": "measured",
+       "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares",
+       "unit": "%"
+      },
+      "path_pct": {
+       "value": 5.4,
+       "status": "measured",
+       "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares",
+       "unit": "%"
+      },
+      "street_pct": {
+       "value": 43.3,
+       "status": "measured",
+       "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares",
+       "unit": "%"
+      },
+      "signalized_crossings": {
+       "value": 11,
+       "status": "measured",
+       "source": "OpenStreetMap crosswalks tagged crossing=traffic_signals that the route walks",
+       "counted": "signalized crossings, each time the route crosses (decision 020)"
+      },
+      "lights_per_mile": {
+       "value": 3.6,
+       "status": "measured",
+       "source": "OpenStreetMap crosswalks tagged crossing=traffic_signals that the route walks",
+       "counted": "signalized crossings, each time the route crosses (decision 020)",
+       "unit": "per mi"
+      },
+      "ranking_signals_per_mile": {
+       "value": 2.0,
+       "status": "measured",
+       "source": "OpenStreetMap crosswalks tagged crossing=traffic_signals that the route walks",
+       "counted": "each signalized crosswalk once, however often it is crossed: the ranking's input",
+       "unit": "per mi"
+      },
+      "climb": {
+       "value": 8.0,
+       "status": "estimate",
+       "source": "GraphHopper Skadi elevation (AWS Terrain Tiles; USGS data in the US)",
+       "unit": "m"
+      },
+      "wait_at_lights": {
+       "value": 3.0,
+       "status": "estimate",
+       "source": "decision 015's signal-timing assumptions, at every signalized crossing",
+       "unit": "min"
+      },
+      "crowds": {
+       "value": 5.4,
+       "status": "estimate",
+       "source": "subway volume and DOT counts, weekday 7-9am (a DOT count window), scheduled crowd pulse (school or ferry, decision 022)",
+       "not_scored_pct": 58.4,
+       "unit": "% busy"
+      },
+      "turnarounds": [
+       {
+        "value": 1.52,
+        "status": "measured",
+        "source": "route geometry: where the heading reverses by 150 degrees or more",
+        "meters": 2439,
+        "unit": "mi"
+       }
+      ],
+      "score": {
+       "value": 80,
+       "status": "provisional",
+       "source": "combined ranking; weights not calibrated (decision 010)"
+      },
+      "rank": {
+       "value": 1,
+       "status": "measured",
+       "source": "distinct routes that passed every hard rule within the distance limit, duplicates dropped as for the top 3 (decision 020)",
+       "of": 31
+      }
+     }
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      -73.97994,
+      40.743839
+     ]
+    },
+    "properties": {
+     "name": "Start / finish",
+     "label": "446 3 AVENUE, New York, NY, USA",
+     "marker-color": "#2b8a3e"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      -73.9729872389933,
+      40.7388919659946
+     ]
+    },
+    "properties": {
+     "feature": "mile",
+     "mile": 1,
+     "along_m": 1609,
+     "along_mi": 1.0,
+     "status": "measured",
+     "source": "route geometry"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      -73.97323855233206,
+      40.73848326477652
+     ]
+    },
+    "properties": {
+     "feature": "mile",
+     "mile": 2,
+     "along_m": 3219,
+     "along_mi": 2.0,
+     "status": "measured",
+     "source": "route geometry"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      -73.97937099735618,
+      40.743690014814156
+     ]
+    },
+    "properties": {
+     "feature": "mile",
+     "mile": 3,
+     "along_m": 4828,
+     "along_mi": 3.0,
+     "status": "measured",
+     "source": "route geometry"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "Point",
+     "coordinates": [
+      -73.974493,
+      40.732433
+     ]
+    },
+    "properties": {
+     "feature": "turnaround",
+     "along_m": 2439,
+     "along_mi": 1.52,
+     "status": "measured",
+     "source": "route geometry: where the heading reverses by 150 degrees or more"
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.979889,
+       40.743909
+      ],
+      [
+       -73.9796815908479,
+       40.74382131795385
+      ],
+      [
+       -73.97947418169579,
+       40.74373363590771
+      ],
+      [
+       -73.9792667725437,
+       40.74364595386156
+      ],
+      [
+       -73.97905936339158,
+       40.74355827181542
+      ],
+      [
+       -73.97885195423949,
+       40.74347058976927
+      ],
+      [
+       -73.97864454508738,
+       40.743382907723124
+      ],
+      [
+       -73.97843713593528,
+       40.743295225676974
+      ],
+      [
+       -73.97822972678317,
+       40.74320754363083
+      ],
+      [
+       -73.97802231763107,
+       40.74311986158468
+      ],
+      [
+       -73.97781490847896,
+       40.74303217953853
+      ],
+      [
+       -73.97760749932687,
+       40.74294449749239
+      ],
+      [
+       -73.97740009017475,
+       40.74285681544624
+      ],
+      [
+       -73.97719268102266,
+       40.742769133400095
+      ],
+      [
+       -73.97730615972434,
+       40.74261299936783
+      ],
+      [
+       -73.97742384062144,
+       40.74245596892076
+      ],
+      [
+       -73.9774597020263,
+       40.742311412956646
+      ],
+      [
+       -73.97726482367028,
+       40.74221095811079
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 0,
+     "name": "East 31st Street",
+     "kind": "street",
+     "from_mile": 0.0,
+     "to_mile": 0.21,
+     "length_m": 340,
+     "signals": {
+      "value": 3,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": "medium",
+      "status": "estimate",
+      "basis": "subway ridership within 800 m, weekday 7-9am (a DOT count window)",
+      "band": "weekday 7-9am (a DOT count window)",
+      "high_pct": 5.6
+     },
+     "composition": {
+      "waterfront_m": 0.0,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 360.2,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On East 31st Street",
+       "source": "OSM way w46334598",
+       "trust": "listed"
+      },
+      {
+       "text": "Sidewalk about 15 ft wide",
+       "source": "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), width measured across the way by Loop",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.97726482367028,
+       40.74221095811079
+      ],
+      [
+       -73.97705752849325,
+       40.74212311939689
+      ],
+      [
+       -73.97685023331621,
+       40.742035280682984
+      ],
+      [
+       -73.97664293813918,
+       40.741947441969074
+      ],
+      [
+       -73.97643564296214,
+       40.74185960325517
+      ],
+      [
+       -73.97622834778511,
+       40.74177176454126
+      ],
+      [
+       -73.97602105260808,
+       40.74168392582736
+      ],
+      [
+       -73.97581375743103,
+       40.74159608711346
+      ],
+      [
+       -73.97560646225399,
+       40.74150824839955
+      ],
+      [
+       -73.97539987993795,
+       40.74141954465406
+      ],
+      [
+       -73.97520622582958,
+       40.74131515298626
+      ],
+      [
+       -73.97500359524992,
+       40.74122151500502
+      ],
+      [
+       -73.97479764989004,
+       40.74113184808393
+      ],
+      [
+       -73.97459170453016,
+       40.74104218116284
+      ],
+      [
+       -73.97438575917027,
+       40.740952514241755
+      ],
+      [
+       -73.9741798138104,
+       40.74086284732066
+      ],
+      [
+       -73.97397386845051,
+       40.74077318039957
+      ],
+      [
+       -73.97376792309063,
+       40.74068351347849
+      ],
+      [
+       -73.97356197773075,
+       40.740593846557395
+      ],
+      [
+       -73.97335603237087,
+       40.740504179636304
+      ],
+      [
+       -73.9732001625543,
+       40.74051237360285
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 1,
+     "name": "East 30th Street",
+     "kind": "street",
+     "from_mile": 0.21,
+     "to_mile": 0.46,
+     "length_m": 400,
+     "signals": {
+      "value": 1,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": "low",
+      "status": "estimate",
+      "basis": "far from the subway (assumption), weekday 7-9am (a DOT count window)",
+      "band": "weekday 7-9am (a DOT count window)",
+      "high_pct": 0.0
+     },
+     "composition": {
+      "waterfront_m": 0.0,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 418.4,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On East 30th Street",
+       "source": "OSM way w226040997",
+       "trust": "listed"
+      },
+      {
+       "text": "Sidewalk about 16 ft wide",
+       "source": "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), width measured across the way by Loop",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.9732001625543,
+       40.74051237360285
+      ],
+      [
+       -73.97312830151388,
+       40.74068474299034
+      ],
+      [
+       -73.97306434949014,
+       40.74085867193746
+      ],
+      [
+       -73.97299841146183,
+       40.74098828629177
+      ],
+      [
+       -73.97296751009912,
+       40.74116761835732
+      ],
+      [
+       -73.97293660873643,
+       40.74134695042288
+      ],
+      [
+       -73.97290570737373,
+       40.74152628248843
+      ],
+      [
+       -73.97287480601102,
+       40.741705614553986
+      ],
+      [
+       -73.97284390464833,
+       40.74188494661954
+      ],
+      [
+       -73.97279091443367,
+       40.74206119257897
+      ],
+      [
+       -73.97273647331343,
+       40.74223723582761
+      ],
+      [
+       -73.97267058400767,
+       40.74241097069963
+      ],
+      [
+       -73.97259468894961,
+       40.74258233123954
+      ],
+      [
+       -73.97251879389155,
+       40.74275369177945
+      ],
+      [
+       -73.97243022237278,
+       40.74292146376889
+      ],
+      [
+       -73.97227964715337,
+       40.743053622178124
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 2,
+     "name": "FDR Drive",
+     "kind": "street",
+     "from_mile": 0.46,
+     "to_mile": 0.65,
+     "length_m": 300,
+     "signals": {
+      "value": 0,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": null,
+      "status": "not_scored",
+      "basis": "no crowd data off mapped sidewalks (paths, greenways, bridges)"
+     },
+     "composition": {
+      "waterfront_m": 79.4,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 222.4,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On FDR Drive",
+       "source": "OSM way w46201647",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.97227964715337,
+       40.743053622178124
+      ],
+      [
+       -73.97209246650368,
+       40.743164671248586
+      ],
+      [
+       -73.97199231407032,
+       40.743056055548
+      ],
+      [
+       -73.97213170602481,
+       40.74297776748944
+      ],
+      [
+       -73.97220768210491,
+       40.74280647686126
+      ],
+      [
+       -73.97226997322134,
+       40.74263195433675
+      ],
+      [
+       -73.97232523318429,
+       40.74245630139486
+      ],
+      [
+       -73.97236059554365,
+       40.74227744946196
+      ],
+      [
+       -73.972395957903,
+       40.74209859752905
+      ],
+      [
+       -73.97234810225962,
+       40.74195841968507
+      ],
+      [
+       -73.97211547591705,
+       40.741924021086206
+      ],
+      [
+       -73.97209629334019,
+       40.74177728512427
+      ],
+      [
+       -73.97213622701352,
+       40.74159899389129
+      ],
+      [
+       -73.97217616068686,
+       40.7414207026583
+      ],
+      [
+       -73.97221609436019,
+       40.74124241142532
+      ],
+      [
+       -73.97225602803353,
+       40.74106412019234
+      ],
+      [
+       -73.97229596170686,
+       40.74088582895936
+      ],
+      [
+       -73.97234047958145,
+       40.740708980453434
+      ],
+      [
+       -73.97245293529713,
+       40.74057170315259
+      ],
+      [
+       -73.97250777563612,
+       40.740397332418276
+      ],
+      [
+       -73.97254280629635,
+       40.74021844251333
+      ],
+      [
+       -73.97250428522054,
+       40.74007672936553
+      ],
+      [
+       -73.97252201286524,
+       40.739897601862566
+      ],
+      [
+       -73.97256937929512,
+       40.73972037247075
+      ],
+      [
+       -73.972616745725,
+       40.73954314307894
+      ],
+      [
+       -73.9726737344744,
+       40.73936759874574
+      ],
+      [
+       -73.97273246341831,
+       40.739192359155034
+      ],
+      [
+       -73.97279119236222,
+       40.73901711956434
+      ],
+      [
+       -73.97294394168357,
+       40.73896975011498
+      ],
+      [
+       -73.97303661571979,
+       40.73880326013129
+      ],
+      [
+       -73.97313379294661,
+       40.73863838081982
+      ],
+      [
+       -73.9732427150776,
+       40.73847772363842
+      ],
+      [
+       -73.97336061228722,
+       40.73832078761766
+      ],
+      [
+       -73.97343829953388,
+       40.73815092594009
+      ],
+      [
+       -73.9735287639284,
+       40.73798500107167
+      ],
+      [
+       -73.97357254608029,
+       40.73784324446427
+      ],
+      [
+       -73.97368703213604,
+       40.73768484594876
+      ],
+      [
+       -73.9738015181918,
+       40.73752644743325
+      ],
+      [
+       -73.97391600424757,
+       40.73736804891774
+      ],
+      [
+       -73.97403049030333,
+       40.73720965040223
+      ],
+      [
+       -73.97414305712086,
+       40.73705046099908
+      ],
+      [
+       -73.97425399785675,
+       40.7368906015135
+      ],
+      [
+       -73.9743612147868,
+       40.7367293623788
+      ],
+      [
+       -73.97446147655188,
+       40.736566460395046
+      ],
+      [
+       -73.97451964112045,
+       40.73639111132801
+      ],
+      [
+       -73.97455900276083,
+       40.73621277153817
+      ],
+      [
+       -73.97456897756337,
+       40.73603281204173
+      ],
+      [
+       -73.97456266355569,
+       40.73585200182199
+      ],
+      [
+       -73.97455634954802,
+       40.73567119160225
+      ],
+      [
+       -73.97457977698139,
+       40.73550399129095
+      ],
+      [
+       -73.9746652108381,
+       40.735367694751254
+      ],
+      [
+       -73.97464739434234,
+       40.735189727880545
+      ],
+      [
+       -73.97459897832043,
+       40.73501266357188
+      ],
+      [
+       -73.97450420725887,
+       40.734852842293115
+      ],
+      [
+       -73.97435110060032,
+       40.734714720541554
+      ],
+      [
+       -73.97428779032504,
+       40.73454289423689
+      ],
+      [
+       -73.97424674862158,
+       40.73436474945164
+      ],
+      [
+       -73.97420570691813,
+       40.73418660466639
+      ],
+      [
+       -73.97417853286608,
+       40.7340076804653
+      ],
+      [
+       -73.97411212481757,
+       40.73385014005492
+      ],
+      [
+       -73.97406506184662,
+       40.73367291205594
+      ],
+      [
+       -73.97402107386061,
+       40.73349517681516
+      ],
+      [
+       -73.9739770858746,
+       40.733317441574385
+      ],
+      [
+       -73.97393309788859,
+       40.73313970633361
+      ],
+      [
+       -73.97388910990257,
+       40.73296197109283
+      ],
+      [
+       -73.97387012722149,
+       40.73278222588543
+      ],
+      [
+       -73.97385469097449,
+       40.732604995315754
+      ],
+      [
+       -73.97404420666456,
+       40.7325589427985
+      ],
+      [
+       -73.97420482147866,
+       40.73260636986986
+      ],
+      [
+       -73.97443189947623,
+       40.732556420707596
+      ],
+      [
+       -73.97449535000446,
+       40.7324419480939
+      ],
+      [
+       -73.97440943981374,
+       40.73256271780923
+      ],
+      [
+       -73.97418130476026,
+       40.73260974316963
+      ],
+      [
+       -73.97403032676532,
+       40.73255211690785
+      ],
+      [
+       -73.97385976744938,
+       40.73262283157894
+      ],
+      [
+       -73.973869768163,
+       40.73280038798387
+      ],
+      [
+       -73.97389354865378,
+       40.73297990604703
+      ],
+      [
+       -73.9739375366398,
+       40.733157641287804
+      ],
+      [
+       -73.9739815246258,
+       40.733335376528586
+      ],
+      [
+       -73.97402551261182,
+       40.73351311176936
+      ],
+      [
+       -73.97406950059782,
+       40.73369084701014
+      ],
+      [
+       -73.97412142499758,
+       40.73386682812148
+      ],
+      [
+       -73.9741776943244,
+       40.73402589513113
+      ],
+      [
+       -73.97420984836509,
+       40.734204580947015
+      ],
+      [
+       -73.97425089006853,
+       40.73438272573226
+      ],
+      [
+       -73.97429193177199,
+       40.73456087051751
+      ],
+      [
+       -73.97436655032709,
+       40.73472865816741
+      ],
+      [
+       -73.97451965698565,
+       40.73486677991898
+      ],
+      [
+       -73.97460386389704,
+       40.73503053082349
+      ],
+      [
+       -73.97465227991894,
+       40.73520759513215
+      ],
+      [
+       -73.9746621488637,
+       40.735385796423415
+      ],
+      [
+       -73.97455941395168,
+       40.73551116366426
+      ],
+      [
+       -73.97455698668357,
+       40.73568943684724
+      ],
+      [
+       -73.97456330069123,
+       40.73587024706697
+      ],
+      [
+       -73.97456961469891,
+       40.73605105728671
+      ],
+      [
+       -73.97455511104707,
+       40.736230780252825
+      ],
+      [
+       -73.97451377183495,
+       40.73640880549757
+      ],
+      [
+       -73.97445560726636,
+       40.7365841545646
+      ],
+      [
+       -73.97435151205802,
+       40.736746046339256
+      ],
+      [
+       -73.97424280301993,
+       40.736906732656315
+      ],
+      [
+       -73.97413186228404,
+       40.73706659214189
+      ],
+      [
+       -73.97401893771445,
+       40.73722563412109
+      ],
+      [
+       -73.97390445165868,
+       40.737384032636605
+      ],
+      [
+       -73.97378996560293,
+       40.737542431152114
+      ],
+      [
+       -73.97367547954717,
+       40.737700829667624
+      ],
+      [
+       -73.9735922842869,
+       40.73785193732965
+      ],
+      [
+       -73.97351717806657,
+       40.73800097077312
+      ],
+      [
+       -73.97343174708037,
+       40.73816848004395
+      ],
+      [
+       -73.97334871548473,
+       40.73833662375872
+      ],
+      [
+       -73.97323138776912,
+       40.738493795897604
+      ],
+      [
+       -73.97312283953276,
+       40.738654608099594
+      ],
+      [
+       -73.9730272641439,
+       40.73882006034614
+      ],
+      [
+       -73.97293459010767,
+       40.738986550329834
+      ],
+      [
+       -73.97278526612658,
+       40.73903480268683
+      ],
+      [
+       -73.97272653718267,
+       40.73921004227753
+      ],
+      [
+       -73.97266780823875,
+       40.73938528186822
+      ],
+      [
+       -73.9726119660609,
+       40.7395610269888
+      ],
+      [
+       -73.97256459963101,
+       40.73973825638061
+      ],
+      [
+       -73.97251723320113,
+       40.73991548577243
+      ],
+      [
+       -73.97251066763056,
+       40.74009249730584
+      ],
+      [
+       -73.97253927141331,
+       40.740236493982685
+      ],
+      [
+       -73.97250424075308,
+       40.74041538388763
+      ],
+      [
+       -73.97244927162822,
+       40.740589739676444
+      ],
+      [
+       -73.97233186574263,
+       40.74072552878478
+      ],
+      [
+       -73.9722919320693,
+       40.74090382001776
+      ],
+      [
+       -73.97225199839596,
+       40.74108211125075
+      ],
+      [
+       -73.97221206472263,
+       40.74126040248373
+      ],
+      [
+       -73.97217213104929,
+       40.74143869371671
+      ],
+      [
+       -73.97213219737597,
+       40.741616984949694
+      ],
+      [
+       -73.97209226370263,
+       40.74179527618268
+      ],
+      [
+       -73.97213901663568,
+       40.74192729554707
+      ],
+      [
+       -73.9723707657454,
+       40.74196427654094
+      ],
+      [
+       -73.97239238954879,
+       40.74211664516671
+      ],
+      [
+       -73.97235702718943,
+       40.74229549709962
+      ],
+      [
+       -73.97232166483008,
+       40.74247434903253
+      ],
+      [
+       -73.97226368753307,
+       40.74264956510134
+      ],
+      [
+       -73.97220139641662,
+       40.74282408762585
+      ],
+      [
+       -73.97212384514934,
+       40.742995006251455
+      ],
+      [
+       -73.97197789986745,
+       40.743055846139995
+      ],
+      [
+       -73.97211135457768,
+       40.743153465479914
+      ],
+      [
+       -73.97229853522737,
+       40.74304241640945
+      ],
+      [
+       -73.97243920885964,
+       40.7429045480289
+      ],
+      [
+       -73.97252645232993,
+       40.742736400085235
+      ],
+      [
+       -73.972602347388,
+       40.742565039545326
+      ],
+      [
+       -73.97267780225178,
+       40.742393574032775
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 3,
+     "name": "East River Esplanade",
+     "kind": "corridor",
+     "from_mile": 0.65,
+     "to_mile": 2.44,
+     "length_m": 2880,
+     "signals": {
+      "value": 3,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": null,
+      "status": "not_scored",
+      "basis": "no crowd data off mapped sidewalks (paths, greenways, bridges)"
+     },
+     "composition": {
+      "waterfront_m": 2420.5,
+      "park_m": 0.0,
+      "path_m": 264.8,
+      "street_m": 116.5,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On East River Esplanade",
+       "source": "Loop corridor catalog #9, from OSM ways (continuity checked by routing)",
+       "trust": "listed"
+      },
+      {
+       "text": "A known 280 m gap in the waterfront or greenway path is nearby",
+       "source": "Loop corridor catalog gap #26 (routed in OSM)",
+       "trust": "listed"
+      },
+      {
+       "text": "A known 847 m gap in the waterfront or greenway path is nearby",
+       "source": "Loop corridor catalog gap #80 (routed in OSM)",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.97267780225178,
+       40.742393574032775
+      ],
+      [
+       -73.97274196687223,
+       40.742219471609395
+      ],
+      [
+       -73.97279640799248,
+       40.74204342836076
+      ],
+      [
+       -73.97284702285113,
+       40.74186685053253
+      ],
+      [
+       -73.97287792421382,
+       40.741687518466975
+      ],
+      [
+       -73.97290882557652,
+       40.74150818640142
+      ],
+      [
+       -73.97293972693923,
+       40.74132885433586
+      ],
+      [
+       -73.97297062830192,
+       40.741149522270305
+      ],
+      [
+       -73.97300152966463,
+       40.740970190204756
+      ],
+      [
+       -73.97306905864514,
+       40.740840777148506
+      ],
+      [
+       -73.97313555288656,
+       40.74066734949507
+      ],
+      [
+       -73.97320741392697,
+       40.74049498010758
+      ],
+      [
+       -73.97337681395915,
+       40.74051322776945
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 4,
+     "name": "FDR Drive",
+     "kind": "street",
+     "from_mile": 2.44,
+     "to_mile": 2.58,
+     "length_m": 240,
+     "signals": {
+      "value": 0,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": null,
+      "status": "not_scored",
+      "basis": "no crowd data off mapped sidewalks (paths, greenways, bridges)"
+     },
+     "composition": {
+      "waterfront_m": 0.0,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 238.3,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On FDR Drive",
+       "source": "OSM way w46201647",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.97337681395915,
+       40.74051322776945
+      ],
+      [
+       -73.97358275931903,
+       40.74060289469054
+      ],
+      [
+       -73.97378870467891,
+       40.74069256161163
+      ],
+      [
+       -73.97399465003879,
+       40.740782228532716
+      ],
+      [
+       -73.97420059539867,
+       40.74087189545381
+      ],
+      [
+       -73.97440654075855,
+       40.7409615623749
+      ],
+      [
+       -73.97461248611843,
+       40.741051229295984
+      ],
+      [
+       -73.97481843147831,
+       40.741140896217075
+      ],
+      [
+       -73.97502437683819,
+       40.74123056313817
+      ],
+      [
+       -73.97522576712905,
+       40.741325686968
+      ],
+      [
+       -73.97542008487295,
+       40.74142927333758
+      ],
+      [
+       -73.97562738004999,
+       40.74151711205148
+      ],
+      [
+       -73.97583467522702,
+       40.74160495076539
+      ],
+      [
+       -73.97604197040405,
+       40.741692789479295
+      ],
+      [
+       -73.97624926558109,
+       40.7417806281932
+      ],
+      [
+       -73.97645656075812,
+       40.74186846690711
+      ],
+      [
+       -73.97666385593516,
+       40.74195630562101
+      ],
+      [
+       -73.9768711511122,
+       40.74204414433492
+      ],
+      [
+       -73.97707844628924,
+       40.74213198304882
+      ],
+      [
+       -73.97728574146628,
+       40.74221982176273
+      ],
+      [
+       -73.97747865057941,
+       40.742322559164364
+      ],
+      [
+       -73.97741196564668,
+       40.74247181459021
+      ],
+      [
+       -73.97729428474958,
+       40.74262884503728
+      ],
+      [
+       -73.97721361031967,
+       40.74277798124296
+      ],
+      [
+       -73.97742101947178,
+       40.7428656632891
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 5,
+     "name": "East 30th Street",
+     "kind": "street",
+     "from_mile": 2.58,
+     "to_mile": 2.88,
+     "length_m": 480,
+     "signals": {
+      "value": 3,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 8.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": "low",
+      "status": "estimate",
+      "basis": "subway ridership within 800 m, weekday 7-9am (a DOT count window)",
+      "band": "weekday 7-9am (a DOT count window)",
+      "high_pct": 0.0
+     },
+     "composition": {
+      "waterfront_m": 0.0,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 503.2,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On East 30th Street",
+       "source": "OSM way w226040994",
+       "trust": "listed"
+      },
+      {
+       "text": "Sidewalk about 16 ft wide",
+       "source": "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), width measured across the way by Loop",
+       "trust": "listed"
+      }
+     ]
+    }
+   },
+   {
+    "type": "Feature",
+    "geometry": {
+     "type": "LineString",
+     "coordinates": [
+      [
+       -73.97742101947178,
+       40.7428656632891
+      ],
+      [
+       -73.97762842862387,
+       40.74295334533525
+      ],
+      [
+       -73.97783583777598,
+       40.743041027381395
+      ],
+      [
+       -73.97804324692808,
+       40.743128709427545
+      ],
+      [
+       -73.97825065608018,
+       40.743216391473695
+      ],
+      [
+       -73.97845806523229,
+       40.74330407351984
+      ],
+      [
+       -73.97866547438439,
+       40.74339175556599
+      ],
+      [
+       -73.9788728835365,
+       40.74347943761213
+      ],
+      [
+       -73.9790802926886,
+       40.74356711965828
+      ],
+      [
+       -73.9792877018407,
+       40.74365480170442
+      ],
+      [
+       -73.9794951109928,
+       40.74374248375057
+      ],
+      [
+       -73.97970252014491,
+       40.74383016579672
+      ],
+      [
+       -73.979889,
+       40.743909
+      ]
+     ]
+    },
+    "properties": {
+     "feature": "stretch",
+     "stretch": 6,
+     "name": "East 31st Street",
+     "kind": "street",
+     "from_mile": 2.88,
+     "to_mile": 3.03,
+     "length_m": 240,
+     "signals": {
+      "value": 1,
+      "status": "measured",
+      "counted": "signalized crossings, each time the route crosses (decision 020)"
+     },
+     "elevation_gain_m": {
+      "value": 0.0,
+      "status": "estimate"
+     },
+     "crowd": {
+      "value": "medium",
+      "status": "estimate",
+      "basis": "subway ridership within 800 m, weekday 7-9am (a DOT count window)",
+      "band": "weekday 7-9am (a DOT count window)",
+      "high_pct": 8.3
+     },
+     "composition": {
+      "waterfront_m": 0.0,
+      "park_m": 0.0,
+      "path_m": 0.0,
+      "street_m": 254.2,
+      "status": "measured",
+      "source": "OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog within 15 m (path); the same 5 m samples as the route's shares"
+     },
+     "facts": [
+      {
+       "text": "On East 31st Street",
+       "source": "OSM way w5672992",
+       "trust": "listed"
+      },
+      {
+       "text": "Sidewalk about 15 ft wide",
+       "source": "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), width measured across the way by Loop",
+       "trust": "listed"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "top3": [
+  {
+   "rank": 1,
+   "kind": "out_and_back",
+   "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
+   "score": 80,
+   "distance_mi": 3.04,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -73.979889,
+      40.743909
+     ],
+     [
+      -73.97719,
+      40.742768
+     ],
+     [
+      -73.97751,
+      40.742341
+     ],
+     [
+      -73.977408,
+      40.742281
+     ],
+     [
+      -73.97739,
+      40.742264
+     ],
+     [
+      -73.97541,
+      40.741425
+     ],
+     [
+      -73.975154,
+      40.741287
+     ],
+     [
+      -73.973227,
+      40.740448
+     ],
+     [
+      -73.973079,
+      40.740803
+     ],
+     [
+      -73.973059,
+      40.740879
+     ],
+     [
+      -73.97302,
+      40.740863
+     ],
+     [
+      -73.972842,
+      40.741896
+     ],
+     [
+      -73.972735,
+      40.742242
+     ],
+     [
+      -73.972675,
+      40.742401
+     ],
+     [
+      -73.972516,
+      40.74276
+     ],
+     [
+      -73.972397,
+      40.742984
+     ],
+     [
+      -73.97207,
+      40.743178
+     ],
+     [
+      -73.971975,
+      40.743052
+     ],
+     [
+      -73.972086,
+      40.743078
+     ],
+     [
+      -73.9722,
+      40.742828
+     ],
+     [
+      -73.972316,
+      40.742503
+     ],
+     [
+      -73.97242,
+      40.741977
+     ],
+     [
+      -73.972331,
+      40.741954
+     ],
+     [
+      -73.972065,
+      40.741917
+     ],
+     [
+      -73.972334,
+      40.740716
+     ],
+     [
+      -73.97237,
+      40.740677
+     ],
+     [
+      -73.972435,
+      40.74066
+     ],
+     [
+      -73.972461,
+      40.740532
+     ],
+     [
+      -73.972491,
+      40.740483
+     ],
+     [
+      -73.972566,
+      40.7401
+     ],
+     [
+      -73.972507,
+      40.740092
+     ],
+     [
+      -73.972499,
+      40.740047
+     ],
+     [
+      -73.972504,
+      40.739965
+     ],
+     [
+      -73.972624,
+      40.739516
+     ],
+     [
+      -73.97281,
+      40.738961
+     ],
+     [
+      -73.972858,
+      40.738973
+     ],
+     [
+      -73.972931,
+      40.738993
+     ],
+     [
+      -73.973103,
+      40.738684
+     ],
+     [
+      -73.973238,
+      40.738484
+     ],
+     [
+      -73.973389,
+      40.738283
+     ],
+     [
+      -73.97347,
+      40.738066
+     ],
+     [
+      -73.973618,
+      40.737862
+     ],
+     [
+      -73.973572,
+      40.737844
+     ],
+     [
+      -73.974083,
+      40.737137
+     ],
+     [
+      -73.974337,
+      40.736771
+     ],
+     [
+      -73.974419,
+      40.73663
+     ],
+     [
+      -73.974454,
+      40.736589
+     ],
+     [
+      -73.974522,
+      40.736384
+     ],
+     [
+      -73.974573,
+      40.736148
+     ],
+     [
+      -73.974551,
+      40.735518
+     ],
+     [
+      -73.974567,
+      40.735505
+     ],
+     [
+      -73.974643,
+      40.735499
+     ],
+     [
+      -73.974677,
+      40.735298
+     ],
+     [
+      -73.974572,
+      40.734914
+     ],
+     [
+      -73.974337,
+      40.734702
+     ],
+     [
+      -73.974315,
+      40.734661
+     ],
+     [
+      -73.974177,
+      40.734062
+     ],
+     [
+      -73.974178,
+      40.73401
+     ],
+     [
+      -73.974195,
+      40.733936
+     ],
+     [
+      -73.974138,
+      40.733891
+     ],
+     [
+      -73.974114,
+      40.733856
+     ],
+     [
+      -73.974098,
+      40.733806
+     ],
+     [
+      -73.973876,
+      40.732909
+     ],
+     [
+      -73.973869,
+      40.732787
+     ],
+     [
+      -73.973886,
+      40.732715
+     ],
+     [
+      -73.973849,
+      40.732585
+     ],
+     [
+      -73.974042,
+      40.73255
+     ],
+     [
+      -73.974061,
+      40.732627
+     ],
+     [
+      -73.974305,
+      40.732592
+     ],
+     [
+      -73.974519,
+      40.732532
+     ],
+     [
+      -73.974493,
+      40.732433
+     ],
+     [
+      -73.974519,
+      40.732532
+     ],
+     [
+      -73.974305,
+      40.732592
+     ],
+     [
+      -73.974061,
+      40.732627
+     ],
+     [
+      -73.974042,
+      40.73255
+     ],
+     [
+      -73.973849,
+      40.732585
+     ],
+     [
+      -73.973886,
+      40.732715
+     ],
+     [
+      -73.973869,
+      40.732787
+     ],
+     [
+      -73.973876,
+      40.732909
+     ],
+     [
+      -73.974098,
+      40.733806
+     ],
+     [
+      -73.974114,
+      40.733856
+     ],
+     [
+      -73.974138,
+      40.733891
+     ],
+     [
+      -73.974195,
+      40.733936
+     ],
+     [
+      -73.974178,
+      40.73401
+     ],
+     [
+      -73.974177,
+      40.734062
+     ],
+     [
+      -73.974315,
+      40.734661
+     ],
+     [
+      -73.974337,
+      40.734702
+     ],
+     [
+      -73.974572,
+      40.734914
+     ],
+     [
+      -73.974677,
+      40.735298
+     ],
+     [
+      -73.974643,
+      40.735499
+     ],
+     [
+      -73.974567,
+      40.735505
+     ],
+     [
+      -73.974551,
+      40.735518
+     ],
+     [
+      -73.974573,
+      40.736148
+     ],
+     [
+      -73.974522,
+      40.736384
+     ],
+     [
+      -73.974454,
+      40.736589
+     ],
+     [
+      -73.974419,
+      40.73663
+     ],
+     [
+      -73.974337,
+      40.736771
+     ],
+     [
+      -73.974083,
+      40.737137
+     ],
+     [
+      -73.973572,
+      40.737844
+     ],
+     [
+      -73.973618,
+      40.737862
+     ],
+     [
+      -73.97347,
+      40.738066
+     ],
+     [
+      -73.973389,
+      40.738283
+     ],
+     [
+      -73.973238,
+      40.738484
+     ],
+     [
+      -73.973103,
+      40.738684
+     ],
+     [
+      -73.972931,
+      40.738993
+     ],
+     [
+      -73.972858,
+      40.738973
+     ],
+     [
+      -73.97281,
+      40.738961
+     ],
+     [
+      -73.972624,
+      40.739516
+     ],
+     [
+      -73.972504,
+      40.739965
+     ],
+     [
+      -73.972499,
+      40.740047
+     ],
+     [
+      -73.972507,
+      40.740092
+     ],
+     [
+      -73.972566,
+      40.7401
+     ],
+     [
+      -73.972491,
+      40.740483
+     ],
+     [
+      -73.972461,
+      40.740532
+     ],
+     [
+      -73.972435,
+      40.74066
+     ],
+     [
+      -73.97237,
+      40.740677
+     ],
+     [
+      -73.972334,
+      40.740716
+     ],
+     [
+      -73.972065,
+      40.741917
+     ],
+     [
+      -73.972331,
+      40.741954
+     ],
+     [
+      -73.97242,
+      40.741977
+     ],
+     [
+      -73.972316,
+      40.742503
+     ],
+     [
+      -73.9722,
+      40.742828
+     ],
+     [
+      -73.972086,
+      40.743078
+     ],
+     [
+      -73.971975,
+      40.743052
+     ],
+     [
+      -73.97207,
+      40.743178
+     ],
+     [
+      -73.972397,
+      40.742984
+     ],
+     [
+      -73.972516,
+      40.74276
+     ],
+     [
+      -73.972675,
+      40.742401
+     ],
+     [
+      -73.972735,
+      40.742242
+     ],
+     [
+      -73.972842,
+      40.741896
+     ],
+     [
+      -73.97302,
+      40.740863
+     ],
+     [
+      -73.973059,
+      40.740879
+     ],
+     [
+      -73.973079,
+      40.740803
+     ],
+     [
+      -73.973227,
+      40.740448
+     ],
+     [
+      -73.975154,
+      40.741287
+     ],
+     [
+      -73.97541,
+      40.741425
+     ],
+     [
+      -73.97739,
+      40.742264
+     ],
+     [
+      -73.977408,
+      40.742281
+     ],
+     [
+      -73.97751,
+      40.742341
+     ],
+     [
+      -73.97719,
+      40.742768
+     ],
+     [
+      -73.979889,
+      40.743909
+     ]
+    ]
+   }
+  },
+  {
+   "rank": 2,
+   "kind": "out_and_back",
+   "label": "out-and-back on the waterfront, heading 148 degrees",
+   "score": 75,
+   "distance_mi": 3.03,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -73.979889,
+      40.743909
+     ],
+     [
+      -73.977444,
+      40.74288
+     ],
+     [
+      -73.977209,
+      40.742775
+     ],
+     [
+      -73.977044,
+      40.742729
+     ],
+     [
+      -73.976592,
+      40.743335
+     ],
+     [
+      -73.976519,
+      40.743304
+     ],
+     [
+      -73.976303,
+      40.743604
+     ],
+     [
+      -73.976199,
+      40.743625
+     ],
+     [
+      -73.976097,
+      40.743763
+     ],
+     [
+      -73.975669,
+      40.743583
+     ],
+     [
+      -73.975611,
+      40.74366
+     ],
+     [
+      -73.97393,
+      40.742958
+     ],
+     [
+      -73.973442,
+      40.743624
+     ],
+     [
+      -73.972448,
+      40.743222
+     ],
+     [
+      -73.97241,
+      40.743184
+     ],
+     [
+      -73.972388,
+      40.743189
+     ],
+     [
+      -73.972164,
+      40.743305
+     ],
+     [
+      -73.97213,
+      40.743333
+     ],
+     [
+      -73.9719,
+      40.743256
+     ],
+     [
+      -73.971869,
+      40.743238
+     ],
+     [
+      -73.971975,
+      40.743052
+     ],
+     [
+      -73.972086,
+      40.743078
+     ],
+     [
+      -73.9722,
+      40.742828
+     ],
+     [
+      -73.972316,
+      40.742503
+     ],
+     [
+      -73.97242,
+      40.741977
+     ],
+     [
+      -73.972331,
+      40.741954
+     ],
+     [
+      -73.972065,
+      40.741917
+     ],
+     [
+      -73.972334,
+      40.740716
+     ],
+     [
+      -73.97237,
+      40.740677
+     ],
+     [
+      -73.972435,
+      40.74066
+     ],
+     [
+      -73.972461,
+      40.740532
+     ],
+     [
+      -73.972491,
+      40.740483
+     ],
+     [
+      -73.972566,
+      40.7401
+     ],
+     [
+      -73.972507,
+      40.740092
+     ],
+     [
+      -73.972499,
+      40.740047
+     ],
+     [
+      -73.972504,
+      40.739965
+     ],
+     [
+      -73.972624,
+      40.739516
+     ],
+     [
+      -73.97281,
+      40.738961
+     ],
+     [
+      -73.972858,
+      40.738973
+     ],
+     [
+      -73.972935,
+      40.738814
+     ],
+     [
+      -73.973036,
+      40.738677
+     ],
+     [
+      -73.973019,
+      40.738582
+     ],
+     [
+      -73.973572,
+      40.737844
+     ],
+     [
+      -73.974083,
+      40.737137
+     ],
+     [
+      -73.974337,
+      40.736771
+     ],
+     [
+      -73.974419,
+      40.73663
+     ],
+     [
+      -73.974454,
+      40.736589
+     ],
+     [
+      -73.974522,
+      40.736384
+     ],
+     [
+      -73.974573,
+      40.736148
+     ],
+     [
+      -73.974551,
+      40.735518
+     ],
+     [
+      -73.974567,
+      40.735505
+     ],
+     [
+      -73.974643,
+      40.735499
+     ],
+     [
+      -73.974677,
+      40.735298
+     ],
+     [
+      -73.974572,
+      40.734914
+     ],
+     [
+      -73.974337,
+      40.734702
+     ],
+     [
+      -73.974315,
+      40.734661
+     ],
+     [
+      -73.974177,
+      40.734062
+     ],
+     [
+      -73.974178,
+      40.73401
+     ],
+     [
+      -73.974195,
+      40.733936
+     ],
+     [
+      -73.974138,
+      40.733891
+     ],
+     [
+      -73.974114,
+      40.733856
+     ],
+     [
+      -73.974098,
+      40.733806
+     ],
+     [
+      -73.973876,
+      40.732909
+     ],
+     [
+      -73.973869,
+      40.732787
+     ],
+     [
+      -73.973886,
+      40.732715
+     ],
+     [
+      -73.973823,
+      40.732522
+     ],
+     [
+      -73.973755,
+      40.732407
+     ],
+     [
+      -73.973727,
+      40.732327
+     ],
+     [
+      -73.973578,
+      40.731736
+     ],
+     [
+      -73.973567,
+      40.731668
+     ],
+     [
+      -73.973569,
+      40.731535
+     ],
+     [
+      -73.973542,
+      40.731449
+     ],
+     [
+      -73.9735,
+      40.731392
+     ],
+     [
+      -73.97348,
+      40.731349
+     ],
+     [
+      -73.973468,
+      40.731269
+     ],
+     [
+      -73.973381,
+      40.731187
+     ],
+     [
+      -73.973193,
+      40.730973
+     ],
+     [
+      -73.972866,
+      40.730662
+     ],
+     [
+      -73.972692,
+      40.730525
+     ],
+     [
+      -73.972866,
+      40.730662
+     ],
+     [
+      -73.973193,
+      40.730973
+     ],
+     [
+      -73.973381,
+      40.731187
+     ],
+     [
+      -73.973468,
+      40.731269
+     ],
+     [
+      -73.97348,
+      40.731349
+     ],
+     [
+      -73.9735,
+      40.731392
+     ],
+     [
+      -73.973542,
+      40.731449
+     ],
+     [
+      -73.973569,
+      40.731535
+     ],
+     [
+      -73.973567,
+      40.731668
+     ],
+     [
+      -73.973578,
+      40.731736
+     ],
+     [
+      -73.973727,
+      40.732327
+     ],
+     [
+      -73.973755,
+      40.732407
+     ],
+     [
+      -73.973823,
+      40.732522
+     ],
+     [
+      -73.973886,
+      40.732715
+     ],
+     [
+      -73.973869,
+      40.732787
+     ],
+     [
+      -73.973876,
+      40.732909
+     ],
+     [
+      -73.974098,
+      40.733806
+     ],
+     [
+      -73.974114,
+      40.733856
+     ],
+     [
+      -73.974138,
+      40.733891
+     ],
+     [
+      -73.974195,
+      40.733936
+     ],
+     [
+      -73.974178,
+      40.73401
+     ],
+     [
+      -73.974177,
+      40.734062
+     ],
+     [
+      -73.974315,
+      40.734661
+     ],
+     [
+      -73.974337,
+      40.734702
+     ],
+     [
+      -73.974572,
+      40.734914
+     ],
+     [
+      -73.974677,
+      40.735298
+     ],
+     [
+      -73.974643,
+      40.735499
+     ],
+     [
+      -73.974567,
+      40.735505
+     ],
+     [
+      -73.974551,
+      40.735518
+     ],
+     [
+      -73.974573,
+      40.736148
+     ],
+     [
+      -73.974522,
+      40.736384
+     ],
+     [
+      -73.974454,
+      40.736589
+     ],
+     [
+      -73.974419,
+      40.73663
+     ],
+     [
+      -73.974337,
+      40.736771
+     ],
+     [
+      -73.974083,
+      40.737137
+     ],
+     [
+      -73.973572,
+      40.737844
+     ],
+     [
+      -73.973019,
+      40.738582
+     ],
+     [
+      -73.973036,
+      40.738677
+     ],
+     [
+      -73.972935,
+      40.738814
+     ],
+     [
+      -73.972858,
+      40.738973
+     ],
+     [
+      -73.97281,
+      40.738961
+     ],
+     [
+      -73.972624,
+      40.739516
+     ],
+     [
+      -73.972504,
+      40.739965
+     ],
+     [
+      -73.972499,
+      40.740047
+     ],
+     [
+      -73.972507,
+      40.740092
+     ],
+     [
+      -73.972566,
+      40.7401
+     ],
+     [
+      -73.972491,
+      40.740483
+     ],
+     [
+      -73.972461,
+      40.740532
+     ],
+     [
+      -73.972435,
+      40.74066
+     ],
+     [
+      -73.97237,
+      40.740677
+     ],
+     [
+      -73.972334,
+      40.740716
+     ],
+     [
+      -73.972065,
+      40.741917
+     ],
+     [
+      -73.972331,
+      40.741954
+     ],
+     [
+      -73.97242,
+      40.741977
+     ],
+     [
+      -73.972316,
+      40.742503
+     ],
+     [
+      -73.9722,
+      40.742828
+     ],
+     [
+      -73.972086,
+      40.743078
+     ],
+     [
+      -73.971975,
+      40.743052
+     ],
+     [
+      -73.971869,
+      40.743238
+     ],
+     [
+      -73.9719,
+      40.743256
+     ],
+     [
+      -73.97213,
+      40.743333
+     ],
+     [
+      -73.972164,
+      40.743305
+     ],
+     [
+      -73.972388,
+      40.743189
+     ],
+     [
+      -73.97241,
+      40.743184
+     ],
+     [
+      -73.972448,
+      40.743222
+     ],
+     [
+      -73.973442,
+      40.743624
+     ],
+     [
+      -73.97393,
+      40.742958
+     ],
+     [
+      -73.975611,
+      40.74366
+     ],
+     [
+      -73.975669,
+      40.743583
+     ],
+     [
+      -73.976097,
+      40.743763
+     ],
+     [
+      -73.976199,
+      40.743625
+     ],
+     [
+      -73.976303,
+      40.743604
+     ],
+     [
+      -73.976519,
+      40.743304
+     ],
+     [
+      -73.976592,
+      40.743335
+     ],
+     [
+      -73.977044,
+      40.742729
+     ],
+     [
+      -73.977209,
+      40.742775
+     ],
+     [
+      -73.977444,
+      40.74288
+     ],
+     [
+      -73.979889,
+      40.743909
+     ]
+    ]
+   }
+  },
+  {
+   "rank": 3,
+   "kind": "loop",
+   "label": "rectangle 1:1, --",
+   "score": 64,
+   "distance_mi": 3.06,
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -73.979889,
+      40.743909
+     ],
+     [
+      -73.979686,
+      40.743824
+     ],
+     [
+      -73.980136,
+      40.743205
+     ],
+     [
+      -73.980593,
+      40.7426
+     ],
+     [
+      -73.982309,
+      40.740223
+     ],
+     [
+      -73.982763,
+      40.739602
+     ],
+     [
+      -73.982832,
+      40.739521
+     ],
+     [
+      -73.983358,
+      40.73879
+     ],
+     [
+      -73.983818,
+      40.738169
+     ],
+     [
+      -73.984173,
+      40.737663
+     ],
+     [
+      -73.984256,
+      40.737563
+     ],
+     [
+      -73.984253,
+      40.73755
+     ],
+     [
+      -73.984611,
+      40.737085
+     ],
+     [
+      -73.985116,
+      40.736379
+     ],
+     [
+      -73.986498,
+      40.73449
+     ],
+     [
+      -73.986783,
+      40.734104
+     ],
+     [
+      -73.989883,
+      40.735413
+     ],
+     [
+      -73.990022,
+      40.735458
+     ],
+     [
+      -73.990058,
+      40.735409
+     ],
+     [
+      -73.99115,
+      40.735865
+     ],
+     [
+      -73.99118,
+      40.735825
+     ],
+     [
+      -73.991333,
+      40.735875
+     ],
+     [
+      -73.993032,
+      40.736597
+     ],
+     [
+      -73.99376,
+      40.736895
+     ],
+     [
+      -73.996249,
+      40.737942
+     ],
+     [
+      -73.996507,
+      40.738053
+     ],
+     [
+      -73.996472,
+      40.738101
+     ],
+     [
+      -73.999058,
+      40.739193
+     ],
+     [
+      -73.998777,
+      40.739578
+     ],
+     [
+      -73.99821,
+      40.740357
+     ],
+     [
+      -73.99776,
+      40.740941
+     ],
+     [
+      -73.996845,
+      40.74224
+     ],
+     [
+      -73.995434,
+      40.744143
+     ],
+     [
+      -73.995071,
+      40.744657
+     ],
+     [
+      -73.994977,
+      40.744778
+     ],
+     [
+      -73.994629,
+      40.745282
+     ],
+     [
+      -73.992284,
+      40.748492
+     ],
+     [
+      -73.991932,
+      40.748987
+     ],
+     [
+      -73.992047,
+      40.749042
+     ],
+     [
+      -73.992152,
+      40.748898
+     ],
+     [
+      -73.992047,
+      40.749042
+     ],
+     [
+      -73.991959,
+      40.748997
+     ],
+     [
+      -73.99162,
+      40.748866
+     ],
+     [
+      -73.990333,
+      40.748325
+     ],
+     [
+      -73.989084,
+      40.747782
+     ],
+     [
+      -73.988219,
+      40.747436
+     ],
+     [
+      -73.986888,
+      40.746878
+     ],
+     [
+      -73.985867,
+      40.746426
+     ],
+     [
+      -73.984492,
+      40.745847
+     ],
+     [
+      -73.982628,
+      40.745076
+     ],
+     [
+      -73.981051,
+      40.744398
+     ],
+     [
+      -73.979889,
+      40.743909
+     ]
+    ]
+   }
+  }
+ ],
+ "pool": {
+  "candidates": 84,
+  "best_of": 31,
+  "statuses": {
+   "ranked": 40,
+   "out_of_tolerance": 36,
+   "chosen": 3,
+   "rejected": 5
+  },
+  "timing": {
+   "first_candidate_s": 0.27029583300463855,
+   "first_any_s": 0.27029583300463855,
+   "winner_arrived_s": 1.0010789170046337,
+   "total_s": 6.256664375003311
+  }
+ }
+}
