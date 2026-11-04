@@ -83,18 +83,24 @@ struct ProfileStrip: View {
                        with: .color(Palette.inkMuted.color), lineWidth: 1)
         }
 
-        // Stretch bars, merged where neighbours share a kind, 2 pt gaps between runs.
+        // Bars from the same merged runs the map draws (pieces, under 20 m joined). Path is a
+        // dashed bar in route-path, like the map, so color is never the only cue.
         for run in kindRuns() {
             let x0 = x(run.from, w), x1 = x(run.to, w)
-            let rect = CGRect(x: x0 + (run.from > 0 ? 1 : 0), y: barY,
-                              width: max(2, x1 - x0 - (run.from > 0 ? 1 : 0) - (run.to < totalMi ? 1 : 0)), height: barH)
-            var shape = Path(roundedRect: rect, cornerRadius: Metrics.radiusBar)
+            let gap: CGFloat = 1
+            let left = x0 + (run.from > 0 ? gap : 0)
+            let right = x1 - (run.to < totalMi ? gap : 0)
+            let width = max(1.5, right - left)
+            let color = Palette.drawColor(run.kind).color
             if run.kind == .path {
-                // Path is dashed on the map; mark it on the strip with a hollow bar so color is not the only cue.
-                ctx.stroke(shape, with: .color(Palette.drawColor(run.kind).color), lineWidth: 1.5)
-                shape = Path()
+                var dash = Path()
+                dash.move(to: CGPoint(x: left, y: barY + barH / 2))
+                dash.addLine(to: CGPoint(x: left + width, y: barY + barH / 2))
+                ctx.stroke(dash, with: .color(color), style: StrokeStyle(lineWidth: barH, lineCap: .butt, dash: [4, 2.5]))
+            } else {
+                ctx.fill(Path(roundedRect: CGRect(x: left, y: barY, width: width, height: barH),
+                              cornerRadius: min(Metrics.radiusBar, width / 2)), with: .color(color))
             }
-            ctx.fill(shape, with: .color(Palette.drawColor(run.kind).color))
         }
 
         // Cursor.
@@ -112,26 +118,23 @@ struct ProfileStrip: View {
     private struct KindRun { let kind: DrawKind; let from: Double; let to: Double }
 
     private func kindRuns() -> [KindRun] {
-        var runs: [KindRun] = []
-        for s in detail.stretches {
-            if let last = runs.last, last.kind == s.kind {
-                runs[runs.count - 1] = KindRun(kind: s.kind, from: last.from, to: s.toMile)
-            } else {
-                runs.append(KindRun(kind: s.kind, from: s.fromMile, to: s.toMile))
-            }
+        let len = detail.line.length
+        guard len > 0 else { return [] }
+        return detail.drawn.map {
+            KindRun(kind: $0.kind, from: $0.fromM / len * totalMi, to: $0.toM / len * totalMi)
         }
-        return runs
     }
 
+    /// Legend: only the kinds this route draws ("path" appears only when it has path).
     private var kindsPresent: [DrawKind] {
-        DrawKind.allCases.filter { k in detail.stretches.contains { $0.kind == k } }
+        DrawKind.allCases.filter { k in detail.drawn.contains { $0.kind == k } }
     }
 
     private func legend(width w: CGFloat) -> some View {
         HStack(spacing: 10) {
             ForEach(kindsPresent, id: \.self) { k in
                 HStack(spacing: 4) {
-                    Circle().fill(Palette.drawColor(k).color).frame(width: 8, height: 8)
+                    LegendSwatch(kind: k)
                     Text(k.legend).typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
                 }
             }
@@ -183,10 +186,25 @@ struct ProfileStrip: View {
     }
 
     private var accessibilitySummary: String {
-        let names = kindRuns().map { run in
-            detail.stretches.first { $0.fromMile >= run.from && $0.kind == run.kind }.map { $0.kind.legend } ?? run.kind.legend
-        }
+        let names = kindRuns().map(\.kind.legend)
         let lo = elevationRange.0, hi = elevationRange.1
         return "Route profile by mile, elevation \(detail.profileTrust.text). Between \(CardText.trimmed(lo.rounded())) and \(CardText.trimmed(hi.rounded())) metres up. Turnaround at mile \(detail.turnaround.map { String(format: "%.2f", $0.alongMi) } ?? "none"). \(names.joined(separator: ", ")). Swipe up or down to change the selected mile."
+    }
+}
+
+/// A short bar in the run's color: solid for waterfront and street, dashed for path.
+private struct LegendSwatch: View {
+    let kind: DrawKind
+    var body: some View {
+        Canvas { ctx, size in
+            var line = Path()
+            line.move(to: CGPoint(x: 0, y: size.height / 2))
+            line.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+            let style = kind == .path
+                ? StrokeStyle(lineWidth: 4, lineCap: .butt, dash: [4, 2.5])
+                : StrokeStyle(lineWidth: 4, lineCap: .round)
+            ctx.stroke(line, with: .color(Palette.drawColor(kind).color), style: style)
+        }
+        .frame(width: kind == .path ? 14.5 : 12, height: 8)
     }
 }

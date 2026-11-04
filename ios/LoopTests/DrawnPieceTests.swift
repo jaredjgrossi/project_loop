@@ -53,3 +53,44 @@ final class DrawnPieceTests: XCTestCase {
         XCTAssertEqual(path, 307.2 * detail.line.length / 4877.7, accuracy: 0.5)
     }
 }
+
+final class ZoomDetailTests: XCTestCase {
+    private var candidate: Candidate!
+
+    override func setUpWithError() throws {
+        candidate = try LoopData(file: RouteFile.loadBundled()).candidate(rank: 1)
+    }
+
+    func testMetresPerPoint() {
+        // Zoom 0 at the equator: one 512 pt tile spans the world.
+        XCTAssertEqual(MapScale.metresPerPoint(zoom: 0, latitude: 0), 40_075_016.686 / 512, accuracy: 0.01)
+        XCTAssertEqual(MapScale.metresPerPoint(zoom: 1, latitude: 60), 40_075_016.686 / 512 / 4, accuracy: 0.01)
+    }
+
+    func testCloseInEveryRunShowsAndPathIsDashed() {
+        let mpp = MapScale.metresPerPoint(zoom: 18, latitude: 40.74)   // about 0.45 m per pt
+        let kinds = RouteFrame.layerKinds(for: candidate, metresPerPoint: mpp)
+        XCTAssertEqual(kinds, candidate.detail!.drawn.map(\.kind.rawValue), "all 11 runs, path dashed")
+    }
+
+    func testOverviewMergesShortRunsAndKeepsRulesOnScreen() {
+        let mpp = MapScale.metresPerPoint(zoom: 13.5, latitude: 40.74)
+        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp)
+        XCTAssertLessThan(segs.count, candidate.detail!.drawn.count)
+        let runs = DrawnPiece.merged(candidate.detail!.drawn.map { ($0.kind, $0.lengthM) },
+                                     lineLength: candidate.line.length, minimum: 40 * mpp)
+        for r in runs.dropLast() { XCTAssertGreaterThanOrEqual(r.lengthM / mpp, 40) }
+        for (seg, run) in zip(segs, runs) where seg.kind == .path {
+            XCTAssertEqual(seg.dashed, run.lengthM / mpp >= 30)
+        }
+    }
+
+    func testShortPathRunDrawsSolid() {
+        // A route without pieces draws as one plain line; a short path segment goes to the solid layer.
+        let one = Candidate(rank: 9, line: candidate.line, distanceMi: 3, distanceTrust: nil, kindText: "", detail: nil)
+        XCTAssertEqual(RouteFrame.segments(for: one, fraction: 1, metresPerPoint: 1).first?.layerKind, "lead")
+        let seg = RouteFrame.Segment(kind: .path, points: [], dashed: false)
+        XCTAssertEqual(seg.layerKind, "pathSolid")
+        XCTAssertEqual(RouteFrame.Segment(kind: .path, points: []).layerKind, "path")
+    }
+}

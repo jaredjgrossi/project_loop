@@ -27,11 +27,19 @@ struct MainScreen: View {
                 .frame(maxHeight: .infinity, alignment: .top)
 
             // Our markers sit above the fade (START sits just under the provenance line).
-            MarkerOverlay(model: model)
+            // Markers never draw over the header: masked from the provenance line down.
+            Group {
+                MarkerOverlay(model: model)
+                SelectionOverlay(model: model)
+            }
+            .ignoresSafeArea()
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: model.headerBottom + 2)
+                    Color.black
+                }
                 .ignoresSafeArea()
-
-            SelectionOverlay(model: model)
-                .ignoresSafeArea()
+            }
 
             HeaderView(request: model.data.request, trailing: debugTrailing)
                 .background(GeometryReader { g in
@@ -73,6 +81,12 @@ struct MainScreen: View {
     /// Debug/screenshot hooks: `-LoopMile 1` opens the sheet on mile 1.
     private func applyLaunchArguments() async {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-LoopZoomEsplanade"), let d = model.shownDetail {
+            // Close on the esplanade's path pieces, south of mile 1.
+            try? await Task.sleep(for: .seconds(1.5))
+            let along = (d.drawn.first { $0.kind == .path }.map { ($0.fromM + $0.toM) / 2 }) ?? d.line.length / 3
+            model.requestCamera(.at(d.line.point(at: along), zoom: 16.6), animated: false)
+        }
         if args.contains("-LoopPlay") {
             try? await Task.sleep(for: .seconds(1.5))
             model.play(args.contains("-LoopLate") ? .lateBetterRoute : .standard)

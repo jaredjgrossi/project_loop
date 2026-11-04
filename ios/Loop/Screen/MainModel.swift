@@ -220,7 +220,8 @@ final class MainModel {
             frame.lead = RouteFrame.plain(blend(points(rank: morph.from), points(rank: morph.to), eased),
                                           fraction: fraction)
         } else {
-            frame.lead = RouteFrame.segments(for: shown, fraction: fraction)
+            let mpp = MapScale.metresPerPoint(zoom: zoom, latitude: shown.line.points[0].lat)
+            frame.lead = RouteFrame.segments(for: shown, fraction: fraction, metresPerPoint: mpp)
         }
         return frame
     }

@@ -37,7 +37,9 @@ enum MapStyle {
             "showLandmarkIcons": false,
             "showLandmarkIconLabels": false,
             "showAdminBoundaries": false,
-            "showPedestrianRoads": true,
+            // Night: Standard draws footpaths as thick light lines that read as dashes, and has
+            // no color setting for them, so they are hidden. Paper keeps them (they sit quietly).
+            "showPedestrianRoads": !dark,
             // Night: no basemap labels. Under "day" their halos stay cream (Standard has no halo
             // color setting), and the "night" preset turns our Night land #1C1915 into ~#020304.
             "showPlaceLabels": !dark,

@@ -115,12 +115,13 @@ struct DrawnPiece: Equatable {
 
     static let minimumDrawnLength: Double = 20
 
-    /// For drawing only: every piece shorter than 20 m joins its longer neighbour (shortest
-    /// first), then neighbours of the same kind join up. `lengths` are the file's piece lengths
-    /// in route order; they are scaled so the result tiles a line of `lineLength` exactly.
-    static func merged(_ pieces: [(kind: DrawKind, lengthM: Double)], lineLength: Double) -> [DrawnPiece] {
+    /// For drawing only: every piece shorter than `minimum` metres joins its longer neighbour
+    /// (shortest first), then neighbours of the same kind join up. `pieces` are in route order;
+    /// lengths are scaled so the result tiles a line of `lineLength` exactly.
+    static func merged(_ pieces: [(kind: DrawKind, lengthM: Double)], lineLength: Double,
+                       minimum: Double = minimumDrawnLength) -> [DrawnPiece] {
         var runs = pieces.map { (kind: $0.kind, length: $0.lengthM) }
-        while runs.count > 1, let i = runs.indices.filter({ runs[$0].length < minimumDrawnLength })
+        while runs.count > 1, let i = runs.indices.filter({ runs[$0].length < minimum })
                 .min(by: { runs[$0].length < runs[$1].length }) {
             let prev = i > 0 ? i - 1 : nil
             let next = i < runs.count - 1 ? i + 1 : nil
@@ -150,6 +151,17 @@ struct DrawnPiece: Equatable {
         }
         return out
     }
+}
+
+/// Screen scale for zoom-dependent drawing (Mapbox: 512 pt tiles, Web Mercator).
+enum MapScale {
+    static func metresPerPoint(zoom: Double, latitude: Double) -> Double {
+        cos(latitude * .pi / 180) * 40_075_016.686 / (512 * pow(2, zoom))
+    }
+    /// Runs shorter than this on screen join their longer neighbour.
+    static let minimumRunPoints: Double = 40
+    /// A path run is dashed only when it fits at least two full 9/6 pt dashes.
+    static let minimumDashedPoints: Double = 30
 }
 
 /// One of the top 3. Only the file's #1 carries full detail; the others are outlines.

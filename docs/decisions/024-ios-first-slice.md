@@ -22,7 +22,13 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   For drawing only, every piece under 20 m joins its longer neighbour (shortest first), then
   neighbours of the same kind join. On this route the 25 pieces draw as 11 runs: 42 m of short
   street bits on the esplanade draw as path (307 m of path drawn in all) and 5 m at the turn back
-  joins the waterfront. The profile strip's bars still use one kind per stretch (largest share).
+  joins the waterfront. The profile strip's bars use the same 11 runs (path as a dashed bar in
+  route-path; "path" joins the legend only when the route has path).
+- **Detail follows the zoom.** On the map, runs shorter than 40 pt on screen join their longer
+  neighbour, and a path run is dashed only when it fits two full dashes (30 pt); shorter path
+  runs are drawn solid in route-path. Recomputed as the camera zooms.
+- **Selected mile.** Other mile labels whose circle would sit under the selected marker or its
+  chip are hidden. Markers never draw over the header.
 - **Whole-route stats.** The three stats and the crowd line describe the whole route.
   Selecting a mile only moves the marker, the chip and the profile cursor.
 - **Crowd line names stretches** (Jared, 2026-11-04): "Crowds at 7:00 · moderate on E 31st St ·
@@ -47,7 +53,11 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   shows our token colors as given ("night" turns the Night land #1C1915 into about #020304).
   Under "day" the basemap's label halos stay cream and Standard has no halo color setting, so
   Night shows no basemap labels (neighborhood or street names). Our route layers ignore the
-  basemap lighting.
+  basemap lighting. Night also hides Standard's footpaths (`showPedestrianRoads`): they draw as
+  thick light lines that read as dashes, and Standard has no color setting for them.
+- **Dashes mean path only: ferry lines masked.** Standard has no setting for its dashed ferry
+  routes on the water. The app draws Mapbox Streets v8 water polygons over them in our water
+  color, in Standard's middle slot.
 - **Without a Mapbox token** the app draws on a plain paper background, so layout and route can
   be checked before the account exists.
 - **Mapbox logo and attribution** stay visible just above the sheet (Mapbox terms).
@@ -63,4 +73,8 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   Studio style comes later as a design task.
 - Basemap neighborhood labels can sit under the Mapbox logo (East Village, with the sheet open);
   fine for now (Jared, 2026-11-04).
+- The water mask sits above Standard's roads, so anything Standard draws over water below the
+  labels is covered too: bridge decks would disappear (none on this route; the Brooklyn,
+  Williamsburg and Queensboro bridges matter for later routes). Standard's white one-way arrows
+  (zoomed in) have no setting either. Both go to the custom Mapbox Studio style.
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.

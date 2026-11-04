@@ -9,6 +9,8 @@ struct CameraRequest: Equatable {
         case overview
         /// Put a point just above the sheet, a little right of center (room for the chip).
         case focus(GeoPoint)
+        /// A fixed center and zoom (debug and screenshots).
+        case at(GeoPoint, zoom: Double)
     }
     var id = 0
     var kind: Kind = .overview
@@ -64,6 +66,7 @@ struct RouteMapView: UIViewRepresentable {
         private var pendingCamera: CameraRequest?
         private var lastFrame: RouteFrame?
         private var lastFrameVersion = -1
+        private var lastZoomKey = -1
         private var wasAnimating = false
         private var displayLink: CADisplayLink?
         private var roadLabelsOn: Bool?
@@ -151,6 +154,9 @@ struct RouteMapView: UIViewRepresentable {
             static let others = "loop-others-dots"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
+            static let pathSolid = "loop-route-path-solid"
+            static let waterSource = "loop-water"
+            static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
@@ -162,6 +168,7 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.addSource(s)
             }
             let slot: Slot? = MapStyle.hasToken ? .top : nil
+            if MapStyle.hasToken { addWaterMask(map) }
 
             var others = LineLayer(id: Ids.others, source: Ids.othersSource)
             others.lineWidth = .constant(3)
@@ -193,6 +200,15 @@ struct RouteMapView: UIViewRepresentable {
                 l.slot = slot
                 try? map.addLayer(l)
             }
+            // Path runs too short for two dashes: same color and width, solid.
+            var pathSolid = LineLayer(id: Ids.pathSolid, source: Ids.routeSource)
+            pathSolid.filter = Exp(.eq) { Exp(.get) { "kind" }; "pathSolid" }
+            pathSolid.lineWidth = .constant(4.5)
+            pathSolid.lineCap = .constant(.round)
+            pathSolid.lineJoin = .constant(.round)
+            pathSolid.slot = slot
+            try? map.addLayer(pathSolid)
+
             var lead = LineLayer(id: Ids.lead, source: Ids.routeSource)
             lead.filter = Exp(.eq) { Exp(.get) { "kind" }; "lead" }
             lead.lineWidth = .constant(4.5)
@@ -203,16 +219,36 @@ struct RouteMapView: UIViewRepresentable {
             recolorRouteLayers(map)
         }
 
+        /// Standard has no setting for ferry routes, which it draws as dashed lines on the water.
+        /// Dashes on this map mean "path" only, so Mapbox Streets' own water polygons are drawn
+        /// over them in our water color, in Standard's bottom slot (above the water, below roads
+        /// and labels).
+        private func addWaterMask(_ map: MapboxMap) {
+            if !map.sourceExists(withId: Ids.waterSource) {
+                var src = VectorSource(id: Ids.waterSource)
+                src.url = "mapbox://mapbox.mapbox-streets-v8"
+                try? map.addSource(src)
+            }
+            var water = FillLayer(id: Ids.waterMask, source: Ids.waterSource)
+            water.sourceLayer = "water"
+            water.fillAntialias = .constant(true)
+            water.fillEmissiveStrength = .constant(1)
+            water.slot = .middle
+            try? map.addLayer(water)
+        }
+
         private func recolorRouteLayers(_ map: MapboxMap) {
             func set(_ id: String, _ prop: String, _ token: Palette.Token) {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
             }
             // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
-            for id in [Ids.casing, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
+            for id in [Ids.casing, Ids.lead, Ids.others, Ids.pathSolid] + DrawKind.allCases.map(Ids.kind) {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
             set(Ids.lead, "line-color", Palette.routeWater)
+            set(Ids.pathSolid, "line-color", Palette.routePath)
+            try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
             set(Ids.others, "line-color", Palette.routeStreet)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
         }
@@ -228,16 +264,19 @@ struct RouteMapView: UIViewRepresentable {
             }
             let now = CACurrentMediaTime()
             // Idle: nothing changed and nothing is moving, so skip the frame work entirely.
-            if lastFrame != nil, model.frameVersion == lastFrameVersion,
+            // Route detail follows the zoom, so a zoom change counts as a change.
+            let zoomKey = Int((model.zoom * 20).rounded())
+            if lastFrame != nil, model.frameVersion == lastFrameVersion, zoomKey == lastZoomKey,
                !model.isAnimating(now: now, reduceMotion: reduceMotion), !wasAnimating { return }
             wasAnimating = model.isAnimating(now: now, reduceMotion: reduceMotion)
             lastFrameVersion = model.frameVersion
+            lastZoomKey = zoomKey
             let frame = model.frame(now: now, reduceMotion: reduceMotion)
             guard frame != lastFrame else { return }
             if frame.lead != lastFrame?.lead {
                 let features: [Feature] = frame.lead.map { seg in
                     var f = Feature(geometry: LineString(seg.points.map(\.coordinate)))
-                    f.properties = ["kind": .string(seg.kind?.rawValue ?? "lead")]
+                    f.properties = ["kind": .string(seg.layerKind)]
                     return f
                 }
                 map.updateGeoJSONSource(withId: Ids.routeSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
@@ -310,6 +349,8 @@ struct RouteMapView: UIViewRepresentable {
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let shifted = CGPoint(x: center.x + (now.x - goal.x), y: center.y + (now.y - goal.y))
                 target = CameraOptions(center: map.coordinate(for: shifted))
+            case let .at(point, zoom):
+                target = CameraOptions(center: point.coordinate, zoom: zoom)
             }
             guard let target else { return }
             if request.animated && !reduceMotion {

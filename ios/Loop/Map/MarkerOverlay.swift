@@ -6,15 +6,21 @@ struct MarkerOverlay: View {
     let model: MainModel
 
     var body: some View {
+        GeometryReader { geo in content(size: geo.size) }
+    }
+
+    @ViewBuilder private func content(size: CGSize) -> some View {
         let showDetailMarks = model.zoom >= MapStyle.markerMinZoom
+        let selection = SelectionLayout.compute(model, size: size)
         ZStack(alignment: .topLeading) {
             if let detail = model.shownDetail {
                 // Mile marks (the selected one is drawn by the selection layer instead).
                 if showDetailMarks {
                     let placements = model.markPlacements()
                     ForEach(detail.miles, id: \.mile) { m in
+                        // Hidden when its circle would sit under the selected marker or the chip.
                         if m.mile != model.selectedMile, model.isDrawn(alongM: m.alongM),
-                           let place = placements[m.mile] {
+                           let place = placements[m.mile], selection?.covers(place.center) != true {
                             MarkLeader(placement: place)
                             MileMarkButton(mile: m.mile) { model.tapMile(m.mile) }
                                 .position(place.center)
