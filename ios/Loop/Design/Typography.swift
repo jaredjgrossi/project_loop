@@ -30,7 +30,17 @@ struct TypeStyle {
     var pointSize: CGFloat { size * Self.scale }
     var trackingPoints: CGFloat { tracking * pointSize }
 
+    @MainActor private static var cache: [String: UIFont] = [:]
+
     var uiFont: UIFont {
+        let key = "\(family)-\(pointSize)-\(weight)-\(tabularNumerals)"
+        if let hit = MainActor.assumeIsolated({ Self.cache[key] }) { return hit }
+        let font = makeFont()
+        MainActor.assumeIsolated { Self.cache[key] = font }
+        return font
+    }
+
+    private func makeFont() -> UIFont {
         // Variation axes by 4-char tag: wght, opsz (Fraunces), SOFT and WONK (Fraunces, off).
         func tag(_ s: String) -> NSNumber {
             NSNumber(value: s.unicodeScalars.reduce(UInt32(0)) { ($0 << 8) | $1.value })
