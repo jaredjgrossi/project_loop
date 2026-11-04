@@ -204,6 +204,34 @@ def composition_by_range(classes: list[str], along: list[float], bounds_m: list[
     return out
 
 
+def pieces_by_range(coords, classes: list[str], along: list[float], bounds_m: list[float]) -> list[dict]:
+    """The route line cut wherever the class or the range changes (decision 023): each piece has one class
+    (`kind`), the range it sits in, where it starts and ends along the route, and its line. A piece's `length_m`
+    weighs every sample as `composition_by_range` does, so the pieces add up to the ranges' meters exactly. Each
+    line runs from its first sample to the next piece's first sample, so neighbors join without a gap."""
+    if not classes:
+        return []
+    frame = _Frame(coords[0][1])
+    lonlat = [[x / frame.kx, y / frame.ky] for x, y in _samples(coords, frame)]
+    per = along[-1] / len(classes)
+    ranges, i = [], 0
+    for a in along:
+        while i + 1 < len(bounds_m) and a >= bounds_m[i + 1]:
+            i += 1
+        ranges.append(i)
+    pieces, start = [], 0
+    for k in range(1, len(classes) + 1):
+        if k < len(classes) and (classes[k], ranges[k]) == (classes[start], ranges[start]):
+            continue
+        last = min(k, len(classes) - 1)  # the next piece's first sample, or the route's end
+        line = lonlat[start:last + 1] if last > start else lonlat[max(0, start - 1):start + 1]
+        pieces.append({"kind": classes[start], "range": ranges[start], "start_m": along[start],
+                       "end_m": along[k] if k < len(classes) else along[-1], "length_m": (k - start) * per,
+                       "coordinates": line})
+        start = k
+    return pieces
+
+
 def any_cell(grid: dict, xy: list, size: float, pad: int = 0) -> bool:
     """Whether the grid (cells of `size`) has an entry in any cell under the points' bounding box, widened by `pad`
     cells. When it has none, no point there can be near anything in the grid, so the exact test can be skipped."""

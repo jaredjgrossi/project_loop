@@ -36,7 +36,7 @@ from api.lights import signal_penalty_model
 from api.markers import marker_features
 from api.summary import route_summary
 from api.route_context import ContextScores, score_context
-from api.segments import route_stretches
+from api.segments import route_stretches_and_pieces
 from api.routing import RoutingError, request_round_trip, request_route, route_to_geojson
 from api.streets import grid_at
 
@@ -109,9 +109,11 @@ DB_FEATURE_ANCHOR_SOURCES = [_on_own_connection(f) for f in (corridor_anchors, p
 
 
 def db_stretches(coords: list[list[float]], elevation: list[float] | None, start=None) -> list[dict]:
-    """Per-stretch GeoJSON features for a route (decision 014), with crowd levels for the start moment (016)."""
+    """Per-stretch GeoJSON features for a route (decision 014), with crowd levels for the start moment (016), then
+    the route cut into pieces by kind (023)."""
     with psycopg.connect(database_url()) as conn:
-        return route_stretches(conn, coords, elevation, start)
+        stretches, pieces = route_stretches_and_pieces(conn, coords, elevation, start)
+    return stretches + pieces
 
 
 def _merged(*models: dict | None) -> dict | None:

@@ -13,6 +13,7 @@ from api.route_context import (
     familiar_share,
     park_or_water_share,
     park_share,
+    pieces_by_range,
     sample_classes,
     waterfront_share,
 )
@@ -248,3 +249,37 @@ def test_stretch_compositions_add_up_to_the_route():
         assert sum(p[k] for p in parts) == pytest.approx(total * classes.count(k) / len(classes))
     assert parts[0]["street"] == pytest.approx(200, abs=10) and parts[0]["park"] == pytest.approx(100, abs=10)
     assert parts[2]["park"] == 0  # the park at 900-1000 m is by the water: waterfront
+
+
+def test_pieces_split_at_every_change_of_class_and_of_range():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    bounds = [0.0, 300.0, 700.0]
+    pieces = pieces_by_range(STRAIGHT, classes, along, bounds)
+    for a, b in zip(pieces, pieces[1:]):
+        assert (a["kind"], a["range"]) != (b["kind"], b["range"])  # neighbors differ in kind or stretch
+        assert a["end_m"] == b["start_m"] and a["range"] <= b["range"]
+    assert pieces[0]["start_m"] == 0 and pieces[-1]["end_m"] == pytest.approx(along[-1])
+    assert [p["kind"] for p in pieces if p["range"] == 0] == ["street", "park"]  # 0-200 street, 200-300 park
+
+
+def test_pieces_add_up_to_the_stretch_compositions_exactly():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    bounds = [0.0, 300.0, 700.0]
+    parts = composition_by_range(classes, along, bounds)
+    pieces = pieces_by_range(STRAIGHT, classes, along, bounds)
+    for i, part in enumerate(parts):
+        for k in COMPOSITION:
+            assert sum(p["length_m"] for p in pieces if p["range"] == i and p["kind"] == k) == pytest.approx(part[k])
+
+
+def test_piece_lines_join_up_and_cover_the_route():
+    parks, shore, path = _composition_scene()
+    classes, along = sample_classes(STRAIGHT, parks, shore, path)
+    pieces = pieces_by_range(STRAIGHT, classes, along, [0.0, 300.0, 700.0])
+    assert all(len(p["coordinates"]) >= 2 for p in pieces)
+    for a, b in zip(pieces, pieces[1:]):
+        assert a["coordinates"][-1] == pytest.approx(b["coordinates"][0])
+    assert pieces[0]["coordinates"][0] == pytest.approx(STRAIGHT[0])
+    assert pieces[-1]["coordinates"][-1] == pytest.approx(STRAIGHT[-1])

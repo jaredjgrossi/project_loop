@@ -117,6 +117,25 @@ def stretch_features(samples: list[list[float]], labels: list[Label], step_m: fl
     return feats
 
 
+def piece_features(pieces: list[dict], stretches: list[dict]) -> list[dict]:
+    """GeoJSON features for the route cut by kind (api/route_context.pieces_by_range; decision 023): one line per
+    run of waterfront, park, path or street inside one stretch, with its meters and the stretch's name. The pieces
+    of a stretch add up to its composition, so the line can be colored by kind without hiding anything."""
+    feats = []
+    for i, p in enumerate(pieces):
+        s = stretches[p["range"]]["properties"]
+        feats.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": p["coordinates"]},
+            "properties": {
+                "feature": "piece", "piece": i, "kind": p["kind"], "length_m": round(p["length_m"], 1),
+                "from_mile": round(p["start_m"] / METERS_PER_MILE, 2), "to_mile": round(p["end_m"] / METERS_PER_MILE, 2),
+                "stretch": s["stretch"], "stretch_name": s["name"], "status": "measured", "source": COMPOSITION_SOURCE,
+            },
+        })
+    return feats
+
+
 SIGNALS_COUNTED = "signalized crossings, each time the route crosses (decision 020)"
 COMPOSITION_SOURCE = ("OSM coastline within 60 m (waterfront), NYC Parks properties (park), Loop corridor catalog "
                       "within 15 m (path); the same 5 m samples as the route's shares")
@@ -182,9 +201,16 @@ WIDTH_SOURCE = "NYC planimetric sidewalk polygons (52n9-sdep, 2022 imagery), wid
 def route_stretches(conn, coords: list[list[float]], elevation: list[float] | None = None, start=None) -> list[dict]:
     """Stretch features for a route: labels from PostGIS, signals from OSM crosswalks, climb from the elevation, and
     the crowd level (estimate) for a run starting at `start` (decision 016)."""
+    return route_stretches_and_pieces(conn, coords, elevation, start)[0]
+
+
+def route_stretches_and_pieces(conn, coords: list[list[float]], elevation: list[float] | None = None,
+                               start=None) -> tuple[list[dict], list[dict]]:
+    """The stretch features, and the route cut into pieces by kind (feature "piece", decision 023)."""
     from api.crowds import route_crowds, stretch_crowd
     from api.elevation import elevation_profile
-    from api.route_context import _BBOX, composition_by_range, crossing_passes, fetch_context, sample_classes
+    from api.route_context import (_BBOX, composition_by_range, crossing_passes, fetch_context, pieces_by_range,
+                                   sample_classes)
 
     samples = _resample(coords, STEP_M)
     rows = conn.execute(_LABELS, {"lons": [c[0] for c in samples], "lats": [c[1] for c in samples]}).fetchall()
@@ -224,7 +250,8 @@ def route_stretches(conn, coords: list[list[float]], elevation: list[float] | No
         if idx and 2 * len(ws) > len(idx):  # mostly on sidewalks with a measured width
             extra[-1].append({"text": f"Sidewalk about {ws[len(ws) // 2]:.0f} ft wide", "source": WIDTH_SOURCE,
                               "trust": "listed"})
-    return stretch_features(samples, labels, STEP_M, signals, gains, extra, crowds, compositions)
+    feats = stretch_features(samples, labels, STEP_M, signals, gains, extra, crowds, compositions)
+    return feats, piece_features(pieces_by_range(coords, classes, along, bounds), feats)
 
 
 def _elevation_at_samples(coords, elevation, samples) -> list[float]:

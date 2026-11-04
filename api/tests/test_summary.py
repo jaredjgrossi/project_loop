@@ -8,7 +8,7 @@ from api.markers import marker_features
 from api.ranking import rank
 from api.route_context import ContextScores
 from api.routing import Route
-from api.segments import Label, stretch_features
+from api.segments import Label, piece_features, stretch_features
 from api.shape import shape_metrics
 from api.summary import route_summary
 
@@ -71,6 +71,14 @@ def test_shares_and_lights_are_the_sums_of_the_stretches():
     assert s["lights_per_mile"]["value"] == pytest.approx(12 / (4800 / 1609.344), abs=0.05)
     # The ranking keeps its own input, each crosswalk once, and says so.
     assert s["ranking_signals_per_mile"]["value"] == 1.8 and "once" in s["ranking_signals_per_mile"]["counted"]
+
+
+def test_pieces_beside_the_stretches_do_not_change_the_sums():
+    c = candidate(CONTEXT)
+    feats = stretches(c.route.coordinates)
+    pieces = piece_features([{"kind": "street", "range": 0, "start_m": 0.0, "end_m": 400.0, "length_m": 400.0,
+                              "coordinates": c.route.coordinates[:21]}], feats)
+    assert route_summary(c, feats + pieces, [], ELEVATION) == route_summary(c, feats, [], ELEVATION)
 
 
 def test_estimates_are_labeled_and_the_turnaround_is_measured():

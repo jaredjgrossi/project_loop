@@ -37,6 +37,7 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
                   rank: int | None = None, best_of: int | None = None) -> dict:
     # The geometry's own length, as the mile markers and stretches measure it; GraphHopper's figure differs slightly.
     miles = c.shape.distance_miles
+    stretches = [s for s in stretches if s["properties"].get("feature", "stretch") == "stretch"]  # not the pieces
     out = {
         "distance": _value(round(miles, 2), "mi", "measured", DISTANCE_SOURCE, meters=round(miles * METERS_PER_MILE),
                            router_meters=round(c.route.distance_m)),

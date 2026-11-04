@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from api.segments import Label, merge_stretches, stretch_features
+from api.segments import Label, merge_stretches, piece_features, stretch_features
 
 LAT0, LON0 = 40.74, -73.98
 KX = 111_320 * math.cos(math.radians(LAT0))
@@ -71,3 +71,24 @@ def test_stretch_composition_is_measured_meters_by_class():
     assert first["status"] == second["status"] == "measured" and second["source"]
     plain = stretch_features(coords, labels, step_m=20)
     assert plain[0]["properties"]["composition"] == {"status": "not_scored"}
+
+
+def test_piece_features_carry_kind_meters_and_the_stretch_they_sit_in():
+    coords = [[LON0 + x / KX, LAT0] for x in range(0, 1001, 20)]
+    stretches = stretch_features(coords, [STREET] * 15 + [GREENWAY] * 36, step_m=20)
+    pieces = [{"kind": "street", "range": 0, "start_m": 0.0, "end_m": 300.0, "length_m": 300.0,
+               "coordinates": coords[:16]},
+              {"kind": "waterfront", "range": 1, "start_m": 300.0, "end_m": 900.0, "length_m": 600.0,
+               "coordinates": coords[15:46]},
+              {"kind": "path", "range": 1, "start_m": 900.0, "end_m": 1000.0, "length_m": 100.0,
+               "coordinates": coords[45:]}]
+    feats = piece_features(pieces, stretches)
+    props = [f["properties"] for f in feats]
+    assert [p["feature"] for p in props] == ["piece"] * 3
+    assert [(p["kind"], p["length_m"], p["stretch"], p["stretch_name"]) for p in props] == [
+        ("street", 300.0, 0, "East 34th Street"), ("waterfront", 600.0, 1, "East River Greenway"),
+        ("path", 100.0, 1, "East River Greenway")]
+    assert [p["piece"] for p in props] == [0, 1, 2]
+    assert props[2]["from_mile"] == 0.56 and props[2]["to_mile"] == 0.62
+    assert all(p["status"] == "measured" and p["source"] for p in props)
+    assert feats[1]["geometry"] == {"type": "LineString", "coordinates": coords[15:46]}
