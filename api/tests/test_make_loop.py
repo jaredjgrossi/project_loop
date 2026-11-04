@@ -308,3 +308,18 @@ def test_shape_left_unset_is_shown_as_a_default_and_the_request_goes_into_the_ge
     assert {"key": "shape", "title": "Shape", "value": "any", "origin": "default"} in request
     assert go(tmp_path, fake_generate([candidate()]), shape="any") == 0
     assert "Shape: any (you said)" in capsys.readouterr().out
+
+
+def test_a_start_time_without_a_day_gets_the_next_day_it_comes_round(tmp_path, capsys):
+    from datetime import datetime
+
+    seen = {}
+
+    def factory(lights, grid, start):
+        seen["start"] = start
+        return None
+
+    assert go(tmp_path, fake_generate([candidate()]), start_time="07:00", context_factory=factory,
+              now_fn=lambda: datetime(2026, 11, 3, 21, 0)) == 0
+    assert seen["start"] == datetime(2026, 11, 4, 7, 0)  # 9 pm now: tomorrow, a Wednesday
+    assert "Day: Wednesday 2026-11-04 (default)" in capsys.readouterr().out

@@ -139,3 +139,30 @@ def test_describe_lines_carry_the_origin():
     lines = describe(RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3))
     assert "Shape: any (default)" in lines and "Distance: 3 mi (you said)" in lines
     assert "Start time: not set, so crowds are not scored (default)" in lines
+
+
+def test_a_time_without_a_day_means_the_next_time_it_comes_round():
+    from datetime import date, datetime
+
+    from api.constraints import with_default_date
+
+    c = RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time="07:00")
+    morning = with_default_date(c, datetime(2026, 11, 3, 6, 30))  # a Tuesday, before 7
+    assert morning.start_date == date(2026, 11, 3)
+    assert with_default_date(c, datetime(2026, 11, 3, 7, 30)).start_date == date(2026, 11, 4)  # already past: tomorrow
+    assert _origins(morning)["start_date"] == "default" and _origins(morning)["start_time"] == "you said"
+    assert _origins(morning)["shape"] == "default"  # the copy keeps what was and wasn't said
+    assert morning.start_moment() == datetime(2026, 11, 3, 7, 0)
+
+
+def test_a_stated_day_or_no_time_is_left_alone():
+    from datetime import date, datetime
+
+    from api.constraints import with_default_date
+
+    dated = RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3, start_time="07:00",
+                           start_date=date(2026, 11, 7))
+    assert with_default_date(dated, datetime(2026, 11, 3, 6, 0)) is dated
+    assert _origins(dated)["start_date"] == "you said"
+    untimed = RunConstraints(start_address="446 3rd Ave, 10016", distance_mi=3)
+    assert with_default_date(untimed, datetime(2026, 11, 3, 6, 0)).start_date is None

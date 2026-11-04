@@ -13,14 +13,16 @@ import re
 import sys
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from functools import partial
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import psycopg
 
 from etl.load import database_url
 
-from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences
+from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences, with_default_date
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -39,6 +41,7 @@ from api.routing import RoutingError, request_round_trip, request_route, route_t
 from api.streets import grid_at
 
 OUT_DIR = Path(__file__).resolve().parents[2] / "out"
+NEW_YORK = ZoneInfo("America/New_York")
 KIND_LABELS = {"loop": "loop", "out_and_back": "out-and-back", "lollipop": "lollipop"}
 MIN_MILES, MAX_MILES = 0.5, 30.0
 
@@ -271,6 +274,7 @@ def run(
     stretch_fn: Callable | None = None,  # (coords, elevation, start) -> stretch features (api/segments.py)
     pool_out: Path | None = None,
     closures_fn: Callable | None = None,  # (lat, lon, miles) -> known closures (decision 017)
+    now_fn: Callable[[], datetime] = lambda: datetime.now(NEW_YORK).replace(tzinfo=None),  # for the default day
 ) -> int:
     if not MIN_MILES <= miles <= MAX_MILES:
         print(f"Distance must be between {MIN_MILES:g} and {MAX_MILES:g} miles.", file=sys.stderr)
@@ -278,6 +282,7 @@ def run(
     stated = {"shape": shape, "mode": mode, "start_time": start_time, "start_date": start_date, "lights": lights}
     constraints = RunConstraints(start_address=address, distance_mi=miles, avoid_places=avoid or [],
                                  **{k: v for k, v in stated.items() if v is not None})
+    constraints = with_default_date(constraints, now_fn())
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
     zones, unknown = resolve_zones(constraints.avoid_places)

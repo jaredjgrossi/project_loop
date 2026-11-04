@@ -10,11 +10,11 @@ neutral default, and `resolve_preferences` records which.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 
 class Mode(StrEnum):
@@ -78,6 +78,9 @@ class RunConstraints(BaseModel):
     turns: Turns | None = None
     familiar: Familiar | None = None
 
+    # Fields that code filled in, never the parse (decision 020): shown as "default", not "you said".
+    _defaulted: set[str] = PrivateAttr(default_factory=set)
+
     def start_moment(self) -> datetime | None:
         """The start as a local date and time, when both are known."""
         if self.start_time is None or self.start_date is None:
@@ -134,7 +137,20 @@ SAID, DEFAULT = "you said", "default"
 
 def _said(c: RunConstraints, field: str) -> bool:
     """Whether the request stated this field (passed with a value), rather than leaving the schema default."""
-    return field in c.model_fields_set and getattr(c, field) is not None
+    return field in c.model_fields_set and getattr(c, field) is not None and field not in c._defaulted
+
+
+def with_default_date(c: RunConstraints, now: datetime) -> RunConstraints:
+    """A start time with no day means the next time that clock time comes round (decision 020): today if it is
+    still ahead of `now` (New York local time), else tomorrow. The day is labeled "default". Without a day, crowds
+    can't be scored, since weekday, Saturday and Sunday differ (decision 016)."""
+    if c.start_time is None or c.start_date is not None:
+        return c
+    at = datetime.strptime(c.start_time, "%H:%M").time()
+    day = now.date() if at >= now.time().replace(second=0, microsecond=0) else now.date() + timedelta(days=1)
+    out = RunConstraints(**c.model_dump(exclude_unset=True), start_date=day)
+    out._defaulted = {*c._defaulted, "start_date"}
+    return out
 
 
 def request_items(c: RunConstraints) -> list[dict]:
