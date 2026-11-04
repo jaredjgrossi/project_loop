@@ -1,9 +1,19 @@
 import Foundation
 
-/// The three ways a stretch is drawn. Never told apart by color alone:
+/// The three ways a piece of route is drawn. Never told apart by color alone:
 /// waterfront is solid and wide, path is dashed, street is solid and thinner.
 enum DrawKind: String, CaseIterable {
     case waterfront, path, street
+
+    /// The file's piece kinds. Park is drawn as path (dashed) for now.
+    init?(pieceKind: String) {
+        switch pieceKind {
+        case "waterfront": self = .waterfront
+        case "path", "park": self = .path
+        case "street": self = .street
+        default: return nil
+        }
+    }
 
     /// The stretch's largest measured share decides how it is drawn (first slice).
     /// Park metres count as path (off-street). Ties go waterfront, then path, then street.
@@ -70,6 +80,8 @@ struct RouteDetail {
     let distanceMi: Double
     let distanceTrust: Trust
     let stretches: [Stretch]
+    /// How the line is drawn, from the file's pieces (merged under 20 m).
+    let drawn: [DrawnPiece]
     let miles: [MileMark]
     let turnaround: Turnaround?
     let start: GeoPoint
@@ -94,11 +106,59 @@ struct RouteDetail {
     }
 }
 
+/// A run of route drawn one way, by along-route metres on the route line.
+struct DrawnPiece: Equatable {
+    let kind: DrawKind
+    let fromM: Double
+    let toM: Double
+    var lengthM: Double { toM - fromM }
+
+    static let minimumDrawnLength: Double = 20
+
+    /// For drawing only: every piece shorter than 20 m joins its longer neighbour (shortest
+    /// first), then neighbours of the same kind join up. `lengths` are the file's piece lengths
+    /// in route order; they are scaled so the result tiles a line of `lineLength` exactly.
+    static func merged(_ pieces: [(kind: DrawKind, lengthM: Double)], lineLength: Double) -> [DrawnPiece] {
+        var runs = pieces.map { (kind: $0.kind, length: $0.lengthM) }
+        while runs.count > 1, let i = runs.indices.filter({ runs[$0].length < minimumDrawnLength })
+                .min(by: { runs[$0].length < runs[$1].length }) {
+            let prev = i > 0 ? i - 1 : nil
+            let next = i < runs.count - 1 ? i + 1 : nil
+            let into: Int
+            switch (prev, next) {
+            case let (p?, n?): into = runs[p].length >= runs[n].length ? p : n
+            case let (p?, nil): into = p
+            case let (nil, n?): into = n
+            default: return []
+            }
+            runs[into].length += runs[i].length
+            runs.remove(at: i)
+        }
+        var joined: [(kind: DrawKind, length: Double)] = []
+        for r in runs {
+            if let last = joined.last, last.kind == r.kind { joined[joined.count - 1].length += r.length }
+            else { joined.append(r) }
+        }
+        let total = joined.reduce(0) { $0 + $1.length }
+        guard total > 0 else { return [] }
+        var out: [DrawnPiece] = []
+        var at = 0.0
+        for (i, r) in joined.enumerated() {
+            let end = i == joined.count - 1 ? lineLength : at + r.length / total * lineLength
+            out.append(DrawnPiece(kind: r.kind, fromM: at, toM: end))
+            at = end
+        }
+        return out
+    }
+}
+
 /// One of the top 3. Only the file's #1 carries full detail; the others are outlines.
 struct Candidate: Identifiable {
     let rank: Int
     let line: Polyline
     let distanceMi: Double
+    /// The file's trust label for the distance (nil if the file gives none).
+    let distanceTrust: Trust?
     let kindText: String
     let detail: RouteDetail?
     var id: Int { rank }
@@ -144,6 +204,15 @@ struct LoopData {
                 crowd: p.crowd?.value, crowdTrust: Trust(p.crowd?.status ?? "not_scored"))
         }.sorted { $0.index < $1.index }
 
+        let pieces: [(kind: DrawKind, lengthM: Double)] = features
+            .filter { $0.properties.feature == "piece" }
+            .sorted { ($0.properties.piece ?? 0) < ($1.properties.piece ?? 0) }
+            .compactMap { f in
+                guard let k = f.properties.kind.flatMap(DrawKind.init(pieceKind:)), let len = f.properties.lengthM else { return nil }
+                return (k, len)
+            }
+        let drawn = DrawnPiece.merged(pieces, lineLength: line.length)
+
         let miles: [MileMark] = features.compactMap { f in
             let p = f.properties
             guard p.feature == "mile", let m = p.mile, let pt = f.geometry.point,
@@ -168,7 +237,7 @@ struct LoopData {
             kindText: CardText.kindText(summary.kind),
             distanceMi: summary.distance.value,
             distanceTrust: Trust(summary.distance.status),
-            stretches: stretches, miles: miles, turnaround: turnaround, start: start,
+            stretches: stretches, drawn: drawn, miles: miles, turnaround: turnaround, start: start,
             profile: elevation.profile, profileTrust: Trust(elevation.status),
             summary: summary)
 
@@ -177,7 +246,8 @@ struct LoopData {
             return Candidate(
                 rank: t.rank,
                 line: t.rank == 1 ? line : Polyline(coords),
-                distanceMi: t.rank == 1 ? summary.distance.value : t.distanceMi,
+                distanceMi: t.rank == 1 ? summary.distance.value : t.distance.value,
+                distanceTrust: Trust(t.rank == 1 ? summary.distance.status : t.distance.status),
                 kindText: CardText.kindText(t.kind),
                 detail: t.rank == 1 ? detail : nil)
         }.sorted { $0.rank < $1.rank }

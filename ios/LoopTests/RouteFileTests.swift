@@ -18,6 +18,13 @@ final class RouteFileTests: XCTestCase {
         XCTAssertEqual(data.bestOf, 31)
     }
 
+    func testTopThreeDistancesCarryTheFileTrustLabel() {
+        XCTAssertEqual(data.candidate(rank: 2)?.distanceMi, 3.01)
+        XCTAssertEqual(data.candidate(rank: 2)?.distanceTrust, Trust("measured"))
+        XCTAssertEqual(data.candidate(rank: 3)?.distanceMi, 3.05)
+        XCTAssertEqual(data.candidate(rank: 1)?.distanceTrust, Trust("measured"))
+    }
+
     func testRouteLengthMatchesFileDistance() {
         // summary.distance.meters is 4878; haversine on the same coordinates agrees within 0.5%.
         XCTAssertEqual(detail.line.length, 4878, accuracy: 4878 * 0.005)

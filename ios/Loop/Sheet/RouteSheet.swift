@@ -78,8 +78,7 @@ struct RouteSheet: View {
                 StatRow(stats: CardText.stats(detail.summary))
                     .padding(.top, 10)
                 let crowd = CardText.crowdLine(detail, startTime: model.data.request.startHourText)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(CardText.signalsLine(detail.summary))
+                VStack(alignment: .leading, spacing: 2) {
                     // 11 pt mono fits about 50 characters across the sheet; wrap only at " · ".
                     ForEach(Array(CardText.wrapAtSeparators(crowd, maxChars: 50).prefix(2).enumerated()), id: \.offset) {
                         Text($0.element)
@@ -91,7 +90,7 @@ struct RouteSheet: View {
                 .frame(height: Metrics.dataLinesHeight, alignment: .topLeading)
                 .padding(.top, 8)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(CardText.signalsLine(detail.summary)). \(crowd)")
+                .accessibilityLabel(crowd)
             }
         } else if model.cardRevealed {
             Text("Details for this route aren't in the saved file.")
@@ -137,8 +136,8 @@ struct CardBlock: View {
                             Text("mi")
                                 .typeStyle(.unit)
                                 .foregroundStyle(Palette.unitInk.color)
-                            // Only the file's own label; the top 3 outlines carry none yet.
-                            if let trust = shown.detail?.distanceTrust {
+                            // Only the file's own label, never a default.
+                            if let trust = shown.distanceTrust {
                                 Text(trust.text)
                                     .typeStyle(.data)
                                     .foregroundStyle(Palette.inkMuted.color)
@@ -147,7 +146,7 @@ struct CardBlock: View {
                         .frame(height: 56)
                         .padding(.top, 2)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.detail?.distanceTrust.text]
+                        .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
                         if let detail = shown.detail {

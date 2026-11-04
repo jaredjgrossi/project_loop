@@ -57,22 +57,16 @@ enum CardText {
         ]
     }
 
-    /// "11 signal crossings · measured" (each time the route crosses, decision 020).
-    static func signalsLine(_ s: RouteFile.Summary) -> String {
-        let n = Int(s.signalizedCrossings.value.rounded())
-        return "\(n) signal crossing\(n == 1 ? "" : "s") · \(Trust(s.signalizedCrossings.status).text)"
-    }
-
-    /// "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate"
+    /// "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate"
     /// Names stretches, not percentages. Only the busiest band present is named (high "busy",
-    /// medium "moderate", low "quiet"), then the stretches with no crowd data, longest first,
-    /// at most two names per part. Out-and-back repeats of a street count once.
+    /// medium "moderate", low "quiet"), then the stretches with no crowd data by bare name,
+    /// longest first, at most two names per part. Out-and-back repeats of a street count once.
     static func crowdLine(_ d: RouteDetail, startTime: String) -> String {
-        func names(_ stretches: [Stretch]) -> [String] {
+        func names(_ stretches: [Stretch], bare: Bool = false) -> [String] {
             var total: [String: Double] = [:]
             var order: [String] = []
             for s in stretches {
-                let n = shortName(s.name)
+                let n = bare ? bareName(s.name) : shortName(s.name)
                 if total[n] == nil { order.append(n) }
                 total[n, default: 0] += s.lengthM
             }
@@ -91,7 +85,7 @@ enum CardText {
             if !hits.isEmpty { parts.append("\(word) on \(list(names(hits)))"); break }
         }
         let unscored = d.stretches.filter { $0.crowd == nil }
-        if !unscored.isEmpty { parts.append("not scored on \(list(names(unscored)))") }
+        if !unscored.isEmpty { parts.append("\(list(names(unscored, bare: true))) not scored") }
         parts.append(Trust(d.summary.crowds.status).text)
         return parts.joined(separator: " · ")
     }
@@ -107,6 +101,16 @@ enum CardText {
         }
         if !current.isEmpty { lines.append(current) }
         return lines
+    }
+
+    /// The shortest recognisable name: "East River Esplanade" → "esplanade", "FDR Drive" → "FDR",
+    /// "East 31st Street" → "E 31st".
+    static func bareName(_ name: String) -> String {
+        var words = shortName(name).split(separator: " ").map(String.init)
+        if words.first == "the" { words.removeFirst() }
+        let suffixes: Set = ["St", "Ave", "Dr", "Blvd", "Pl", "Rd", "Pkwy"]
+        if words.count > 1, let last = words.last, suffixes.contains(last) { words.removeLast() }
+        return words.joined(separator: " ")
     }
 
     /// Short street names for data lines: "East 31st Street" → "E 31st St", "FDR Drive" → "FDR Dr",

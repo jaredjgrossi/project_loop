@@ -13,18 +13,18 @@ struct RouteFrame: Equatable {
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
 
-    /// The lead route drawn up to `fraction` of its length, split by stretch kind.
+    /// The lead route drawn up to `fraction` of its length, split by drawn piece kind.
     static func segments(for candidate: Candidate, fraction: Double) -> [Segment] {
         let f = min(1, max(0, fraction))
         let line = candidate.line
         let drawn = line.length * f
         guard drawn > 0 else { return [] }
-        guard let detail = candidate.detail, !detail.stretches.isEmpty else {
+        guard let detail = candidate.detail, !detail.drawn.isEmpty else {
             return [Segment(kind: nil, points: line.slice(from: 0, to: drawn))]
         }
-        return detail.stretches.compactMap { s in
-            let pts = line.slice(from: s.fromM, to: min(s.toM, drawn))
-            return pts.count >= 2 ? Segment(kind: s.kind, points: pts) : nil
+        return detail.drawn.compactMap { piece in
+            let pts = line.slice(from: piece.fromM, to: min(piece.toM, drawn))
+            return pts.count >= 2 ? Segment(kind: piece.kind, points: pts) : nil
         }
     }
 

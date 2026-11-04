@@ -1,4 +1,4 @@
-# 023 · iPhone app, first slice
+# 024 · iPhone app, first slice
 
 *2026-11-04 · branch `ios-first-slice`*
 
@@ -17,20 +17,21 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Reason sentence bands** (Jared, 2026-11-04): 60%+ waterfront "Mostly by the water", 40–59%
   "About half by the water", under 40% "Mostly on streets", then ": X lights a mile." The band is
   picked on the whole-number percent the card shows, so the sentence and the stat agree.
-- **Stretch drawing by largest share.** The file's stretches are `street` or `corridor` plus
-  measured metres of waterfront, park, path and street. Each stretch is drawn as its largest share
-  (park counts as path). On this route that draws 265 m of path (all of it, 5.4%) and 117 m of
-  street as waterfront (inside the esplanade stretch), and 79 m of waterfront as street (FDR
-  Drive). A later slice can split stretches by their 5 m samples.
-- **Whole-route stats.** Stats, the signals line and the crowd line describe the whole route.
+- **Route drawn from the file's pieces** (decision 023's route pieces). Each `"feature": "piece"`
+  (waterfront, park, path, street) is drawn as its kind; park is drawn as path (dashed) for now.
+  For drawing only, every piece under 20 m joins its longer neighbour (shortest first), then
+  neighbours of the same kind join. On this route the 25 pieces draw as 11 runs: 42 m of short
+  street bits on the esplanade draw as path (307 m of path drawn in all) and 5 m at the turn back
+  joins the waterfront. The profile strip's bars still use one kind per stretch (largest share).
+- **Whole-route stats.** The three stats and the crowd line describe the whole route.
   Selecting a mile only moves the marker, the chip and the profile cursor.
 - **Crowd line names stretches** (Jared, 2026-11-04): "Crowds at 7:00 · moderate on E 31st St ·
-  not scored on the esplanade and FDR Dr · estimate". Only the busiest band present is named
-  (high "busy", medium "moderate", low "quiet"), then the stretches without crowd data, longest
-  first, two names at most per part. It needs two lines under the signals line, so the open
-  sheet is 412 pt (the mockup's 398 plus one 14 pt data line), wrapped only at " · ".
-- **No trust label the file doesn't give.** The #2 and #3 distances show none until the file
-  carries one.
+  esplanade and FDR not scored · estimate". Only the busiest band present is named (high
+  "busy", medium "moderate", low "quiet"), then the stretches without crowd data by bare name,
+  longest first, two names at most per part. Two data lines, wrapped only at " · ". The signals
+  line is dropped (it repeats the lights stat), so the open sheet stays at 398 pt.
+- **No trust label the file doesn't give.** The #2 and #3 distances show the label from the
+  file's `top3[].distance` object; a distance without one would show none.
 - **Map framing.** The route is fitted below the provenance line and at least 40 pt above the
   sheet's top, refitted when the sheet opens or closes. Candidate outlines show only while
   building and fade out within 500 ms of the provisional flag.
@@ -58,7 +59,8 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   2026-11-04). The page doesn't define how mobile users are counted.
 - Night values for the four mockup-only colors (control border, request rule, grabber, unit ink)
   are first picks.
-- Night has no neighborhood or street labels (see above). Getting them back needs a custom
-  Mapbox Studio style or a halo color control in Standard.
-- Basemap neighborhood labels can sit under the Mapbox logo (East Village, with the sheet open).
+- Night has no neighborhood or street labels for this slice (Jared, 2026-11-04). A custom Mapbox
+  Studio style comes later as a design task.
+- Basemap neighborhood labels can sit under the Mapbox logo (East Village, with the sheet open);
+  fine for now (Jared, 2026-11-04).
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.

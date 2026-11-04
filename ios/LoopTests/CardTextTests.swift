@@ -36,9 +36,8 @@ final class CardTextTests: XCTestCase {
             .init(value: "51%", label: "waterfront", trust: Trust("measured")),
             .init(value: "8 m", label: "climb", trust: Trust("estimate")),
         ])
-        XCTAssertEqual(CardText.signalsLine(s), "11 signal crossings · measured")
         XCTAssertEqual(CardText.crowdLine(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),
-                       "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate")
+                       "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate")
     }
 
     func testRequestCard() throws {
@@ -48,10 +47,10 @@ final class CardTextTests: XCTestCase {
     }
 
     func testWrapAtSeparators() {
-        let line = "Crowds at 7:00 · moderate on E 31st St · not scored on the esplanade and FDR Dr · estimate"
+        let line = "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate"
         XCTAssertEqual(CardText.wrapAtSeparators(line, maxChars: 50), [
             "Crowds at 7:00 · moderate on E 31st St",
-            "not scored on the esplanade and FDR Dr · estimate",
+            "esplanade and FDR not scored · estimate",
         ])
         XCTAssertEqual(CardText.wrapAtSeparators("a · b", maxChars: 50), ["a · b"])
     }
@@ -63,6 +62,10 @@ final class CardTextTests: XCTestCase {
         XCTAssertEqual(CardText.shortName("Hudson River Greenway"), "the greenway")
         XCTAssertEqual(CardText.shortName("East End Avenue"), "East End Ave", "compass word kept before a name")
         XCTAssertEqual(CardText.shortName("Broadway"), "Broadway")
+        XCTAssertEqual(CardText.bareName("East River Esplanade"), "esplanade")
+        XCTAssertEqual(CardText.bareName("FDR Drive"), "FDR")
+        XCTAssertEqual(CardText.bareName("East 31st Street"), "E 31st")
+        XCTAssertEqual(CardText.bareName("Broadway"), "Broadway")
     }
 
     func testTrustText() {

@@ -103,11 +103,9 @@ enum Metrics {
     static let s24: CGFloat = 24, s32: CGFloat = 32, s52: CGFloat = 52
     static let radiusBar: CGFloat = 3, radiusThumb: CGFloat = 8, radiusButton: CGFloat = 14, radiusSheet: CGFloat = 24
     static let sheetCollapsed: CGFloat = 216
-    /// 398 in the mockup, plus one 14 pt data line: the crowd sentence names stretches and
-    /// needs two lines under the signals line.
-    static let sheetOpen: CGFloat = 412
-    /// Signals line + two crowd lines at the data style's 14 pt line height.
-    static let dataLinesHeight: CGFloat = 42
+    static let sheetOpen: CGFloat = 398
+    /// The crowd sentence: two data lines at 16 pt, as in the mockup.
+    static let dataLinesHeight: CGFloat = 32
     static let selectedMileMarker: CGFloat = 30
     static let routeCasing: CGFloat = 10
     static let minTap: CGFloat = 44

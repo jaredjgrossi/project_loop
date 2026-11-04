@@ -77,8 +77,10 @@ struct RouteFile: Decodable {
         let alongMi: Double?
         let status: String?
         let source: String?
-        // stretches
+        // stretches and pieces
         let stretch: Int?
+        let piece: Int?
+        let stretchName: String?
         let name: String?
         let fromMile: Double?
         let toMile: Double?
@@ -170,7 +172,7 @@ struct RouteFile: Decodable {
         let rank: Int
         let kind: String
         let label: String
-        let distanceMi: Double
+        let distance: Measure
         let geometry: Geometry
     }
 
