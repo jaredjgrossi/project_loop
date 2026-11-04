@@ -94,3 +94,24 @@ final class ZoomDetailTests: XCTestCase {
         XCTAssertEqual(RouteFrame.Segment(kind: .path, points: []).layerKind, "path")
     }
 }
+
+final class StripRunTests: XCTestCase {
+    func testStripRunsAtStripScale() throws {
+        let d = try LoopData(file: RouteFile.loadBundled()).candidate(rank: 1)!.detail!
+        let width = 342.0
+        let runs = d.stripRuns(width: width)
+        let ptPerMile = width / d.distanceMi
+        XCTAssertLessThan(runs.count, d.drawn.count, "the 21-27 m street bits are under 16 pt here")
+        XCTAssertEqual(runs.first!.fromMile, 0)
+        XCTAssertEqual(runs.last!.toMile, d.distanceMi, accuracy: 1e-9)
+        for (a, b) in zip(runs, runs.dropFirst()) {
+            XCTAssertNotEqual(a.kind, b.kind, "same-kind neighbours are one run")
+            XCTAssertEqual(a.toMile, b.fromMile, accuracy: 1e-9)
+        }
+        for r in runs {
+            let pts = (r.toMile - r.fromMile) * ptPerMile
+            XCTAssertGreaterThanOrEqual(pts, 16)
+            XCTAssertEqual(r.dashed, r.kind == .path && pts >= 10.5)
+        }
+    }
+}

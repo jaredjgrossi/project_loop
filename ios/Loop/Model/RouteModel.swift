@@ -89,6 +89,34 @@ struct RouteDetail {
     let profileTrust: Trust
     let summary: RouteFile.Summary
 
+    /// One bar on the profile strip.
+    struct StripRun: Equatable {
+        let kind: DrawKind
+        let fromMile: Double
+        let toMile: Double
+        let dashed: Bool
+    }
+
+    /// The map's merged runs at the strip's scale: runs under 16 pt join their longer neighbour,
+    /// same-kind neighbours join with no gap, and path is dashed only if it fits two full strip
+    /// dashes (4 on, 2.5 off: 10.5 pt). Otherwise path is a solid bar in route-path.
+    static let stripMinimumRunPoints: Double = 16
+    static let stripDash: (on: Double, off: Double) = (4, 2.5)
+
+    func stripRuns(width: Double) -> [StripRun] {
+        guard width > 0, line.length > 0 else { return [] }
+        let mpp = line.length / width
+        let runs = DrawnPiece.merged(drawn.map { ($0.kind, $0.lengthM) }, lineLength: line.length,
+                                     minimum: Self.stripMinimumRunPoints * mpp)
+        let twoDashes = 2 * Self.stripDash.on + Self.stripDash.off
+        return runs.map {
+            StripRun(kind: $0.kind,
+                     fromMile: $0.fromM / line.length * distanceMi,
+                     toMile: $0.toM / line.length * distanceMi,
+                     dashed: $0.kind == .path && $0.lengthM / mpp >= twoDashes)
+        }
+    }
+
     func stretch(atMile mile: Double) -> Stretch? {
         stretches.first { mile >= $0.fromMile && mile < $0.toMile } ?? stretches.last { mile >= $0.fromMile }
     }

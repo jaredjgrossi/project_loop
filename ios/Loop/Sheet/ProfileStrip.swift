@@ -83,20 +83,24 @@ struct ProfileStrip: View {
                        with: .color(Palette.inkMuted.color), lineWidth: 1)
         }
 
-        // Bars from the same merged runs the map draws (pieces, under 20 m joined). Path is a
-        // dashed bar in route-path, like the map, so color is never the only cue.
-        for run in kindRuns() {
-            let x0 = x(run.from, w), x1 = x(run.to, w)
+        // Bars from the map's merged runs at the strip's scale (under 16 pt joined). Each run
+        // spans its full width, so same-kind neighbours never show a gap; a 1 pt gap separates
+        // runs of different kinds. Path is dashed when it fits two full dashes, else solid.
+        let runs = detail.stripRuns(width: Double(w))
+        for (i, run) in runs.enumerated() {
+            let x0 = x(run.fromMile, w), x1 = x(run.toMile, w)
             let gap: CGFloat = 1
-            let left = x0 + (run.from > 0 ? gap : 0)
-            let right = x1 - (run.to < totalMi ? gap : 0)
+            let left = x0 + (i > 0 ? gap / 2 : 0)
+            let right = x1 - (i < runs.count - 1 ? gap / 2 : 0)
             let width = max(1.5, right - left)
             let color = Palette.drawColor(run.kind).color
-            if run.kind == .path {
+            if run.dashed {
                 var dash = Path()
                 dash.move(to: CGPoint(x: left, y: barY + barH / 2))
                 dash.addLine(to: CGPoint(x: left + width, y: barY + barH / 2))
-                ctx.stroke(dash, with: .color(color), style: StrokeStyle(lineWidth: barH, lineCap: .butt, dash: [4, 2.5]))
+                ctx.stroke(dash, with: .color(color), style: StrokeStyle(
+                    lineWidth: barH, lineCap: .butt,
+                    dash: [CGFloat(RouteDetail.stripDash.on), CGFloat(RouteDetail.stripDash.off)]))
             } else {
                 ctx.fill(Path(roundedRect: CGRect(x: left, y: barY, width: width, height: barH),
                               cornerRadius: min(Metrics.radiusBar, width / 2)), with: .color(color))
@@ -112,16 +116,6 @@ struct ProfileStrip: View {
             let dot = Path(ellipseIn: CGRect(x: cx - 5, y: cy - 5, width: 10, height: 10))
             ctx.fill(dot, with: .color(ink))
             ctx.stroke(dot, with: .color(Palette.surfaceSheet.color), lineWidth: 2)
-        }
-    }
-
-    private struct KindRun { let kind: DrawKind; let from: Double; let to: Double }
-
-    private func kindRuns() -> [KindRun] {
-        let len = detail.line.length
-        guard len > 0 else { return [] }
-        return detail.drawn.map {
-            KindRun(kind: $0.kind, from: $0.fromM / len * totalMi, to: $0.toM / len * totalMi)
         }
     }
 
@@ -186,7 +180,7 @@ struct ProfileStrip: View {
     }
 
     private var accessibilitySummary: String {
-        let names = kindRuns().map(\.kind.legend)
+        let names = detail.stripRuns(width: 342).map(\.kind.legend)
         let lo = elevationRange.0, hi = elevationRange.1
         return "Route profile by mile, elevation \(detail.profileTrust.text). Between \(CardText.trimmed(lo.rounded())) and \(CardText.trimmed(hi.rounded())) metres up. Turnaround at mile \(detail.turnaround.map { String(format: "%.2f", $0.alongMi) } ?? "none"). \(names.joined(separator: ", ")). Swipe up or down to change the selected mile."
     }
