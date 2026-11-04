@@ -3,18 +3,18 @@
  "rows": {
   "kips-bay|3|zigzags": [
    {
-    "label": "out-and-back on the waterfront, heading 159 degrees",
+    "label": "out-and-back on the waterfront, heading 148 degrees",
     "kind": "out_and_back",
-    "distance_m": 4921,
-    "score": 83.38,
-    "fingerprint": "dd1b5c10daf1"
+    "distance_m": 4891,
+    "score": 75.51,
+    "fingerprint": "1b705b43ef0c"
    },
    {
     "label": "out-and-back both ways on the waterfront",
     "kind": "out_and_back",
-    "distance_m": 4735,
-    "score": 80.01,
-    "fingerprint": "d9c059ecdb46"
+    "distance_m": 4824,
+    "score": 75.46,
+    "fingerprint": "e2c224162991"
    },
    {
     "label": "rectangle 1:1, --",
@@ -28,9 +28,9 @@
    {
     "label": "out-and-back both ways on the waterfront",
     "kind": "out_and_back",
-    "distance_m": 6480,
-    "score": 86.33,
-    "fingerprint": "643c4088b655"
+    "distance_m": 6570,
+    "score": 83.34,
+    "fingerprint": "b12216abf208"
    },
    {
     "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
@@ -42,18 +42,18 @@
    {
     "label": "rectangle 1.5:1, -+",
     "kind": "loop",
-    "distance_m": 6205,
-    "score": 65.42,
-    "fingerprint": "d4ad4a8b1435"
+    "distance_m": 6214,
+    "score": 64.93,
+    "fingerprint": "73bc664db745"
    }
   ],
   "kips-bay|6|zigzags": [
    {
     "label": "out-and-back on the waterfront, heading 3 degrees",
     "kind": "out_and_back",
-    "distance_m": 9585,
-    "score": 67.97,
-    "fingerprint": "006d1471c5e3"
+    "distance_m": 9674,
+    "score": 66.22,
+    "fingerprint": "e5b7fb17569c"
    },
    {
     "label": "rectangle 1.5:1, +-",
@@ -316,7 +316,7 @@
     "fingerprint": "275f0f8427a1"
    },
    {
-    "label": "loop on the waterfront and beyond, heading 184 degrees",
+    "label": "loop on unnamed waterfront path and beyond, heading 184 degrees",
     "kind": "out_and_back",
     "distance_m": 4868,
     "score": 56.73,
@@ -348,18 +348,18 @@
   ],
   "kips-bay|3|waits": [
    {
-    "label": "loop on the waterfront, heading 159 degrees",
+    "label": "out-and-back on the waterfront, heading 148 degrees",
     "kind": "out_and_back",
-    "distance_m": 4958,
-    "score": 79.01,
-    "fingerprint": "8f14e7afca65"
+    "distance_m": 4872,
+    "score": 75.25,
+    "fingerprint": "c7b54b51153c"
    },
    {
     "label": "out-and-back both ways on the waterfront",
     "kind": "out_and_back",
-    "distance_m": 4796,
-    "score": 76.39,
-    "fingerprint": "d6a966a4923d"
+    "distance_m": 4816,
+    "score": 75.1,
+    "fingerprint": "9c57c4a784b5"
    },
    {
     "label": "rectangle 1:1, --",
@@ -373,9 +373,9 @@
    {
     "label": "out-and-back both ways on the waterfront",
     "kind": "out_and_back",
-    "distance_m": 6542,
-    "score": 83.02,
-    "fingerprint": "d831bda5045c"
+    "distance_m": 6561,
+    "score": 82.17,
+    "fingerprint": "917467e98eb0"
    },
    {
     "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
@@ -396,9 +396,9 @@
    {
     "label": "out-and-back on the waterfront, heading 3 degrees",
     "kind": "out_and_back",
-    "distance_m": 9647,
-    "score": 70.45,
-    "fingerprint": "5533a2112e2f"
+    "distance_m": 9666,
+    "score": 69.85,
+    "fingerprint": "2740ba249cc9"
    },
    {
     "label": "rectangle 1.5:1 (short side along grid), +-",
@@ -509,7 +509,7 @@
   ],
   "upper-east-side|4|waits": [
    {
-    "label": "out-and-back on the waterfront, heading 31 degrees",
+    "label": "out-and-back on Bobby Wagner Walk, heading 31 degrees",
     "kind": "out_and_back",
     "distance_m": 6400,
     "score": 93.18,
