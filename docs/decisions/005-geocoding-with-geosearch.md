@@ -1,6 +1,7 @@
 # 005: Geocoding with NYC Planning Labs GeoSearch, with verification
 
-**Status:** accepted (Phase 1)
+**Status:** accepted (Phase 1). Partly replaced by 026 (2026-11-06): when the same address is in several boroughs,
+the borough rule (R19) picks one before Loop asks.
 
 ## Decision
 Use GeoSearch (`geosearch.planninglabs.nyc/v2/search`): free, no key, built on the city's own address points (PAD). Nothing better is needed for Phase 1. It is a public service without an uptime guarantee, so it sits behind `api/geocoding.py`, which is easy to swap.

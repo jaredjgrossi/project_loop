@@ -34,6 +34,9 @@ CONTACT_SPLIT_M = 300  # contact stretches this far apart are different spots ("
 CROSSING_LABEL_M = 150  # the crossing street that labels a contact spot is within this distance
 MAJOR_PARK_HA = 10  # "the park" (R13): a named OSM leisure=park at least this big (about 25 acres). Provisional.
 MAJOR_PARK_RADIUS_M = 1609  # ... within about 1 mi of the start
+# Smaller parks that also count as "the park" (Jared, 2026-11-06), as (name, borough).
+MAJOR_PARK_ALSO = (("Battery Park", "Manhattan"),)
+PICK_NEAREST_M = 3000  # R19 step 2: the nearest match wins when it is this close and every other match is farther
 PARTIAL_LIMIT = 300
 FT_PER_M = 3.28084
 
@@ -368,19 +371,46 @@ def lookup(name: str, near: tuple[float, float] | PlaceMatch | None = None, near
             conn.close()
 
 
+def pick_by_borough(matches: list, ref_borough: str | None = None, nearest_m: float = PICK_NEAREST_M):
+    """Rule R19 (decision 026): which of several matches the runner means, or None to ask. Works on anything with
+    `.borough` and `.distance_m`: PlaceMatch, or a geocoded address.
+
+    1. Prefer the match in the reference borough (the runner's current borough for a start today, the saved start's
+       borough for a later day, the route's start borough for an end or via point).
+    2. Otherwise, the nearest match within `nearest_m` when every other match is farther.
+    3. Otherwise, None: ask.
+    """
+    if len(matches) == 1:
+        return matches[0]
+    if ref_borough is not None:
+        mine = [m for m in matches if m.borough == ref_borough]
+        if len(mine) == 1:
+            return mine[0]
+        if mine:
+            matches = mine
+    near = sorted((m for m in matches if m.distance_m is not None), key=lambda m: m.distance_m)
+    if near and len(near) == len(matches) and near[0].distance_m <= nearest_m \
+            and all(m.distance_m > nearest_m for m in near[1:]):
+        return near[0]
+    return None
+
+
 def major_parks_near(lat: float, lon: float, radius_m: float = MAJOR_PARK_RADIUS_M, min_ha: float = MAJOR_PARK_HA,
                      conn=None) -> list[PlaceMatch]:
-    """'The park' (R13): named parks of at least `min_ha` within `radius_m` of the point, nearest first."""
+    """'The park' (R13): named parks of at least `min_ha`, or on MAJOR_PARK_ALSO, within `radius_m` of the point,
+    nearest first."""
     conn, own = _connect(conn)
     try:
         rows = conn.execute(
             f"""WITH p AS (SELECT ST_Transform(ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326), 2263) p)
                 SELECT DISTINCT ON (name) {_ROW}, ST_Distance(ST_Transform(outline, 2263), p.p) / %(f)s d
                 FROM places, p
-                WHERE kind = 'park' AND category = 'leisure=park' AND area_ha >= %(ha)s  -- not nature reserves (the Hudson's estuarine sanctuary is water)
+                WHERE kind = 'park' AND category = 'leisure=park'  -- not nature reserves: the Hudson's sanctuary is water
+                  AND (area_ha >= %(ha)s OR (name, borough) IN (SELECT * FROM unnest(%(also_n)s::text[], %(also_b)s::text[])))
                   AND ST_DWithin(ST_Transform(outline, 2263), p.p, %(ft)s)
                 ORDER BY name, d""",
-            {"lat": lat, "lon": lon, "ha": min_ha, "ft": radius_m * FT_PER_M, "f": FT_PER_M}).fetchall()
+            {"lat": lat, "lon": lon, "ha": min_ha, "ft": radius_m * FT_PER_M, "f": FT_PER_M,
+             "also_n": [n for n, _ in MAJOR_PARK_ALSO], "also_b": [b for _, b in MAJOR_PARK_ALSO]}).fetchall()
         found = [PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
                             ids=(r[0],), area_ha=r[11], distance_m=round(r[-1], 1)) for r in rows]
         return sorted(found, key=lambda m: m.distance_m)

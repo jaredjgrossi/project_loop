@@ -22,7 +22,9 @@ BY_ID = {c["id"]: c for c in CASES}
 
 def _actual(name, value):
     if name in ("start_place", "end_place"):
-        return {"kind": "place", "name": value["place"]} if "place" in value else {"kind": "saved", "id": value["saved"]}
+        kind = next(k for k in ("place", "address", "saved") if k in value)
+        ref = {"kind": kind, "id": value[kind]} if kind == "saved" else {"kind": kind, "name": value[kind]}
+        return ref | ({"borough": value["borough"]} if "borough" in value else {})
     if name == "via_places":
         return [_actual("start_place", v) for v in value]
     return copy.deepcopy(value)
@@ -84,7 +86,7 @@ def test_fifty_cases_with_the_docs_coverage():
     assert [c["seq"] for c in CASES] == list(range(1, 51))
     assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 11, "E": 4, "F": 7, "G": 6,
                                                      "H": 5, "I": 3, "J": 3}
-    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 15
+    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 13  # P16, P46 parse since R19
     assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 16
 
 
@@ -192,9 +194,9 @@ def test_question_checks():
     out = oracle(BY_ID["R06"])
     out["trace"]["routing_calls"] = 1
     assert any("routing call" in r for r in reasons("R06", out))
-    out = oracle(BY_ID["P16"])
-    out["parsed"]["question"]["options"] = out["parsed"]["question"]["options"][:1]
-    assert any("at least 2" in r for r in reasons("P16", out))
+    out = oracle(BY_ID["P20"])
+    out["parsed"]["question"]["options"] = []
+    assert any("at least 1" in r for r in reasons("P20", out))
 
 
 def test_must_nots():
@@ -255,6 +257,9 @@ def test_places_and_planned_compare_by_name_and_kind():
     assert reasons("P18", out) == []
     out["parsed"]["constraints"]["start_place"] = {"kind": "saved", "id": "Penn Station"}
     assert any("start_place" in r for r in reasons("P18", out))
+    out = oracle(BY_ID["P16"])
+    out["parsed"]["constraints"]["start_place"]["borough"] = "Brooklyn"
+    assert any("start_place" in r for r in reasons("P16", out))
     out = oracle(BY_ID["P45"])
     out["parsed"]["constraints"]["planned"]["start_date"] = "2026-11-08"
     assert any("planned.start_date" in r for r in reasons("P45", out))

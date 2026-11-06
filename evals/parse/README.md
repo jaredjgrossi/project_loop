@@ -18,7 +18,7 @@ uv run python -m evals.parse.run --case R02 -v
 
 In `expect`, each field is `{"value", "source"}`; source is `said`, `preset`, `default` or `usual`, and is only
 checked when given. "Now" and "today" are written as the context's values (06:40, 2026-11-03). Place refs are
-`{"place": name}` or `{"saved": id}`; avoids are `{"name", "how"}`.
+`{"place": name}`, `{"address": text}` or `{"saved": id}`, with an optional `"borough"` (R19); avoids are `{"name", "how"}`.
 
 ## What the parser returns
 See the docstring at the top of `grader.py`: the contract's `parsed` event, plus a `trace` with each field's source,

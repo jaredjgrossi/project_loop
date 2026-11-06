@@ -1,7 +1,7 @@
 # 026: A places table from our OSM extract, and `lookup(name, near)`
 
-**Status:** accepted for Phase 3, step 2 (2026-11-05). Two choices wait on Jared (below). Extends 025; follows 005
-(several matches ask) and 006 (every row keeps its source and load time).
+**Status:** accepted (2026-11-05; borough rule and park list decided by Jared 2026-11-06). Extends 025 and 006
+(every row keeps its source and load time). Replaces decision 005's "always ask" for several boroughs.
 
 ## Decision
 - **`places` in PostGIS, built by `make places`** (`etl/load_places.py`, about 20 s) from data already on disk.
@@ -34,8 +34,18 @@
   "Central Park Reservoir" for Jacqueline Kennedy Onassis Reservoir. The loader fails if an entry's place is missing.
 - **Every row is trust `listed`** and names its source: OpenStreetMap, MTA or the Loop corridor catalog.
 - **"The park" (R13)** is the nearest named OSM `leisure=park` of 10 ha or more within 1 mi of the start
-  (`major_parks_near`). That gives 103 parks; the list and the reasoning are in
-  `docs/phase3/major-parks-proposal.md`.
+  (`major_parks_near`), plus an add-list of smaller parks that count anyway. Today the add-list is just Battery
+  Park, Manhattan. That gives 104 parks; the list and the reasoning are in `docs/phase3/major-parks-proposal.md`.
+- **The borough rule (R19)** applies to addresses and place names alike, through `pick_by_borough`:
+  1. Prefer the match in the reference borough: the runner's current borough for a start today, the saved start's
+     borough for a later day, the route's start borough for an end or via point.
+  2. Otherwise, take the nearest match within 3 km when the others are farther.
+  3. Otherwise, ask.
+
+  The chip always names the borough. `lookup` still returns every match; the parser applies the rule. For
+  addresses, the geocoder's several-borough error (decision 005) becomes a candidate list for the same rule in
+  step 4.
+- **No typo tolerance** in the lookup: Claude fixes typos before it (Jared, 2026-11-06).
 
 ## Tests
 - `api/tests/test_places.py` covers names, bases, display, crossings and grouping. It runs with the unit tests and
@@ -45,13 +55,7 @@
   E 23rd St, 42nd St, E 42nd St, Hudson River Greenway, Prospect Park, New Jersey names (none), "the park" from
   three starts, and provenance on every row. 19 pass, and lookups take 12–110 ms.
 
-## Waiting on Jared
-1. **Several boroughs.** On this data these names exist in more than one borough:
-   - "42nd St": Manhattan, Brooklyn and Queens
-   - "E 42nd St": Manhattan and East Flatbush
-   - "Grand Army Plaza": Manhattan (5th Ave & 59th St) and Brooklyn
-
-   Today the lookup returns all of them, so the parser would ask. Eval R07 ("avoid the chaos of 42nd st", no
-   question) needs the nearest instead. The choice is to always ask, or to use the nearest when it is within
-   `near_m` of the runner and the others are not.
-2. **The major-park bar:** 10 ha within 1 mi, or something else (`docs/phase3/major-parks-proposal.md`).
+## Decided by Jared (2026-11-06)
+- **Several boroughs:** the borough rule above, replacing decision 005's "always ask". So "42nd St" from Kips Bay
+  is Manhattan's, and evals P16 and P46 now parse (Manhattan).
+- **"The park":** 10 ha within 1 mi, approved, with Battery Park added.

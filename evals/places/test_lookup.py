@@ -4,12 +4,13 @@ then `uv run pytest evals/places`. Needs Postgres with the table loaded; skips o
 import psycopg
 import pytest
 
-from api.places import lookup, major_parks_near
+from api.places import lookup, major_parks_near, pick_by_borough
 from etl.load import database_url
 
 KIPS_BAY = (40.7438, -73.9799)  # Kips Bay Library, the public stand-in
 GRAND_ARMY_PLAZA = (40.6742, -73.9700)
 BEDFORD_AV = (40.7172, -73.9567)  # the L at Bedford Av, Williamsburg
+BOWLING_GREEN = (40.7049, -74.0137)
 
 
 @pytest.fixture(scope="module")
@@ -127,3 +128,18 @@ def test_row_counts_by_kind(conn):
     for kind in ("station", "subway_station", "park", "square", "water", "bridge", "street", "path", "crossing",
                  "amenity", "shop"):
         assert counts.get(kind, 0) > 0, kind
+
+
+def test_the_park_from_bowling_green_is_battery_park_on_the_add_list(conn):
+    assert major_parks_near(*BOWLING_GREEN, conn=conn)[0].name == "Battery Park"
+
+
+def test_r19_42nd_st_from_kips_bay_is_manhattan_without_asking(conn):
+    m = pick_by_borough(lookup("42nd St", near=KIPS_BAY, conn=conn), "Manhattan")
+    assert (m.name, m.borough) == ("42nd St", "Manhattan")
+
+
+def test_r19_grand_army_plaza_from_brooklyn_is_the_brooklyn_one(conn):
+    found = lookup("Grand Army Plaza", near=GRAND_ARMY_PLAZA, conn=conn)
+    assert pick_by_borough(found, "Brooklyn").borough == "Brooklyn"
+    assert pick_by_borough(found, "Queens").borough == "Brooklyn"  # nearest within 3 km, the other is 11 km off

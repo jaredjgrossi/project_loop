@@ -1,12 +1,12 @@
-# "The park" (rule R13): proposed major-park list
+# "The park" (rule R13): major-park list
 
-*Proposal, 2026-11-05 (Phase 3, step 2; decision 026). For Jared to accept or change.*
+*Proposed 2026-11-05; approved by Jared 2026-11-06 with Battery Park added (Phase 3, step 2; decision 026).*
 
 **Rule:** "the park" means the nearest named OpenStreetMap park (`leisure=park`) of at least **10 ha (about 25 acres)** whose edge is within **1 mi (1,609 m)** of the start. If none is, Loop asks "Which park?" with the nearest parks as options. Nature reserves are left out: in OSM they include water, such as the Hudson River Park Estuarine Sanctuary (142 ha of river).
 
-**Why 10 ha:** McCarren Park (14 ha) is "the park" in Williamsburg and Greenpoint; Madison Square Park (2.9 ha) is not "the park" for Kips Bay (eval P20 asks there). At 10 ha the evals hold: none from Kips Bay, Prospect Park from Grand Army Plaza, McCarren from Bedford Av. Left out at this size: Washington Square Park (4.3 ha), Tompkins Square Park (4.2 ha), Carl Schurz Park (5.7 ha), Battery Park (8.9 ha), Sunset Park (9.8 ha). An add-list for named smaller parks is the alternative to lowering the bar.
+**Why 10 ha:** McCarren Park (14 ha) is "the park" in Williamsburg and Greenpoint; Madison Square Park (2.9 ha) is not "the park" for Kips Bay (eval P20 asks there). At 10 ha the evals hold: none from Kips Bay, Prospect Park from Grand Army Plaza, McCarren from Bedford Av. Left out at this size: Washington Square Park (4.3 ha), Tompkins Square Park (4.2 ha), Carl Schurz Park (5.7 ha), Battery Park (8.9 ha), Sunset Park (9.8 ha). Smaller parks that should count go on an add-list instead (`MAJOR_PARK_ALSO` in `api/places.py`). Today it holds Battery Park (Manhattan, 8.9 ha).
 
-**103 parks** on the 2026-10-28 OSM snapshot, largest first (hectares, the largest OSM area of that name in the borough):
+**103 parks** at 10 ha or more, plus Battery Park from the add-list, on the 2026-10-28 OSM snapshot, largest first (hectares, the largest OSM area of that name in the borough):
 
 - **Manhattan** (12): Central Park 342, Hudson River Park 167, Randalls Island Park 86, Inwood Hill Park 79, Governors Island 70, Fort Washington Park 61, Riverside Park 42, Wards Island Park 34, Fort Tryon Park 28, John V. Lindsay East River Park 18, Morningside Park 12, Riverbank State Park 12
 - **Brooklyn** (22): Floyd Bennett Field 520, Marine Park 253, Prospect Park 188, Dyker Beach Park 86, Canarsie Park 61, Bergen Beach 53, Paerdegat Basin Park 41, McGuire Fields 34, Leif Ericson Drive 32, Calvert Vaux Park 30, Plumb Beach 28, Canarsie Pier 25, Brooklyn Bridge Park 25, Shore Road Park 22, Fresh Creek Nature Preserve 20, Red Hook Park 16, Prospect Park Parade Ground 15, McCarren Park 14, Kaiser Park 12, Manhattan Beach Park 12, Fort Greene Park 12, Owl’s Head Park 10

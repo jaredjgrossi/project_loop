@@ -3,7 +3,8 @@ the lookups against the loaded table are in evals/places/."""
 
 import pytest
 
-from api.places import display_name, group_ids, is_streetlike, normalize, split_crossing, street_base
+from api.places import (PlaceMatch, display_name, group_ids, is_streetlike, normalize, pick_by_borough, split_crossing,
+                        street_base)
 
 
 @pytest.mark.parametrize("raw, want", [
@@ -76,3 +77,33 @@ def test_streetlike():
 
 def test_group_ids_joins_pairs_transitively():
     assert group_ids([1, 2, 3, 4, 5], [(1, 2), (2, 3), (4, 4)]) == [[1, 2, 3], [4], [5]]
+
+
+def _m(borough, distance_m=None, name="42nd St"):
+    return PlaceMatch(name=name, kind="street", borough=borough, lat=0, lon=0, matched=name, source="OpenStreetMap",
+                      distance_m=distance_m)
+
+
+def test_pick_one_match_is_that_match():
+    assert pick_by_borough([_m("Queens")], "Manhattan").borough == "Queens"
+
+
+def test_pick_prefers_the_reference_borough():
+    assert pick_by_borough([_m("Brooklyn", 900), _m("Manhattan", 5000)], "Manhattan").borough == "Manhattan"
+
+
+def test_pick_nearest_within_3_km_when_the_others_are_farther():
+    found = [_m("Manhattan", 900), _m("Queens", 4000), _m("Brooklyn", 9000)]
+    assert pick_by_borough(found, "Bronx").borough == "Manhattan"
+    assert pick_by_borough(found).borough == "Manhattan"
+
+
+def test_pick_asks_when_two_are_within_3_km_or_none_is():
+    assert pick_by_borough([_m("Manhattan", 900), _m("Queens", 2500)]) is None
+    assert pick_by_borough([_m("Manhattan", 3500), _m("Queens", 4000)]) is None
+    assert pick_by_borough([_m("Manhattan"), _m("Queens")]) is None  # no distances: ask
+
+
+def test_pick_applies_nearest_inside_the_reference_borough():
+    found = [_m("Manhattan", 500, "a"), _m("Manhattan", 4000, "b"), _m("Brooklyn", 300, "c")]
+    assert pick_by_borough(found, "Manhattan").name == "a"

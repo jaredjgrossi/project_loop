@@ -97,10 +97,14 @@ def _same_number(name: str, want, got) -> bool:
 
 
 def _same_place(want: dict, got) -> bool:
+    """want: {"place": name} | {"address": text} | {"saved": id}, with an optional "borough" (rule R19)."""
     if not isinstance(got, dict):
         return False
-    if "place" in want:
-        return got.get("kind") == "place" and norm(str(got.get("name", ""))) == norm(want["place"])
+    if "borough" in want and got.get("borough") != want["borough"]:
+        return False
+    for kind in ("place", "address"):
+        if kind in want:
+            return got.get("kind") == kind and norm(str(got.get("name", ""))) == norm(want[kind])
     return got.get("kind") == "saved" and got.get("id") == want["saved"]
 
 

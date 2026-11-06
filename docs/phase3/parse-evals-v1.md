@@ -38,7 +38,7 @@ Every case names its context, so defaults are deterministic. Places are public s
 ### Fields
 Existing: `distance_mi` (0.5–30) · `tolerance_pct` · `shape` (loop | out_and_back | any) · `start_address` | `use_my_location` · `avoid_places` · `amenities` (restroom | water @ mile) · `start_date`, `start_time` · `mode` (training | exploring) · `lights` (waits | zigzags) · `crowds` (avoid | some | dont_mind) · `scenery` (park_or_water | some | dont_mind) · `surface` (paths | any) · `turns` · `familiar` (favor | some | new)
 
-New: `start_place`, `end_place`, `via_places` (place refs, including saved places like `saved:home`) · `hills` (avoid | dont_mind) · `reuse_route_id`, `reverse` · `planned` (a second run, D6). `distance_mi` is optional when the start, via and end define the route (R10).
+New: `start_place`, `end_place`, `via_places` (place refs: places like `place:"Penn Station"`, saved places like `saved:home`, and geocoded addresses like `address:"11 Madison Ave"`, each with its borough) · `hills` (avoid | dont_mind) · `reuse_route_id`, `reverse` · `planned` (a second run, D6). `distance_mi` is optional when the start, via and end define the route (R10).
 
 ---
 
@@ -51,17 +51,23 @@ New: `start_place`, `end_place`, `via_places` (place refs, including saved place
 - **R5. Times** (D4): no time means now. "Morning" means the usual time (07:00), lunch 12:00, after work 18:30, tonight 20:00, all labeled default. "In 30" means now plus 30 min (said). A day with no hour gets the usual time. Times resolve to the next occurrence.
 - **R6. Effort words set nothing** (easy, chill, recovery, quick). Exception: "long run" with no distance asks, because the usual distance is wrong for a long run. Workout words (tempo, intervals, 4xmile, race pace) set `mode=training`. Sightseeing words (scenic, showing someone around) set `mode=exploring`. Novelty words (new, different, haven't tried) set `familiar=new`. "New to this area" sets `mode=exploring`.
 - **R7. Distance limits** (D5): 0.5–30 mi. Outside them, ask and offer the likely typo.
-- **R8. Health mentions** shape this request only. They are never saved to the profile or to saved routes, and never repeated back to the runner. The raw request text is logged in `llm_calls`, which is private (never in git) and deleted after 30 days (decision 025).
+- **R8. Health mentions** shape this request only. They're never saved to a profile or a saved route, and never repeated back. Raw request logs (`llm_calls`) are private, never in git, and deleted after 30 days (decision 025).
 - **R9. The parser doesn't know geography.** Whether a route is feasible (too far, closed, gapped) is the engine's call, and the engine may ask.
 - **R10. "Loop"** (D1): plain "loop" means `shape=any`. "Real loop", "circle" or "no out and back" means `loop`. Out-and-back words mean `out_and_back`. When the start, via and end define the route, distance may be left out.
 - **R11. "No lights", "uninterrupted" and "hate waiting at lights"** mean `lights=waits`. `zigzags` only when said.
 
 **Places** (D2, D3)
-- **R12. Lookup, never invention.** Claude normalizes the name ("penn" → "Penn Station"). The places table (built from our OSM extract) resolves it. One match: use it, trust listed. Several: ask with the options. None: ask for an address. Claude never outputs coordinates.
+- **R12. Lookup, never invention.** Claude normalizes the name ("penn" → "Penn Station"). The places table (built from our OSM extract) resolves it. One match: use it, trust listed. Several: pick by borough (R19), otherwise ask with the options. None: ask for an address. Claude never outputs coordinates.
 - **R13. "The park"** means the nearest major park within about 1 mi, shown on the chip. If there's none, ask "Which park?" (Code proposes the major-park list.)
 - **R14. Subjective picks** ("best Italian spot", "a good coffee place") ask for the specific place. Loop doesn't rank businesses.
 - **R15. Streets in avoids** mean don't run *along* them. Crossing is allowed.
 - **R16. Start default:** a run today starts from the current location. A later day starts from `saved:home`, otherwise ask. Location off or outside NYC: `saved:home`, otherwise ask. "From home" or "from the office" means that saved place, otherwise ask.
+- **R19. Same name or address in several boroughs** (decision 026; replaces decision 005's "always ask"), for addresses and place names alike:
+  1. Prefer the match in the reference borough: the runner's current borough for a start today, the saved start's borough for a later day, the route's start borough for an end or via point.
+  2. Otherwise, the nearest match within 3 km when the others are farther.
+  3. Otherwise, ask.
+
+  The chip always names the borough.
 
 **Past routes and planned runs**
 - **R17. Past routes come only from the recent-routes list.** Match by date or name. Several matches: ask. None: say so. "My usual" means the most-run route, rebuilt for now. Without one, it means usual distance plus `familiar=favor`.
@@ -138,8 +144,8 @@ Must not: pick a restaurant (R14).
 ASK (start, parser) · "What's the office's address?" · keep `start_time=12:00 (default)`, `distance_mi=3`
 
 **P16** · C1 · `5 mi from 11 madison ave` · [lookup]
-ASK (start, places) · "Which 11 Madison Ave?" with the lookup's borough options
-Must not: start from any first match (decision 005).
+PARSE · `start_place=address:"11 Madison Ave" (Manhattan, said)` · `distance_mi=5 (said)`
+The runner is in Manhattan, so R19 picks the Manhattan address. The chip names the borough.
 
 **P17** · C1 · `start at 1st and 23rd, 4 mi` · [lookup]
 PARSE · `start_place=place:"1st Ave & E 23rd St" (said)` · `distance_mi=4 (said)`
@@ -156,8 +162,8 @@ Must not: start in New Jersey.
 ASK (start, places) · "Which park?" with the nearest parks as options (no major park within about 1 mi of Kips Bay, R13)
 
 **P46** · C1 · `run to work, 5 mi, office is 120 broadway` · [lookup]
-ASK (end, places) · "Which 120 Broadway?" with the lookup's borough options · keep `distance_mi=5`, `use_my_location`
-Must not: guess the borough.
+PARSE · `end_place=address:"120 Broadway" (Manhattan, said)` · `distance_mi=5 (said)` · `use_my_location (default)`
+The route starts in Manhattan, so R19 picks the Manhattan address. The chip names the borough.
 
 ### E. Avoid
 **R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup]
@@ -266,14 +272,14 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | A. Bare and vague | 4 | 1 | 2 |
 | B. Distance and units | 4 | 1 | 0 |
 | C. Time | 3 | 0 | 1 |
-| D. Start, end and places | 11 | 7 | 4 |
+| D. Start, end and places | 11 | 5 | 4 |
 | E. Avoid | 4 | 0 | 1 |
 | F. Preferences | 7 | 0 | 0 |
 | G. Training, Exploring and novelty | 6 | 2 | 3 |
 | H. Past routes | 5 | 2 | 5 |
 | I. Multi-part and contradictory | 3 | 0 | 0 |
 | J. Impossible and feasibility | 3 | 2 | 0 |
-| **Total** | **50** | **15** | **16** |
+| **Total** | **50** | **13** | **16** |
 
 The set is at the cap. Each diary phrasing replaces the synthetic case closest to it.
 
@@ -308,5 +314,5 @@ Cases marked [lookup] run against the places table. Cases marked [engine] also h
 | G10 | Timed avoids | Mostly covered by crowd pulses (schools, ferries, decision 022) |
 | G11 | Two runs in one request | **Phase 3** (`planned`) |
 
-## Decisions applied (2026-11-05)
-D1: "loop" means any route back to the start. D2/D3: places and intersections come from the OSM places table, and anything unclear gets a question. D4: default hours as proposed. D5: 0.5–30 mi. D6: build both runs and save the later one. Also: the start defaults to the current location; `lights=waits` for "no lights"; `hills`, `via_places`, `end_place`, past routes and minimal storage are in Phase 3.
+## Decisions applied (2026-11-05, borough rule 2026-11-06)
+D1: "loop" means any route back to the start. D2/D3: places and intersections come from the OSM places table, and anything unclear gets a question. D4: default hours as proposed. D5: 0.5–30 mi. D6: build both runs and save the later one. Also: the start defaults to the current location; `lights=waits` for "no lights"; `hills`, `via_places`, `end_place`, past routes and minimal storage are in Phase 3. Borough rule (2026-11-06): R19; P16 and P46 now PARSE.

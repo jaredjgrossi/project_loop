@@ -11,28 +11,26 @@
   "needs": [
     "end"
   ],
-  "doc": "ASK (end, places) · \"Which 120 Broadway?\" with the lookup's borough options · keep distance_mi=5, use_my_location",
+  "doc": "PARSE · end_place=address:\"120 Broadway\" (Manhattan, said) · distance_mi=5 (said) · use_my_location (default). The route starts in Manhattan, so R19 picks the Manhattan address.",
   "expect": {
-    "outcome": "ASK",
-    "question": {
-      "about": "end",
-      "from": "places",
-      "min_options": 2
-    },
-    "keep": {
+    "outcome": "PARSE",
+    "fields": {
+      "end_place": {
+        "value": {
+          "address": "120 Broadway",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
       "distance_mi": {
-        "value": 5
+        "value": 5,
+        "source": "said"
       },
       "use_my_location": {
-        "value": true
+        "value": true,
+        "source": "default"
       }
     }
   },
-  "must_not": [
-    {
-      "check": "field_absent",
-      "why": "Must not: guess the borough.",
-      "field": "end_place"
-    }
-  ]
+  "must_not": []
 }

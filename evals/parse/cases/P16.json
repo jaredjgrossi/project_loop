@@ -9,20 +9,22 @@
     "lookup"
   ],
   "needs": [],
-  "doc": "ASK (start, places) · \"Which 11 Madison Ave?\" with the lookup's borough options",
+  "doc": "PARSE · start_place=address:\"11 Madison Ave\" (Manhattan, said) · distance_mi=5 (said). The runner is in Manhattan, so R19 picks the Manhattan address.",
   "expect": {
-    "outcome": "ASK",
-    "question": {
-      "about": "start",
-      "from": "places",
-      "min_options": 2
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "address": "11 Madison Ave",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      }
     }
   },
-  "must_not": [
-    {
-      "check": "field_absent",
-      "why": "Must not: start from any first match (decision 005).",
-      "field": "start_place"
-    }
-  ]
+  "must_not": []
 }
