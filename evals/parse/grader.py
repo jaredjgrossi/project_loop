@@ -43,7 +43,7 @@ SCHEMA_DEFAULTS = {
     "distance_mi": None, "tolerance_pct": 5, "shape": "any", "avoid_places": [], "amenities": [],
     "start_time": None, "start_date": None, "mode": None, "lights": None, "crowds": None, "scenery": None,
     "surface": None, "turns": None, "familiar": None, "hills": None, "reuse_route_id": None, "reverse": False,
-    "planned": None,
+    "planned": None, "sources": {},
 }
 KNOWN_FIELDS = tuple(SCHEMA_DEFAULTS)
 
@@ -54,6 +54,7 @@ FIELD_CHIP = {
     "start_date": "time", "shape": "shape", "mode": "mode", "lights": "lights", "crowds": "crowds",
     "scenery": "scenery", "surface": "surface", "turns": "turns", "familiar": "familiar", "hills": "hills",
     "avoid_places": "avoid", "amenities": "amenity", "reuse_route_id": "reuse", "reverse": "reverse", "planned": None,
+    "sources": None,
 }
 NUMBER_TOL = {"distance_mi": 0.05, "tolerance_pct": 0.1, "at_mile": 0.05}
 PARSED_KEYS = {"event", "v", "parse_id", "chips", "question", "cant", "notes", "constraints"}
@@ -199,6 +200,8 @@ def _check_unlisted(listed: dict, constraints: dict, sources: dict) -> list[str]
     """Rule 3: nothing beyond the listed fields is set, except defaults code filled in (source default or preset)."""
     out = []
     for name, value in constraints.items():
+        if name == "sources":  # where values came from: graded through the trace and chips, not as a field
+            continue
         if name not in SCHEMA_DEFAULTS:
             out.append(f"unknown field {name}")
         elif name not in listed and not is_unset(name, value) and sources.get(name) not in ("default", "preset"):

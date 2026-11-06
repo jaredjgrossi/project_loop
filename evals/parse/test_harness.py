@@ -12,7 +12,7 @@ import pytest
 from evals.parse import run as runner
 from evals.parse.fixtures import build_request, load_cases, load_contexts
 from evals.parse.grader import (ABOUTS, FIELD_CHIP, FROMS, GAPS, KNOWN_FIELDS, MUST_NOT_CHECKS, NEEDS, NOTE_KEYS,
-                                OUTCOMES, SOURCES, grade)
+                                OUTCOMES, SCHEMA_DEFAULTS, SOURCES, grade)
 
 CASES = load_cases()
 BY_ID = {c["id"]: c for c in CASES}
@@ -109,6 +109,17 @@ def test_case_fixture_is_well_formed(case):
         assert (exp["outcome"] == "PARSE+CANT") <= bool(exp.get("cant"))
     for rule in case["must_not"]:
         assert rule["check"] in MUST_NOT_CHECKS and rule["why"]
+
+
+def test_grader_fields_match_run_constraints():
+    from api.constraints import RunConstraints
+
+    fields = RunConstraints.model_fields
+    assert set(KNOWN_FIELDS) == set(fields)
+    for name, default in SCHEMA_DEFAULTS.items():
+        f = fields[name]
+        model_default = f.default_factory() if f.default_factory else f.default
+        assert model_default == default, name
 
 
 def test_request_follows_the_contract_and_drops_human_labels():

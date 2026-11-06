@@ -75,7 +75,7 @@ def test_stated_preference_beats_the_preset():
     c = RunConstraints(start_address="11 Madison Ave, Manhattan", distance_mi=4, mode=Mode.TRAINING, lights=Lights.ZIGZAGS)
     p = resolve_preferences(c)
     assert p.values["lights"] == Lights.ZIGZAGS
-    assert p.sources["lights"] == "stated"
+    assert p.sources["lights"] == "said"
     assert p.sources["crowds"] == "preset"
 
 

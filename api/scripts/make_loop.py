@@ -22,7 +22,8 @@ import psycopg
 
 from etl.load import database_url
 
-from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences, with_default_date
+from api.constraints import (Lights, RunConstraints, describe, request_items, resolve_preferences, unsupported,
+                             with_default_date)
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -288,7 +289,11 @@ def run(
     constraints = with_default_date(constraints, now_fn())
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
-    zones, unknown = resolve_zones(constraints.avoid_places)
+    later = unsupported(constraints)
+    if later:  # product rule 3: say so, never build without them
+        print(f"Can't build this yet: {', '.join(later)} (Phase 3).", file=sys.stderr)
+        return 6
+    zones, unknown = resolve_zones([a.name for a in constraints.avoid_places])
     for name in unknown:
         print(f"Avoid:     '{name}' isn't in the no-go list, so it was NOT applied.")
 
