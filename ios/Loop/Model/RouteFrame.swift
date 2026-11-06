@@ -9,13 +9,21 @@ struct RouteFrame: Equatable {
         let points: [GeoPoint]
         /// True for a dash cut from a dashed path run.
         var isDash = false
+        /// True for the casing-coloured bed under a dashed run (so dash gaps read as gaps).
+        var isBed = false
 
-        /// The map layer this segment goes to. Dashes are drawn as solid segments on the path layer.
-        var layerKind: String { kind?.rawValue ?? "lead" }
+        /// The map layer this segment goes to.
+        var layerKind: String {
+            if isBed { return "pathBed" }
+            return kind?.rawValue ?? "lead"
+        }
     }
 
-    /// One line under all runs: the whole drawn route, so the casing never breaks at a join.
+    /// The whole drawn route as one line: the casing and the solid base line both use it, so the
+    /// outline never breaks or doubles at a join.
     var casing: [GeoPoint] = []
+    /// Kind styling on top of the base line: waterfront, path (bed + dashes, or solid when short),
+    /// or the plain lead line. Street is the base line itself. Butt caps, cut edge to edge.
     var lead: [Segment] = []
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
@@ -23,44 +31,57 @@ struct RouteFrame: Equatable {
     /// Path dash pattern on the map, in points.
     static let dashOn: Double = 9
     static let dashOff: Double = 6
-    /// Neighbouring runs overlap by this much (half on each side of a join), in points.
-    static let joinOverlap: Double = 1
 
-    /// The lead route drawn up to `fraction` of its length, split by drawn piece kind.
-    /// With `metresPerPoint`: runs shorter than 40 pt on screen join their longer neighbour; a path
-    /// run of at least two full dashes (30 pt) is cut into dashes fitted to start and end on a dash;
-    /// shorter path runs are solid; every run reaches 0.5 pt past each join so neighbours overlap.
-    static func segments(for candidate: Candidate, fraction: Double, metresPerPoint: Double? = nil) -> [Segment] {
+    /// The drawn line at this scale: jogs under 2.5 pt removed (display only), or the full line.
+    static func displayLine(for line: Polyline, metresPerPoint: Double?) -> DisplayLine {
+        DisplayLine(full: line, toleranceMetres: (metresPerPoint ?? 0) * DisplayLine.tolerancePoints)
+    }
+
+    /// The casing/base line and the kind styling for a route drawn up to `fraction` of its length.
+    /// With `metresPerPoint`: jogs under 2.5 pt are removed from the drawn line; runs shorter than
+    /// 40 pt join their longer neighbour; a path run of at least two full dashes (30 pt) gets a bed
+    /// and dashes fitted to start and end on a dash; shorter path runs are solid.
+    static func route(for candidate: Candidate, fraction: Double, metresPerPoint: Double? = nil)
+        -> (casing: [GeoPoint], lead: [Segment]) {
         let f = min(1, max(0, fraction))
-        let line = candidate.line
-        let drawn = line.length * f
-        guard drawn > 0 else { return [] }
+        let full = candidate.line
+        let display = displayLine(for: full, metresPerPoint: metresPerPoint)
+        let line = display.line
+        let drawn = display.along(fromFull: full.length * f)
+        guard drawn > 0 else { return ([], []) }
+        let casing = line.slice(from: 0, to: drawn)
         guard let detail = candidate.detail, !detail.drawn.isEmpty else {
-            return [Segment(kind: nil, points: line.slice(from: 0, to: drawn))]
+            return (casing, [Segment(kind: nil, points: casing)])
         }
         let mpp = metresPerPoint ?? 0
         var runs = detail.drawn
         if mpp > 0 {
-            runs = DrawnPiece.merged(runs.map { ($0.kind, $0.lengthM) }, lineLength: line.length,
+            runs = DrawnPiece.merged(runs.map { ($0.kind, $0.lengthM) }, lineLength: full.length,
                                      minimum: MapScale.minimumRunPoints * mpp)
         }
-        let half = joinOverlap / 2 * mpp
         var out: [Segment] = []
-        for (i, run) in runs.enumerated() where run.fromM < drawn {
-            let from = i == 0 ? run.fromM : run.fromM - half
-            let to = min(i == runs.count - 1 ? run.toM : run.toM + half, drawn)
-            if run.kind == .path, mpp > 0, run.lengthM / mpp >= MapScale.minimumDashedPoints {
-                for dash in fittedDashes(from: from, to: run.toM + (i == runs.count - 1 ? 0 : half), mpp: mpp)
-                where dash.0 < drawn {
+        for run in runs where run.kind != .street {
+            let from = display.along(fromFull: run.fromM)
+            let to = display.along(fromFull: run.toM)
+            guard from < drawn else { continue }
+            if run.kind == .path, mpp > 0, (to - from) / mpp >= MapScale.minimumDashedPoints {
+                let bed = line.slice(from: from, to: min(to, drawn))
+                if bed.count >= 2 { out.append(Segment(kind: .path, points: bed, isBed: true)) }
+                for dash in fittedDashes(from: from, to: to, mpp: mpp) where dash.0 < drawn {
                     let pts = line.slice(from: dash.0, to: min(dash.1, drawn))
                     if pts.count >= 2 { out.append(Segment(kind: .path, points: pts, isDash: true)) }
                 }
             } else {
-                let pts = line.slice(from: from, to: to)
+                let pts = line.slice(from: from, to: min(to, drawn))
                 if pts.count >= 2 { out.append(Segment(kind: run.kind, points: pts)) }
             }
         }
-        return out
+        return (casing, out)
+    }
+
+    /// Kind styling only (see `route`).
+    static func segments(for candidate: Candidate, fraction: Double, metresPerPoint: Double? = nil) -> [Segment] {
+        route(for: candidate, fraction: fraction, metresPerPoint: metresPerPoint).lead
     }
 
     /// Dashes over [from, to] metres that start and end on a dash: the 9/6 pt pattern is stretched
@@ -77,14 +98,11 @@ struct RouteFrame: Equatable {
         }
     }
 
-    /// Run kinds as drawn at a scale, one entry per run (dashes of one run count once), for tests.
+    /// Styled run kinds at a scale, one entry per run (a dashed run's bed and dashes count once).
     static func layerKinds(for candidate: Candidate, metresPerPoint: Double) -> [String] {
         var kinds: [String] = []
-        var lastWasDash = false
-        for seg in segments(for: candidate, fraction: 1, metresPerPoint: metresPerPoint) {
-            if seg.isDash && lastWasDash { continue }
-            kinds.append(seg.layerKind)
-            lastWasDash = seg.isDash
+        for seg in segments(for: candidate, fraction: 1, metresPerPoint: metresPerPoint) where !seg.isDash {
+            kinds.append(seg.isBed ? "path" : seg.layerKind)
         }
         return kinds
     }

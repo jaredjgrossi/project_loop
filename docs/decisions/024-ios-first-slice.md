@@ -36,6 +36,19 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   each join (1 pt overlap, butt caps); casing and runs go in one source update, recomputed in
   the frame the zoom changes, so no frame shows a run missing. Checked frame by frame on a
   recorded slow pinch out over mile 1 (`PinchRecordingTests`, recording only).
+- **Even width at every zoom** (bug on Jared's phone, 2026-11-06: lumpy, uneven edges, worst
+  between mile 1 and the turnaround). Checked in order: GeoJSON simplification was not it
+  (tolerance 0 changed nothing, kept anyway); runs were already cut from the route line's own
+  141 vertices, not the 945 sample points; it is a Mapbox line layer. The cause is the route
+  geometry: about 40 right-angle jogs of 4–10 m (crosswalk and path switches), dense on the
+  esplanade and repeated on the way back. A jog narrower than the line can't be drawn at an even
+  width, so it showed as a lump; the butt-capped, overlapping runs added notches where runs met
+  at a jog. Fix: the casing and a solid base line (street style, round joins and caps) are one
+  line each from the drawn geometry; waterfront and path are styled on top, cut edge to edge
+  with butt caps and no overlap (path on a casing-coloured bed so dash gaps read as gaps); and
+  the drawn line drops jogs under 2.5 pt at the current zoom (Douglas–Peucker over the whole line
+  once, display only, recomputed with the zoom; close in every jog shows). The two legs of the
+  out-and-back simplify as mirror images and stay on top of each other.
 - **Selection by tapping the route** (Jared, 2026-11-04). A tap within 22 pt of the line, at any
   zoom, selects the nearest point on it (ties on an out-and-back go to the outbound leg): a small
   dot, a selection tick, the strip cursor moves there, and the chip reads "<stretch> · x.x mi ·

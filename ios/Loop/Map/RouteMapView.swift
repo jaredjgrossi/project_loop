@@ -160,6 +160,8 @@ struct RouteMapView: UIViewRepresentable {
             static let others = "loop-others-dots"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
+            static let base = "loop-route-base"
+            static let pathBed = "loop-route-path-bed"
             static let waterSource = "loop-water"
             static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
@@ -170,6 +172,9 @@ struct RouteMapView: UIViewRepresentable {
             for id in [Ids.othersSource, Ids.routeSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
+                // No simplification: the route is ~140 vertices, and simplifying each feature on
+                // its own bends overlapping copies (an out-and-back) apart at mid zooms.
+                s.tolerance = 0
                 try? map.addSource(s)
             }
             let slot: Slot? = MapStyle.hasToken ? .top : nil
@@ -191,15 +196,26 @@ struct RouteMapView: UIViewRepresentable {
             casing.slot = slot
             try? map.addLayer(casing)
 
-            // Street under path under waterfront under the plain lead line. Butt caps: runs meet
-            // edge to edge with a 1 pt overlap, and path dashes are cut as geometry (no dasharray),
-            // so every dashed run starts and ends on a dash at any zoom.
-            for kind in [DrawKind.street, .path, .waterfront] {
-                var l = LineLayer(id: Ids.kind(kind), source: Ids.routeSource)
-                l.filter = Exp(.eq) { Exp(.get) { "kind" }; kind.rawValue }
+            // The base line: the whole route as one solid line in street style, round joins and
+            // caps, from the same geometry as the casing. Kind styling goes on top of it.
+            var base = LineLayer(id: Ids.base, source: Ids.routeSource)
+            base.filter = Exp(.eq) { Exp(.get) { "kind" }; "casing" }
+            base.lineWidth = .constant(3.5)
+            base.lineCap = .constant(.round)
+            base.lineJoin = .constant(.round)
+            base.slot = slot
+            try? map.addLayer(base)
+
+            // Kind styling, cut edge to edge from the drawn line with butt caps (no overlaps):
+            // the path bed (casing colour, so dash gaps read as gaps), path dashes or solid
+            // short path, and waterfront. Street needs nothing: it is the base line.
+            for (id, kind, width) in [(Ids.pathBed, "pathBed", 4.5), (Ids.kind(.path), "path", 4.5),
+                                      (Ids.kind(.waterfront), "waterfront", 4.5)] {
+                var l = LineLayer(id: id, source: Ids.routeSource)
+                l.filter = Exp(.eq) { Exp(.get) { "kind" }; kind }
                 l.lineCap = .constant(.butt)
                 l.lineJoin = .constant(.round)
-                l.lineWidth = .constant(kind == .street ? 3.5 : 4.5)
+                l.lineWidth = .constant(width)
                 l.slot = slot
                 try? map.addLayer(l)
             }
@@ -237,11 +253,13 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
             }
             // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
-            for id in [Ids.casing, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
+            for id in [Ids.casing, Ids.base, Ids.pathBed, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
             set(Ids.lead, "line-color", Palette.routeWater)
+            set(Ids.base, "line-color", Palette.routeStreet)
+            set(Ids.pathBed, "line-color", Palette.routeCasing)
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
             set(Ids.others, "line-color", Palette.routeStreet)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
