@@ -51,7 +51,7 @@ New: `start_place`, `end_place`, `via_places` (place refs, including saved place
 - **R5. Times** (D4): no time means now. "Morning" means the usual time (07:00), lunch 12:00, after work 18:30, tonight 20:00, all labeled default. "In 30" means now plus 30 min (said). A day with no hour gets the usual time. Times resolve to the next occurrence.
 - **R6. Effort words set nothing** (easy, chill, recovery, quick). Exception: "long run" with no distance asks, because the usual distance is wrong for a long run. Workout words (tempo, intervals, 4xmile, race pace) set `mode=training`. Sightseeing words (scenic, showing someone around) set `mode=exploring`. Novelty words (new, different, haven't tried) set `familiar=new`. "New to this area" sets `mode=exploring`.
 - **R7. Distance limits** (D5): 0.5–30 mi. Outside them, ask and offer the likely typo.
-- **R8. Health mentions** shape this request only, and are never stored or repeated.
+- **R8. Health mentions** shape this request only. They are never saved to the profile or to saved routes, and never repeated back to the runner. The raw request text is logged in `llm_calls`, which is private (never in git) and deleted after 30 days (decision 025).
 - **R9. The parser doesn't know geography.** Whether a route is feasible (too far, closed, gapped) is the engine's call, and the engine may ask.
 - **R10. "Loop"** (D1): plain "loop" means `shape=any`. "Real loop", "circle" or "no out and back" means `loop`. Out-and-back words mean `out_and_back`. When the start, via and end define the route, distance may be left out.
 - **R11. "No lights", "uninterrupted" and "hate waiting at lights"** mean `lights=waits`. `zigzags` only when said.

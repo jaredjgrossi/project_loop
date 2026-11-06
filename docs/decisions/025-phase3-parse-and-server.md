@@ -18,8 +18,11 @@
 - **Tolerance folds into the distance chip** ("3–4 mi"). There is no separate tolerance chip.
 - **Places come from an OSM `places` table built from our extract.** One match: use it (trust `listed`). Several:
   ask. None: ask for an address. Decision 005 stands: the same address in several boroughs asks.
-- **`llm_calls` logs the request text, model, tokens, cost and latency** for every Claude call, never the runner's
-  location.
+- **`llm_calls` logs the raw request text, model, tokens, cost and latency** for every Claude call, never the
+  runner's location. The table is private: never in git, never shown to the runner, and rows are deleted after
+  30 days. Raw text can hold health details ("knees r sore"), so this is the one place they may sit, and only for
+  those 30 days. Health details are never saved to the profile or to saved routes, and never repeated back
+  (rule R8, updated 2026-11-05).
 
 ## Repo
 - Phase 3 work happens on branch `phase3`, in its own worktree, one commit per step. The three design docs are
