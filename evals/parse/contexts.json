@@ -1,0 +1,44 @@
+{
+  "_doc": "The three parse-eval contexts (docs/phase3/parse-evals-v1.md). Each becomes the request's client, profile and recent_routes. Places are public stand-ins, never a real home address. Now: Tue 2026-11-03 06:40 ET, a school day.",
+  "C1": {
+    "label": "Runner 0 at home",
+    "client": {
+      "now": "2026-11-03T06:40:00-05:00",
+      "tz": "America/New_York",
+      "location": {"lat": 40.7438, "lon": -73.9799, "accuracy_m": 15, "label": "Kips Bay Library (446 3rd Ave)"}
+    },
+    "profile": {
+      "usual_distance_mi": 3.1,
+      "usual_time": "07:00",
+      "saved_places": [{"id": "home", "label": "Home", "lat": 40.7438, "lon": -73.9799, "stand_in": "Kips Bay Library"}]
+    },
+    "recent_routes": "recent_routes.json",
+    "own_runs_prior": "available"
+  },
+  "C2": {
+    "label": "Runner 0 somewhere new",
+    "client": {
+      "now": "2026-11-03T06:40:00-05:00",
+      "tz": "America/New_York",
+      "location": {"lat": 40.6742, "lon": -73.9700, "accuracy_m": 15, "label": "Grand Army Plaza, Brooklyn"}
+    },
+    "profile": {
+      "usual_distance_mi": 3.1,
+      "usual_time": "07:00",
+      "saved_places": [{"id": "home", "label": "Home", "lat": 40.7438, "lon": -73.9799, "stand_in": "Kips Bay Library"}]
+    },
+    "recent_routes": "recent_routes.json",
+    "own_runs_prior": "available, no data here"
+  },
+  "C3": {
+    "label": "New runner",
+    "client": {
+      "now": "2026-11-03T06:40:00-05:00",
+      "tz": "America/New_York",
+      "location": {"lat": 40.7355, "lon": -73.9906, "accuracy_m": 15, "label": "Union Square (14th St & Broadway)"}
+    },
+    "profile": {"usual_distance_mi": null, "usual_time": null, "saved_places": []},
+    "recent_routes": null,
+    "own_runs_prior": "none"
+  }
+}

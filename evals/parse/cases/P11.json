@@ -1,0 +1,26 @@
+{
+  "id": "P11",
+  "seq": 8,
+  "category": "B",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "45 min run",
+  "tags": [],
+  "needs": [],
+  "doc": "ASK (distance, parser) · \"About how many miles is 45 minutes for you?\" · allow_text",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "allow_text": true
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: assume a pace.",
+      "field": "distance_mi"
+    }
+  ]
+}

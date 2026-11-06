@@ -1,0 +1,25 @@
+{
+  "id": "P42",
+  "seq": 45,
+  "category": "I",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "out and back loop 5mi",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · shape=out_and_back (said) · distance_mi=5 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "shape": {
+        "value": "out_and_back",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

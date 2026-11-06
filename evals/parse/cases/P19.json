@@ -1,0 +1,27 @@
+{
+  "id": "P19",
+  "seq": 20,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5 mi from hoboken path",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "ASK (start, places) · \"Loop only covers New York City. Where should it start?\"",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "start",
+      "from": "places"
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: start in New Jersey.",
+      "field": "start_place"
+    }
+  ]
+}

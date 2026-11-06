@@ -1,0 +1,51 @@
+{
+  "id": "P45",
+  "seq": 47,
+  "category": "I",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5k tonight and a 10 miler sat",
+  "tags": [],
+  "needs": [
+    "planned"
+  ],
+  "doc": "PARSE · distance_mi=3.11 (said) · start_time=20:00 (default) · use_my_location (default) · planned={distance_mi=10, start_date=2026-11-07, start_time=07:00 (usual), start_place=saved:home (default)}",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3.11,
+        "source": "said"
+      },
+      "start_time": {
+        "value": "20:00",
+        "source": "default"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      },
+      "planned": {
+        "value": {
+          "distance_mi": {
+            "value": 10
+          },
+          "start_date": {
+            "value": "2026-11-07"
+          },
+          "start_time": {
+            "value": "07:00",
+            "source": "usual"
+          },
+          "start_place": {
+            "value": {
+              "saved": "home"
+            },
+            "source": "default"
+          }
+        }
+      }
+    }
+  },
+  "must_not": []
+}

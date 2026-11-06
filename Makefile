@@ -1,5 +1,5 @@
 # Shortcuts. Run `make help` to list them.
-.PHONY: help setup up down data corridors closures crowds pulses test
+.PHONY: help setup up down data corridors closures crowds pulses test eval-parse
 
 help:
 	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
@@ -11,6 +11,7 @@ help:
 	@echo "make crowds  precompute crowd levels per sidewalk (needs the downloads in data/crowds/raw, decision 016)"
 	@echo "make pulses  load school and ferry pulse sources (needs the downloads in data/pulses/raw, decision 022)"
 	@echo "make test    run the unit tests"
+	@echo "make eval-parse run the parse evals and print a pass/fail table (PARSER=module:function, default the stub)"
 
 setup:
 	uv sync
@@ -45,3 +46,7 @@ pulses:
 
 test:
 	uv run pytest
+
+PARSER ?= evals.parse.stub:parse
+eval-parse:
+	uv run python -m evals.parse.run --parser $(PARSER)

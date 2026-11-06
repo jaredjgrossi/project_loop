@@ -1,0 +1,38 @@
+{
+  "id": "R11",
+  "seq": 36,
+  "category": "G",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "4xmile workout - avoid hills",
+  "tags": [],
+  "needs": [
+    "hills"
+  ],
+  "doc": "ASK (distance, parser) · \"How far in total, warm-up and cool-down included?\" · options 6 mi · 7 mi · 8 mi · keep mode=training, hills=avoid · cant: routes built around workout segments (G8)",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "options": [
+        "6 mi",
+        "7 mi",
+        "8 mi"
+      ]
+    },
+    "keep": {
+      "mode": {
+        "value": "training"
+      },
+      "hills": {
+        "value": "avoid"
+      }
+    },
+    "cant": [
+      "G8"
+    ]
+  },
+  "must_not": []
+}

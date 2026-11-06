@@ -1,0 +1,25 @@
+{
+  "id": "P20",
+  "seq": 21,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "start at the park, 3 mi",
+  "tags": [],
+  "needs": [],
+  "doc": "ASK (start, places) · \"Which park?\" with the nearest parks as options (no major park within about 1 mi of Kips Bay, R13)",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "start",
+      "from": "places",
+      "min_options": 1
+    },
+    "keep": {
+      "distance_mi": {
+        "value": 3
+      }
+    }
+  },
+  "must_not": []
+}

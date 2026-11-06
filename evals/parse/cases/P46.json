@@ -1,0 +1,38 @@
+{
+  "id": "P46",
+  "seq": 22,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "run to work, 5 mi, office is 120 broadway",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [
+    "end"
+  ],
+  "doc": "ASK (end, places) · \"Which 120 Broadway?\" with the lookup's borough options · keep distance_mi=5, use_my_location",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "end",
+      "from": "places",
+      "min_options": 2
+    },
+    "keep": {
+      "distance_mi": {
+        "value": 5
+      },
+      "use_my_location": {
+        "value": true
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: guess the borough.",
+      "field": "end_place"
+    }
+  ]
+}

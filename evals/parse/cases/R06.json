@@ -1,0 +1,39 @@
+{
+  "id": "R06",
+  "seq": 4,
+  "category": "A",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C3",
+  "text": "New to this area and want to find a good route - what do you suggest",
+  "tags": [],
+  "needs": [],
+  "doc": "ASK (distance, parser) · \"How far?\" · options 3 mi · 5 mi · 10 mi · keep mode=exploring, use_my_location",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "options": [
+        "3 mi",
+        "5 mi",
+        "10 mi"
+      ]
+    },
+    "keep": {
+      "mode": {
+        "value": "exploring"
+      },
+      "use_my_location": {
+        "value": true
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: use a default distance.",
+      "field": "distance_mi"
+    }
+  ]
+}

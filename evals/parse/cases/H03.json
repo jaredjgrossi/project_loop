@@ -1,0 +1,27 @@
+{
+  "id": "H03",
+  "seq": 42,
+  "category": "H",
+  "origin": "endorsed",
+  "context": "C1",
+  "text": "the river one, other direction",
+  "tags": [],
+  "needs": [
+    "reuse"
+  ],
+  "doc": "PARSE · reuse_route_id=rt_a (said) · reverse=true (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "reuse_route_id": {
+        "value": "rt_a",
+        "source": "said"
+      },
+      "reverse": {
+        "value": true,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

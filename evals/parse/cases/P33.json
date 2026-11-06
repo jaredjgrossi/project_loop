@@ -1,0 +1,27 @@
+{
+  "id": "P33",
+  "seq": 31,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "6mi flat",
+  "tags": [],
+  "needs": [
+    "hills"
+  ],
+  "doc": "PARSE · distance_mi=6 (said) · hills=avoid (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 6,
+        "source": "said"
+      },
+      "hills": {
+        "value": "avoid",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

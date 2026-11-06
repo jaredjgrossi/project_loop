@@ -1,0 +1,33 @@
+{
+  "id": "P24",
+  "seq": 11,
+  "category": "C",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "leaving 7:45, steer clear of schools at drop off",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_time=07:45 (said) · crowds=avoid (said) · note: school drop-off crowds are estimated (decision 022)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_time": {
+        "value": "07:45",
+        "source": "said"
+      },
+      "crowds": {
+        "value": "avoid",
+        "source": "said"
+      }
+    },
+    "notes": [
+      "crowds_estimated"
+    ]
+  },
+  "must_not": [
+    {
+      "check": "no_cant",
+      "why": "Must not: add a can't-do line. This is covered now."
+    }
+  ]
+}

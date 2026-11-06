@@ -1,0 +1,29 @@
+{
+  "id": "P38",
+  "seq": 35,
+  "category": "G",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5k at race pace, needs to be uninterrupted",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · mode=training (said) · distance_mi=3.11 (said) · lights=waits (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "mode": {
+        "value": "training",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.11,
+        "source": "said"
+      },
+      "lights": {
+        "value": "waits",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

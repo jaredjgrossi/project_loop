@@ -1,0 +1,37 @@
+{
+  "id": "P23",
+  "seq": 24,
+  "category": "E",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "6 miles, avoid 1st ave by the hospitals",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=6 (said) · avoid_places=[\"1st Ave, E 26th–E 34th St\" (along)] (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 6,
+        "source": "said"
+      },
+      "avoid_places": {
+        "value": [
+          {
+            "name": "1st Ave, E 26th–E 34th St",
+            "how": "along"
+          }
+        ],
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "avoid_excludes",
+      "why": "Must not: avoid all of 1st Ave.",
+      "match": "1st ave",
+      "exact": true
+    }
+  ]
+}

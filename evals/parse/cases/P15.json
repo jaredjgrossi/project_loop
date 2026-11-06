@@ -1,0 +1,28 @@
+{
+  "id": "P15",
+  "seq": 16,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "lunch run from the office 3mi",
+  "tags": [],
+  "needs": [],
+  "doc": "ASK (start, parser) · \"What's the office's address?\" · keep start_time=12:00 (default), distance_mi=3",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "start",
+      "from": "parser"
+    },
+    "keep": {
+      "start_time": {
+        "value": "12:00",
+        "source": "default"
+      },
+      "distance_mi": {
+        "value": 3
+      }
+    }
+  },
+  "must_not": []
+}

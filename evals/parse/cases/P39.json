@@ -1,0 +1,28 @@
+{
+  "id": "P39",
+  "seq": 39,
+  "category": "G",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "scenic 7 miler, showing a friend around, bridges would be cool",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE + CANT · mode=exploring (said) · distance_mi=7 (said) · cant: preferring bridges in general (G1)",
+  "expect": {
+    "outcome": "PARSE+CANT",
+    "fields": {
+      "mode": {
+        "value": "exploring",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 7,
+        "source": "said"
+      }
+    },
+    "cant": [
+      "G1"
+    ]
+  },
+  "must_not": []
+}

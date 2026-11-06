@@ -1,0 +1,24 @@
+{
+  "id": "P25",
+  "seq": 25,
+  "category": "E",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5mi no bike lanes",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE + CANT · distance_mi=5 (said) · cant: avoiding bike lanes. The bike-lane rule has not landed (checked 2026-11-05), so this stays a can't-do line.",
+  "expect": {
+    "outcome": "PARSE+CANT",
+    "fields": {
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      }
+    },
+    "cant": [
+      "bike_lanes"
+    ]
+  },
+  "must_not": []
+}

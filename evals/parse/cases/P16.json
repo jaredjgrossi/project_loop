@@ -1,0 +1,28 @@
+{
+  "id": "P16",
+  "seq": 17,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5 mi from 11 madison ave",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "ASK (start, places) · \"Which 11 Madison Ave?\" with the lookup's borough options",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "start",
+      "from": "places",
+      "min_options": 2
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: start from any first match (decision 005).",
+      "field": "start_place"
+    }
+  ]
+}

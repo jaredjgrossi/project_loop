@@ -1,0 +1,39 @@
+{
+  "id": "P49",
+  "seq": 50,
+  "category": "J",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "15 miles staying on the east river path the whole time",
+  "tags": [
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE + CANT · distance_mi=15 (said) · surface=paths (said) · via_places=[place:\"East River Greenway\"] · cant: staying on one path the whole way (G1)",
+  "expect": {
+    "outcome": "PARSE+CANT",
+    "fields": {
+      "distance_mi": {
+        "value": 15,
+        "source": "said"
+      },
+      "surface": {
+        "value": "paths",
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "East River Greenway"
+          }
+        ]
+      }
+    },
+    "cant": [
+      "G1"
+    ]
+  },
+  "must_not": []
+}

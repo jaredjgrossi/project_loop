@@ -1,0 +1,33 @@
+{
+  "id": "P09",
+  "seq": 6,
+  "category": "B",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "half marathon training, 13 today",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=13 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 13,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_not",
+      "why": "Must not: round to 13.11.",
+      "field": "distance_mi",
+      "value": 13.11
+    },
+    {
+      "check": "field_absent",
+      "why": "Must not: set mode=training from \"training\".",
+      "field": "mode"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "P29",
+  "seq": 28,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "i dont stop for lights, i just zig zag. 5",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · lights=zigzags (said) · distance_mi=5 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "lights": {
+        "value": "zigzags",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

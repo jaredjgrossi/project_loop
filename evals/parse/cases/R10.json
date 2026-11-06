@@ -1,0 +1,39 @@
+{
+  "id": "R10",
+  "seq": 15,
+  "category": "D",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "5 miles, finishing at the best italian spot you can find",
+  "tags": [],
+  "needs": [
+    "end"
+  ],
+  "doc": "ASK (end, parser) · \"Which spot should it finish at?\" · allow_text · keep distance_mi=5",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "end",
+      "from": "parser",
+      "allow_text": true
+    },
+    "keep": {
+      "distance_mi": {
+        "value": 5
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: pick a restaurant (R14).",
+      "field": "end_place"
+    },
+    {
+      "check": "lookup_not_called",
+      "why": "Must not: look up a ranked business (R14).",
+      "name_contains": "italian"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "id": "P27",
+  "seq": 26,
+  "category": "E",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "something new, so sick of the east river",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE + CANT · familiar=new (said) · cant: steering away from the East River path without banning it (G3)",
+  "expect": {
+    "outcome": "PARSE+CANT",
+    "fields": {
+      "familiar": {
+        "value": "new",
+        "source": "said"
+      }
+    },
+    "cant": [
+      "G3"
+    ]
+  },
+  "must_not": [
+    {
+      "check": "avoid_excludes",
+      "why": "Must not: add the East River path to avoid_places.",
+      "match": "east river"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "R07",
+  "seq": 23,
+  "category": "E",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "I want to head out for a run, please avoid the chaos of 42nd st",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · avoid_places=[\"42nd St\" (along)] (said) · crowds=avoid (said) · distance_mi=3.1 (usual) · use_my_location (default)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "avoid_places": {
+        "value": [
+          {
+            "name": "42nd St",
+            "how": "along"
+          }
+        ],
+        "source": "said"
+      },
+      "crowds": {
+        "value": "avoid",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.1,
+        "source": "usual"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "avoid_excludes",
+      "why": "Must not: block crossing 42nd St (R15).",
+      "match": "42nd st",
+      "how": "area"
+    }
+  ]
+}

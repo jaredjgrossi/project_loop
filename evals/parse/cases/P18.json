@@ -1,0 +1,29 @@
+{
+  "id": "P18",
+  "seq": 19,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "6 from penn station",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"Penn Station\" (said) · distance_mi=6 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "Penn Station"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 6,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

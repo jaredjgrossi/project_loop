@@ -1,0 +1,30 @@
+{
+  "id": "H01",
+  "seq": 40,
+  "category": "H",
+  "origin": "endorsed",
+  "context": "C1",
+  "text": "same as Tuesday",
+  "tags": [],
+  "needs": [
+    "reuse"
+  ],
+  "doc": "PARSE · reuse_route_id=rt_a (said), rebuilt for now",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "reuse_route_id": {
+        "value": "rt_a",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_not",
+      "why": "Must not: take today (also a Tuesday) as the one meant; no route ran today.",
+      "field": "reuse_route_id",
+      "value": null
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "R09",
+  "seq": 38,
+  "category": "G",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C2",
+  "text": "Long run today - I want to get a few miles in the park",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "ASK (distance, parser) · \"How far today?\" · options 6 mi · 8 mi · 10 mi · keep via_places=[place:\"Prospect Park\"] (said \"the park\", R13), scenery=park_or_water",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "options": [
+        "6 mi",
+        "8 mi",
+        "10 mi"
+      ]
+    },
+    "keep": {
+      "via_places": {
+        "value": [
+          {
+            "place": "Prospect Park"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: use the usual 3.1 mi (R6).",
+      "field": "distance_mi"
+    }
+  ]
+}

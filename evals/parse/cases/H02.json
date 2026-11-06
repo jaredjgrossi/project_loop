@@ -1,0 +1,31 @@
+{
+  "id": "H02",
+  "seq": 41,
+  "category": "H",
+  "origin": "endorsed",
+  "context": "C1",
+  "text": "my usual but longer",
+  "tags": [],
+  "needs": [
+    "reuse"
+  ],
+  "doc": "ASK (distance, parser) · \"How much longer?\" · options +1 mi · +2 mi · keep reuse_route_id=rt_a (usual)",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "options": [
+        "+1 mi",
+        "+2 mi"
+      ]
+    },
+    "keep": {
+      "reuse_route_id": {
+        "value": "rt_a",
+        "source": "usual"
+      }
+    }
+  },
+  "must_not": []
+}

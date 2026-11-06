@@ -1,0 +1,32 @@
+{
+  "id": "R08",
+  "seq": 37,
+  "category": "G",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "Create a route that is new from everything else I have tried",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · familiar=new (said) · distance_mi=3.1 (usual)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "familiar": {
+        "value": "new",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.1,
+        "source": "usual"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: also set mode (R6).",
+      "field": "mode"
+    }
+  ]
+}
