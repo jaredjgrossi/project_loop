@@ -1,0 +1,7 @@
+{
+  "_doc": "Everyday names OSM lacks, added as aliases to an existing OSM place (decision 026). Each entry names the OSM place exactly; the loader fails if it isn't found. Keep this short: Claude normalizes most wording before the lookup.",
+  "aliases": [
+    {"alias": "Central Park Reservoir", "name": "Jacqueline Kennedy Onassis Reservoir", "kind": "water",
+     "why": "What runners call it (parse eval R02); OSM has only the official name."}
+  ]
+}

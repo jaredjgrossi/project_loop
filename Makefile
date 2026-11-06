@@ -1,5 +1,5 @@
 # Shortcuts. Run `make help` to list them.
-.PHONY: help setup up down data corridors closures crowds pulses test eval-parse
+.PHONY: help setup up down data corridors closures crowds pulses places test eval-parse
 
 help:
 	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
@@ -10,6 +10,7 @@ help:
 	@echo "make closures reload the closures (corridor gaps and routing/curated_closures.geojson, decision 017)"
 	@echo "make crowds  precompute crowd levels per sidewalk (needs the downloads in data/crowds/raw, decision 016)"
 	@echo "make pulses  load school and ferry pulse sources (needs the downloads in data/pulses/raw, decision 022)"
+	@echo "make places  build the places table for name lookups (needs make setup; decision 026)"
 	@echo "make test    run the unit tests"
 	@echo "make eval-parse run the parse evals and print a pass/fail table (PARSER=module:function, default the stub)"
 
@@ -21,6 +22,7 @@ setup:
 	uv run python -m etl.load_osm
 	uv run python -m etl.build_corridors
 	uv run python -m etl.build_closures
+	uv run python -m etl.load_places
 
 up:
 	docker compose up -d --wait
@@ -43,6 +45,9 @@ crowds:
 
 pulses:
 	uv run python -m etl.load_pulses
+
+places:
+	uv run python -m etl.load_places
 
 test:
 	uv run pytest

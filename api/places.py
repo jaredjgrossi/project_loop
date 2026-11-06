@@ -1,0 +1,389 @@
+"""Look up a named place in the places table (Phase 3, step 2; decision 026).
+
+`lookup(name, near=None)` returns every place the name can mean: none, one, or several. The caller decides what to
+do with several (rule R12: ask). Claude normalizes the runner's words ("penn" -> "Penn Station") before they get here;
+this module never invents a place and never guesses between two.
+
+How a name matches, in order:
+- A crossing ("1st Ave & E 23rd St"): the two streets must cross. A street written with a direction (E 23rd St)
+  matches only that side; without one (23rd St) it matches either.
+- An exact name, alias or street base. A street without a direction matches both its East and West halves, which
+  count as one street per borough ("42nd St" in Manhattan).
+- Failing that, a name holding every word of the query ("Penn Station" -> "New York Penn Station").
+
+Then places that are one place are joined: the same street in one borough, or same-name rows within
+SAME_PLACE_M of each other (the Penn Station node, its area and the two subway stations under it). A name that ends
+like a street ("86th St") keeps streets and paths only, so it doesn't also return the 86 St stations.
+
+`near` is a point (lat, lon) or a PlaceMatch. A point sorts the matches by distance; `near_m` drops those farther
+than that (off by default: decision 005, ask). A PlaceMatch with an area means "at": only places touching it are
+kept, and a street that touches it in several spots is one match per spot, labeled by the crossing street there
+("86th St" at Central Park: 5th Ave, or Central Park West).
+
+Every match is from the table, so trust is "listed" and the source is named.
+"""
+
+import re
+from dataclasses import dataclass, field
+
+import psycopg
+
+SAME_PLACE_M = 400  # same-name rows this close are one place (Penn Station's node, area and subway stations)
+TOUCH_M = 75  # "at" an area: a place this close to its outline touches it
+CONTACT_SPLIT_M = 300  # contact stretches this far apart are different spots ("86th St" at Central Park: two)
+CROSSING_LABEL_M = 150  # the crossing street that labels a contact spot is within this distance
+MAJOR_PARK_HA = 10  # "the park" (R13): a named OSM leisure=park at least this big (about 25 acres). Provisional.
+MAJOR_PARK_RADIUS_M = 1609  # ... within about 1 mi of the start
+PARTIAL_LIMIT = 300
+FT_PER_M = 3.28084
+
+# Which row speaks for a group of rows that are one place.
+KIND_PRIORITY = ("park", "water", "square", "plaza", "bridge", "station", "subway_station", "path", "corridor",
+                 "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance")
+LINE_KINDS = ("street", "path", "bridge")
+# Kinds a partial name match keeps when any of them matched: a business or artwork that only shares words with a
+# landmark is not what the runner meant.
+LANDMARK_KINDS = ("park", "water", "square", "plaza", "bridge", "station", "subway_station", "path", "corridor",
+                  "street")
+
+_SUFFIX = {"street": "st", "st": "st", "avenue": "ave", "ave": "ave", "av": "ave", "boulevard": "blvd", "blvd": "blvd",
+           "road": "rd", "rd": "rd", "place": "pl", "pl": "pl", "drive": "dr", "dr": "dr", "parkway": "pkwy",
+           "pkwy": "pkwy", "lane": "ln", "ln": "ln", "terrace": "ter", "ter": "ter", "highway": "hwy", "hwy": "hwy",
+           "expressway": "expy", "expy": "expy", "court": "ct", "ct": "ct", "square": "sq", "sq": "sq"}
+_STREET_SUFFIXES = set(_SUFFIX.values()) - {"sq"}
+_DIRS = {"east": "e", "e": "e", "west": "w", "w": "w", "north": "n", "n": "n", "south": "s", "s": "s"}
+_WORD_ORDINALS = {"first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th", "fifth": "5th", "sixth": "6th",
+                  "seventh": "7th", "eighth": "8th", "ninth": "9th", "tenth": "10th", "eleventh": "11th",
+                  "twelfth": "12th"}
+_DISPLAY_SUFFIX = {"Street": "St", "Avenue": "Ave", "Boulevard": "Blvd", "Road": "Rd", "Place": "Pl", "Drive": "Dr",
+                   "Parkway": "Pkwy", "Lane": "Ln", "Terrace": "Ter", "Court": "Ct"}
+_DISPLAY_DIR = {"East": "E", "West": "W", "North": "N", "South": "S"}
+
+
+def _ordinal(n: str) -> str:
+    k = int(n)
+    suffix = "th" if 10 <= k % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(k % 10, "th")
+    return f"{n}{suffix}"
+
+
+def normalize(name: str) -> str:
+    """Lowercase words with street words shortened, so 'East 42nd Street' and 'E. 42nd St' compare equal."""
+    s = re.sub(r"\([^)]*\)", " ", name.casefold())
+    s = s.replace("'", "").replace("’", "").replace(".", "")
+    s = re.sub(r"[–—\-/,&:;]", " ", s)
+    tokens = s.split()
+    if tokens and tokens[0] == "the":
+        tokens = tokens[1:]
+    out = []
+    for i, t in enumerate(tokens):
+        t = _WORD_ORDINALS.get(t, t)
+        t = _SUFFIX.get(t, _DIRS.get(t, t))
+        nxt = _SUFFIX.get(tokens[i + 1]) if i + 1 < len(tokens) else None
+        if t.isdigit() and nxt in _STREET_SUFFIXES:
+            t = _ordinal(t)
+        out.append(t)
+    return " ".join(out)
+
+
+def street_base(norm: str) -> str:
+    """A normalized street name without its leading direction: 'e 42nd st' -> '42nd st'. Kept when nothing but
+    the suffix would be left ('s st' is South Street)."""
+    tokens = norm.split()
+    if len(tokens) >= 3 and tokens[0] in ("e", "w", "n", "s"):
+        return " ".join(tokens[1:])
+    return norm
+
+
+def is_streetlike(norm: str) -> bool:
+    return bool(norm) and norm.split()[-1] in _STREET_SUFFIXES
+
+
+def display_name(name: str) -> str:
+    """The short form a chip shows: 'East 42nd Street' -> 'E 42nd St', 'First Avenue' -> '1st Ave'."""
+    words = name.split()
+    if not words:
+        return name
+    if words[-1] in _DISPLAY_SUFFIX and len(words) >= 2:
+        words[-1] = _DISPLAY_SUFFIX[words[-1]]
+        ordinal = _WORD_ORDINALS.get(words[-2].casefold())
+        if ordinal:
+            words[-2] = ordinal
+    if len(words) >= 3 and words[0] in _DISPLAY_DIR and words[1][:1].isdigit():
+        words[0] = _DISPLAY_DIR[words[0]]
+    return " ".join(words)
+
+
+def split_crossing(name: str) -> tuple[str, str] | None:
+    """'1st Ave & E 23rd St' -> ('1st ave', 'e 23rd st'); None when it isn't two names joined by & or 'and'."""
+    parts = re.split(r"\s*&\s*|\s+and\s+", name.strip(), flags=re.IGNORECASE)
+    if len(parts) != 2 or not all(p.strip() for p in parts):
+        return None
+    return normalize(parts[0]), normalize(parts[1])
+
+
+def group_ids(ids: list[int], pairs: list[tuple[int, int]]) -> list[list[int]]:
+    """Join ids linked by pairs, transitively. Groups come back sorted, in order of their smallest id."""
+    parent = {i: i for i in ids}
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for a, b in pairs:
+        if a in parent and b in parent:
+            parent[find(a)] = find(b)
+    groups: dict[int, list[int]] = {}
+    for i in ids:
+        groups.setdefault(find(i), []).append(i)
+    return sorted((sorted(g) for g in groups.values()), key=lambda g: g[0])
+
+
+@dataclass(frozen=True)
+class PlaceMatch:
+    name: str  # as a chip shows it ("E 42nd St", "New York Penn Station")
+    kind: str
+    borough: str
+    lat: float
+    lon: float
+    matched: str  # the name or alias the query matched ("Central Park Reservoir")
+    source: str
+    ids: tuple[int, ...] = field(default=())  # places rows behind this match
+    trust: str = "listed"
+    distance_m: float | None = None  # from `near`, when near is a point
+    at: str | None = None  # the crossing street at this spot, when near is an area ("5th Ave")
+    area_ha: float | None = None
+
+
+_ROW = """id, name, kind, borough, norm, base, aliases, alias_norms, ST_Y(geom), ST_X(geom), source, area_ha,
+          outline IS NOT NULL AND GeometryType(outline) IN ('POLYGON', 'MULTIPOLYGON')"""
+
+
+@dataclass
+class _Row:
+    id: int
+    name: str
+    kind: str
+    borough: str
+    norm: str
+    base: str
+    aliases: list
+    alias_norms: list
+    lat: float
+    lon: float
+    source: str
+    area_ha: float | None
+    has_area: bool
+
+
+def _connect(conn):
+    if conn is not None:
+        return conn, False
+    from etl.load import database_url
+    return psycopg.connect(database_url()), True
+
+
+def _crossing_rows(conn, a: str, b: str) -> list[_Row]:
+    def matches(part, norms, bases):
+        has_dir = part.split()[0] in ("e", "w", "n", "s") and len(part.split()) >= 3
+        for n, base in zip(norms, bases):
+            if part == n or (not has_dir and part == base):
+                return True
+            if not has_dir and not is_streetlike(part):  # "1st" for "1st ave", "23rd" for "e 23rd st"
+                bt = base.split()
+                if bt[:-1] == part.split() and bt[-1] in _STREET_SUFFIXES:
+                    return True
+        return False
+
+    rows = conn.execute(
+        f"""SELECT {_ROW}, street_norms, street_bases FROM places
+            WHERE kind = 'crossing'
+              AND EXISTS (SELECT 1 FROM unnest(street_bases) s WHERE split_part(s, ' ', 1) = %s)
+              AND EXISTS (SELECT 1 FROM unnest(street_bases) s WHERE split_part(s, ' ', 1) = %s)""",
+        (street_base(a).split()[0], street_base(b).split()[0])).fetchall()
+    out = []
+    for r in rows:
+        norms, bases = r[-2], r[-1]
+        for x, y in ((a, b), (b, a)):
+            if matches(x, norms[:1], bases[:1]) and matches(y, norms[1:], bases[1:]):
+                out.append(_Row(*r[:-2]))
+                break
+    return out
+
+
+def _name_rows(conn, q: str) -> tuple[list[_Row], bool]:
+    """Rows matching the normalized query exactly (name, alias or street base), else every row holding all its
+    words. Returns the rows and whether the match was exact."""
+    has_dir = street_base(q) != q
+    rows = conn.execute(
+        f"""SELECT {_ROW} FROM places WHERE kind <> 'crossing'
+            AND (norm = %(q)s OR %(q)s = ANY(alias_norms) OR (NOT %(dir)s AND base = %(q)s))""",
+        {"q": q, "dir": has_dir}).fetchall()
+    if rows:
+        return [_Row(*r) for r in rows], True
+    words = q.split()
+    if not words:
+        return [], False
+    pattern = " AND ".join(["norm ~ %s"] * len(words))
+    rows = conn.execute(f"SELECT {_ROW} FROM places WHERE kind <> 'crossing' AND {pattern} LIMIT {PARTIAL_LIMIT}",
+                        [rf"\m{re.escape(w)}\M" for w in words]).fetchall()
+    return [_Row(*r) for r in rows], False
+
+
+def _groups(conn, rows: list[_Row], q: str) -> list[list[_Row]]:
+    by_id = {r.id: r for r in rows}
+    ids = list(by_id)
+    pairs = []
+    if street_base(q) == q:  # no direction asked for: a street's East and West halves in one borough are one street
+        lines: dict[tuple, list[int]] = {}
+        for r in rows:
+            if r.kind in LINE_KINDS:
+                lines.setdefault((r.base, r.borough), []).append(r.id)
+        pairs += [(g[0], i) for g in lines.values() for i in g[1:]]
+    if len(ids) > 1:
+        pairs += conn.execute(
+            """SELECT a.id, b.id FROM places a JOIN places b ON a.id < b.id
+               WHERE a.id = ANY(%(ids)s) AND b.id = ANY(%(ids)s)
+                 AND ST_DWithin(ST_Transform(coalesce(a.outline, a.geom), 2263),
+                                ST_Transform(coalesce(b.outline, b.geom), 2263), %(ft)s)""",
+            {"ids": ids, "ft": SAME_PLACE_M * FT_PER_M}).fetchall()
+    return [[by_id[i] for i in g] for g in group_ids(ids, pairs)]
+
+
+def _rep(group: list[_Row]) -> _Row:
+    return min(group, key=lambda r: (KIND_PRIORITY.index(r.kind) if r.kind in KIND_PRIORITY else 99,
+                                     -(r.area_ha or 0), r.id))
+
+
+def _matched(rep: _Row, q: str) -> str:
+    if rep.norm == q:
+        return rep.name
+    for alias, n in zip(rep.aliases or [], rep.alias_norms or []):
+        if n == q:
+            return alias
+    return rep.name
+
+
+def _name(group: list[_Row], rep: _Row, q: str) -> str:
+    if rep.kind == "crossing":
+        return rep.name
+    halves = {r.norm for r in group if r.kind in LINE_KINDS and r.base == rep.base}
+    if rep.kind in LINE_KINDS and len(halves) > 1 and street_base(q) == q:
+        words = rep.name.split()
+        return display_name(" ".join(words[1:]) if words[0] in _DISPLAY_DIR else rep.name)
+    return display_name(rep.name)
+
+
+def _match(group, q, **kw) -> PlaceMatch:
+    rep = _rep(group)
+    base = dict(name=_name(group, rep, q), kind=rep.kind, borough=rep.borough, lat=rep.lat, lon=rep.lon,
+                matched=_matched(rep, q), source=rep.source, ids=tuple(r.id for r in group), area_ha=rep.area_ha)
+    return PlaceMatch(**(base | kw))
+
+
+def _near_point(conn, group, q, lat, lon) -> PlaceMatch:
+    ids = [r.id for r in group]
+    rep = _rep(group)
+    plat, plon, dist = conn.execute(
+        """WITH g AS (SELECT ST_Collect(coalesce(outline, geom)) g FROM places WHERE id = ANY(%(ids)s)),
+                p AS (SELECT ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326) p)
+           SELECT ST_Y(c), ST_X(c), ST_Distance(ST_Transform(g.g, 2263), ST_Transform(p.p, 2263)) / %(f)s
+           FROM g, p, LATERAL (SELECT CASE WHEN %(line)s THEN ST_ClosestPoint(g.g, p.p)
+                                           ELSE (SELECT geom FROM places WHERE id = %(rep)s) END c) x""",
+        {"ids": ids, "lat": lat, "lon": lon, "f": FT_PER_M, "line": rep.kind in LINE_KINDS, "rep": rep.id}).fetchone()
+    return _match(group, q, lat=plat, lon=plon, distance_m=round(dist, 1))
+
+
+def _near_area(conn, group, q, area: PlaceMatch) -> list[PlaceMatch]:
+    ids = [r.id for r in group]
+    rep = _rep(group)
+    params = {"ids": ids, "area": list(area.ids), "touch": TOUCH_M * FT_PER_M, "split": CONTACT_SPLIT_M * FT_PER_M,
+              "label": CROSSING_LABEL_M * FT_PER_M}
+    (touches,) = conn.execute(
+        """SELECT ST_DWithin((SELECT ST_Transform(ST_Collect(coalesce(outline, geom)), 2263) FROM places WHERE id = ANY(%(ids)s)),
+                             (SELECT ST_Transform(ST_Collect(coalesce(outline, geom)), 2263) FROM places WHERE id = ANY(%(area)s)),
+                             %(touch)s)""", params).fetchone()
+    if not touches:
+        return []
+    if rep.kind not in LINE_KINDS:
+        return [_match(group, q)]
+    spots = conn.execute(
+        """WITH area AS (SELECT ST_Buffer(ST_Transform(ST_Collect(coalesce(outline, geom)), 2263), %(touch)s) g
+                         FROM places WHERE id = ANY(%(area)s)),
+                line AS (SELECT ST_Transform(ST_Collect(outline), 2263) g FROM places WHERE id = ANY(%(ids)s)),
+                piece AS (SELECT (ST_Dump(ST_Intersection(line.g, area.g))).geom g FROM line, area),
+                spot AS (SELECT g, ST_ClusterDBSCAN(g, eps := %(split)s, minpoints := 1) OVER () c FROM piece)
+           SELECT ST_Transform(ST_ClosestPoint(ST_Collect(g), ST_Centroid(ST_Collect(g))), 4326) FROM spot GROUP BY c""",
+        params).fetchall()
+    names = [r.norm for r in group]
+    out = []
+    for (point,) in spots:
+        label = conn.execute(
+            """SELECT streets, street_norms FROM places
+               WHERE kind = 'crossing' AND street_norms && %(names)s::text[]
+                 AND ST_DWithin(ST_Transform(geom, 2263), ST_Transform(%(p)s::geometry, 2263), %(label)s)
+               ORDER BY ST_Distance(geom, %(p)s::geometry) LIMIT 5""",
+            params | {"names": names, "p": point}).fetchall()
+        at = None
+        for streets, norms in label:
+            other = next(((s, n) for s, n in zip(streets, norms) if n not in names), None)
+            # The street's own continuation ("86th Street Transverse" for 86th St) doesn't say which spot this is.
+            if other and not street_base(other[1]).startswith(rep.base):
+                at = display_name(other[0])
+                break
+        lat, lon = conn.execute("SELECT ST_Y(%(p)s::geometry), ST_X(%(p)s::geometry)", {"p": point}).fetchone()
+        out.append(_match(group, q, lat=lat, lon=lon, at=at))
+    return out
+
+
+def lookup(name: str, near: tuple[float, float] | PlaceMatch | None = None, near_m: float | None = None,
+           conn=None) -> list[PlaceMatch]:
+    """Every place `name` can mean; see the module docstring."""
+    conn, own = _connect(conn)
+    try:
+        q = normalize(name)
+        rows: list[_Row] = []
+        crossing = split_crossing(name)
+        if crossing:
+            rows = _crossing_rows(conn, *crossing)
+        if not rows:
+            rows, exact = _name_rows(conn, q)
+            if exact and is_streetlike(q) and any(r.kind in LINE_KINDS for r in rows):
+                rows = [r for r in rows if r.kind in LINE_KINDS]
+            if not exact and any(r.kind in LANDMARK_KINDS for r in rows):  # "Penn Station", not "Penn Station Eagle"
+                rows = [r for r in rows if r.kind in LANDMARK_KINDS]
+        if not rows:
+            return []
+        groups = _groups(conn, rows, q)
+        if isinstance(near, PlaceMatch):
+            return [m for g in groups for m in _near_area(conn, g, q, near)]
+        if near is not None:
+            found = sorted((_near_point(conn, g, q, *near) for g in groups), key=lambda m: m.distance_m)
+            return [m for m in found if near_m is None or m.distance_m <= near_m]
+        found = [_match(g, q) for g in groups]
+        return sorted(found, key=lambda m: (KIND_PRIORITY.index(m.kind) if m.kind in KIND_PRIORITY else 99, m.borough))
+    finally:
+        if own:
+            conn.close()
+
+
+def major_parks_near(lat: float, lon: float, radius_m: float = MAJOR_PARK_RADIUS_M, min_ha: float = MAJOR_PARK_HA,
+                     conn=None) -> list[PlaceMatch]:
+    """'The park' (R13): named parks of at least `min_ha` within `radius_m` of the point, nearest first."""
+    conn, own = _connect(conn)
+    try:
+        rows = conn.execute(
+            f"""WITH p AS (SELECT ST_Transform(ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326), 2263) p)
+                SELECT DISTINCT ON (name) {_ROW}, ST_Distance(ST_Transform(outline, 2263), p.p) / %(f)s d
+                FROM places, p
+                WHERE kind = 'park' AND category = 'leisure=park' AND area_ha >= %(ha)s  -- not nature reserves (the Hudson's estuarine sanctuary is water)
+                  AND ST_DWithin(ST_Transform(outline, 2263), p.p, %(ft)s)
+                ORDER BY name, d""",
+            {"lat": lat, "lon": lon, "ha": min_ha, "ft": radius_m * FT_PER_M, "f": FT_PER_M}).fetchall()
+        found = [PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
+                            ids=(r[0],), area_ha=r[11], distance_m=round(r[-1], 1)) for r in rows]
+        return sorted(found, key=lambda m: m.distance_m)
+    finally:
+        if own:
+            conn.close()
