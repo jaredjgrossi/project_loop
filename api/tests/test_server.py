@@ -53,14 +53,30 @@ def fake_parse(by_text: dict):
     return parse_fn
 
 
+class FakeRouteStore:
+    """saved_routes in a dict: it outlives an app, as Postgres outlives a server restart."""
+
+    def __init__(self):
+        self.rows = {}
+
+    def save(self, route_id, request, constraints, final):
+        self.rows[route_id] = {"request": request, "constraints": constraints, "final": final}
+        return True
+
+    def load(self, route_id):
+        row = self.rows.get(route_id)
+        return row["final"] if row else None
+
+
 @contextmanager
 def fake_places():
     yield FakePlaces()
 
 
-def client_for(by_text=None, engine=None, store=None, parse_fn=None):
+def client_for(by_text=None, engine=None, store=None, parse_fn=None, route_store=None):
     parse_fn = parse_fn or fake_parse(by_text or {})
     app = create_app(token=TOKEN, parse_fn=parse_fn, places=fake_places, engine=engine or FakeEngine(),
+                     route_store=FakeRouteStore() if route_store is None else route_store,
                      store=PendingStore() if store is None else store, health_fn=lambda: {"engine": True, "database": True,
                                                                        "parser": True}, warm=False)
     return TestClient(app), parse_fn
@@ -251,3 +267,41 @@ def test_the_start_is_the_phones_location_from_the_request():
     post(c, body("P36", text="5 mi"))
     rc, start = eng.calls[0]
     assert rc.use_my_location and (start.lat, start.lon) == (40.7438, -73.9799)
+
+
+def test_a_build_is_stored_and_served_after_a_restart():
+    routes = FakeRouteStore()
+    c, _ = client_for({"training run, 6 mi, I wait at lights": IDEAL["P36"]}, route_store=routes)
+    final = post(c, body(text="training run, 6 mi, I wait at lights"))[-2]
+    restarted, _ = client_for(route_store=routes)  # a new app: nothing in memory
+    got = restarted.get(f"/v1/routes/{final['route_id']}", headers=AUTH)
+    assert got.status_code == 200 and got.json() == final
+
+
+def test_the_stored_row_keeps_no_text_and_no_location():
+    routes = FakeRouteStore()
+    c, _ = client_for({"6 mi, my knee is sore": IDEAL["P36"]}, route_store=routes)
+    evs = post(c, body(text="6 mi, my knee is sore"))
+    row = routes.rows[evs[-2]["route_id"]]
+    assert row["request"]["kind"] == "text" and row["request"]["parse_id"] == evs[0]["parse_id"]
+    assert row["constraints"] == evs[0]["constraints"]
+    flat = repr(row["request"]) + repr(row["constraints"])
+    assert "knee" not in flat and "40.7438" not in flat
+
+
+def test_answers_and_chip_edits_are_stored_with_their_kind():
+    routes = FakeRouteStore()
+    c, _ = client_for({"exploring run": IDEAL["R06"]}, route_store=routes)
+    first = post(c, body("R06", text="exploring run"))
+    second = post(c, body("R06", answer={"parse_id": first[0]["parse_id"], "question_id": "q_1", "option_id": "a"}))
+    third = post(c, body("R06", constraints=second[0]["constraints"] | {"distance_mi": 4}))
+    kinds = {routes.rows[e[-2]["route_id"]]["request"]["kind"] for e in (second, third)}
+    assert kinds == {"answer", "constraints"}
+
+
+def test_a_question_or_a_blocked_build_stores_nothing():
+    routes = FakeRouteStore()
+    c, _ = client_for({"exploring run": IDEAL["R06"], "to McCarren": IDEAL["R01"]}, route_store=routes)
+    post(c, body("R06", text="exploring run"))
+    post(c, body("R01", text="to McCarren"))
+    assert routes.rows == {}

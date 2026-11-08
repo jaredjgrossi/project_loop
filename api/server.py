@@ -6,7 +6,7 @@
   `final`, then `done`; or `error`. A question ends the stream after `parsed` (and `done`); the answer comes back as
   a new POST with `answer`, which resumes the pending parse with no second Claude call. A chip edit sends
   `constraints` and skips Claude.
-- `GET /v1/routes/{id}`: a built result, the same payload as `final` (in memory until step 7 stores them).
+- `GET /v1/routes/{id}`: a built result, the same payload as `final`, from saved_routes (decision 030).
 - `GET /v1/health`: the server is up, and whether the engine, the database and the parser key are ready.
 
 Every route but health needs `Authorization: Bearer <LOOP_TOKEN>`; the token lives in .env, never in git or the
@@ -34,9 +34,10 @@ from api.copy import render
 from api.engine import BadStart, Engine, EngineUnavailable, before_build, graphhopper_ready, new_route_id, start_for
 from api.parse import Context, DbPlaces, answer_overrides, parse, parsed_for_constraints, resume
 from api.pending import Pending, PendingStore
+from api.saved_routes import PgRouteStore, stored_request
 
 MAX_TEXT = 500  # characters; a run request is a sentence or two
-MAX_ROUTES_KEPT = 50  # in memory until step 7's saved_routes table
+MAX_ROUTES_KEPT = 50  # the latest builds, also kept in memory; every build is in saved_routes (step 7)
 
 
 # ---- the request (contract: POST /v1/runs) -----------------------------------------------------------------------
@@ -160,7 +161,7 @@ def _health_checks() -> dict:
 
 def create_app(*, token: str | None = None, parse_fn: Callable | None = None, places: Callable | None = None,
                engine: Engine | None = None, store: PendingStore | None = None,
-               health_fn: Callable[[], dict] = _health_checks, warm: bool = True) -> FastAPI:
+               route_store=None, health_fn: Callable[[], dict] = _health_checks, warm: bool = True) -> FastAPI:
     """The app. Tests pass fakes; `uvicorn api.server:app` uses the real parser, places table and engine."""
     from api.env import load_env
 
@@ -172,6 +173,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
     places = places or _db_places()
     engine = Engine() if engine is None else engine
     store = PendingStore() if store is None else store
+    route_store = PgRouteStore() if route_store is None else route_store
     routes: OrderedDict[str, dict] = OrderedDict()
     routes_lock = threading.Lock()
 
@@ -241,7 +243,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         return client.get("location"), {p["id"]: p for p in profile.get("saved_places") or []}
 
     async def stream(req: RunRequest) -> AsyncIterator[ServerSentEvent]:
-        step = from_text if req.text is not None else from_answer if req.answer is not None else from_constraints
+        kind = "text" if req.text is not None else "answer" if req.answer is not None else "constraints"
+        step = {"text": from_text, "answer": from_answer, "constraints": from_constraints}[kind]
         try:
             parsed, trace, kept = await run_in_threadpool(step, req)
         except _Fail as f:
@@ -285,6 +288,10 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
             try:
                 final = engine.build(rc, start, send, route_id)
                 keep_route(final)  # kept even if the phone has gone, for GET /v1/routes/{id}
+                # Stored before the phone gets final, so the id it holds always works, after a restart too.
+                # No text and no location (decision 030); a few ms for the insert.
+                route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), parsed["constraints"],
+                                 final)
                 send(final)
             except EngineUnavailable:
                 send({"event": "error", "v": 1, "code": "engine_unavailable",
@@ -323,6 +330,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
     def get_route(route_id: str) -> dict:
         with routes_lock:
             found = routes.get(route_id)
+        if found is None:
+            found = route_store.load(route_id)  # an older build, or one from before a restart
         if found is None:
             raise HTTPException(status_code=404, detail="no such route")
         return found
