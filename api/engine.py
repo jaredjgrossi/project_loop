@@ -1,0 +1,175 @@
+"""Build routes for a parsed request and stream them as contract events (Phase 3, step 5; decision 029).
+
+The same build as the CLI (api/scripts/make_loop.py): the no-go zones, closures, the runner's lights setting, the
+grid, the anchored generators and the context scoring. Each time the top 3 changes, the generator's `on_top3` sends
+a `top3` event, then `provisional` once the anchored tiers are done (decision 018). This module turns those into
+the contract's payloads and adds `final`: the #1 in full, as the iPhone fixture's `route` (kips3-ui.json).
+
+`send` is called from the generator's worker threads; the server bridges it into the event stream.
+"""
+
+import secrets
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import httpx
+import psycopg
+
+from api.constraints import RunConstraints, resolve_preferences, unsupported
+from api.copy import render
+from api.generate import TOLERANCE_PCT, Candidate, generate_loops
+from api.geocoding import GeocodeError, geocode
+from api.nogo import resolve as resolve_zones
+from api.routing import RoutingError, graphhopper_url
+from api.scripts import make_loop as ml
+from api.summary import METERS_PER_MILE, route_summary
+
+# The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
+BLOCKING = ("end_place", "via_places", "avoid_along", "reuse_route_id")
+# These leave a buildable run: hills aren't scored (step 9) and the second run isn't planned (step 10). The first run
+# is built, with a can't-do line.
+TOP_N = 3
+
+
+class EngineUnavailable(Exception):
+    """GraphHopper or Postgres can't be reached."""
+
+
+class BadStart(Exception):
+    """The request has no start the engine can use."""
+
+
+@dataclass(frozen=True)
+class Start:
+    lat: float
+    lon: float
+    label: str
+
+
+def new_route_id() -> str:
+    return f"r_{secrets.token_hex(4)}"
+
+
+def start_for(rc: RunConstraints, location: dict | None, saved: dict, geocode_fn: Callable = geocode) -> Start:
+    """Coordinates for the start: the phone's location, a place ref, a saved place from the profile, or (the CLI's
+    way in) an address. Coordinates come from the server and the phone, never from Claude."""
+    if rc.use_my_location:
+        if not location:
+            raise BadStart("use_my_location without a location")
+        return Start(location["lat"], location["lon"], render("request.start.my_location"))
+    if rc.start_place is not None:
+        p = rc.start_place
+        lat, lon = p.lat, p.lon
+        if lat is None and p.kind == "saved" and p.id in saved:
+            lat, lon = saved[p.id].get("lat"), saved[p.id].get("lon")
+        if lat is None:
+            raise BadStart(f"no coordinates for {p.kind} start")
+        return Start(lat, lon, p.display())
+    if rc.start_address:
+        try:
+            g = geocode_fn(rc.start_address)
+        except GeocodeError as exc:
+            raise BadStart(str(exc)) from exc
+        return Start(g.lat, g.lon, g.label)
+    raise BadStart("no start")
+
+
+def before_build(rc: RunConstraints, zones=None) -> tuple[list[dict], bool]:
+    """Can't-do lines for what the engine can't build yet, and whether that blocks the build. An avoid that isn't on
+    the no-go list is named too: the route is built, but not around it (rule 3: never quietly)."""
+    lines = []
+    later = unsupported(rc)
+    for key in later:
+        lines.append({"gap": "later", "key": key, "text": render(f"cant.later.{key}")})
+    _, unknown = resolve_zones([a.name for a in rc.avoid_places if a.how == "area"], zones)
+    for name in unknown:
+        lines.append({"gap": "avoid_unknown", "key": "avoid_unknown", "text": render("cant.avoid_unknown", name=name)})
+    return lines, any(k in BLOCKING for k in later)
+
+
+def entry(rank: int, c: Candidate) -> dict:
+    """One route of the top 3 as the fixture's `top3` holds it: outline, label, score and the measured distance."""
+    return {"rank": rank, "kind": c.kind, "label": c.label, "score": round(c.score),
+            "distance": route_summary(c, [], [], {})["distance"],
+            "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
+
+
+def distance_notes(rc: RunConstraints, chosen: list[Candidate], within: bool) -> list[dict]:
+    """Rule 3: a miss is said, with the nearest route and how far off it is."""
+    if not chosen:
+        return [{"id": "n_r1", "key": "no_route", "trust": "measured", "text": render("note.no_route")}]
+    if within or rc.distance_mi is None:
+        return []
+    c = chosen[0]  # the miss is measured on the router's distance, so the note is too
+    direction = "short" if c.miss_pct < 0 else "long"
+    tolerance = rc.tolerance_pct if rc.tolerance_pct is not None else TOLERANCE_PCT
+    return [{"id": "n_r1", "key": "distance_off", "trust": "measured",
+             "text": render(f"note.distance_off.{direction}", tolerance=f"{tolerance:g}", miles=f"{rc.distance_mi:g}",
+                            actual=f"{c.route.distance_m / METERS_PER_MILE:.1f}",
+                            pct=f"{abs(c.miss_pct):.0f}")}]
+
+
+def graphhopper_ready(timeout_s: float = 1.0) -> bool:
+    try:
+        return httpx.get(f"{graphhopper_url()}/health", timeout=timeout_s).status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+@dataclass
+class Engine:
+    """The real build. Tests swap the functions for fakes."""
+    generate_fn: Callable = generate_loops
+    grid_fn: Callable = ml.current_grid
+    closures_fn: Callable | None = ml.db_closures
+    stretch_fn: Callable | None = ml.db_stretches
+    anchor_fn: Callable | None = ml.familiar_anchors
+    feature_anchor_fn: object = None
+    use_prior: bool = True
+    ready_fn: Callable[[], bool] = graphhopper_ready
+
+    def __post_init__(self):
+        if self.feature_anchor_fn is None:
+            self.feature_anchor_fn = ml.DB_FEATURE_ANCHOR_SOURCES
+
+    def build(self, rc: RunConstraints, start: Start, send: Callable[[dict], None], route_id: str) -> dict:
+        """Stream `top3` and `provisional` through `send`, then return the `final` payload (not sent here)."""
+        if not self.ready_fn():
+            raise EngineUnavailable("GraphHopper isn't answering")
+        t0 = time.perf_counter()
+        prefs = resolve_preferences(rc).values
+        zones, _ = resolve_zones([a.name for a in rc.avoid_places if a.how == "area"])
+        miles = rc.distance_mi
+        try:
+            grid = self.grid_fn(start.lat, start.lon)
+            closures = self.closures_fn(start.lat, start.lon, miles) if self.closures_fn else []
+        except psycopg.Error as exc:
+            raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        route_fn, round_trip_fn, area_fn = ml.routers_for(zones, prefs["lights"], closures)
+
+        def on_top3(ev: dict) -> None:
+            if ev["event"] in ("top3", "provisional"):  # "final" is sent below, with the #1 in full
+                send({"event": ev["event"], "v": 1, "route_id": route_id, "elapsed_s": ev["elapsed_s"],
+                      "provisional": ev["provisional"],
+                      "routes": [entry(r, c) for r, c in enumerate(ev["candidates"], 1)]})
+
+        try:
+            result = self.generate_fn(
+                start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
+                shape=rc.shape, prefs=prefs, avoid=zones, closures=closures,
+                context_fn=ml.context_for(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment()),
+                anchor_fn=self.anchor_fn, feature_anchor_fn=self.feature_anchor_fn,
+                area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3)
+        except RoutingError as exc:
+            raise EngineUnavailable(f"GraphHopper: {exc}") from exc
+        except psycopg.Error as exc:
+            raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        chosen = result.candidates
+        route = (ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, miles, rc, result.best_of,
+                               self.stretch_fn) if chosen else None)
+        return {"event": "final", "v": 1, "route_id": route_id,
+                "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
+                "routes": [entry(r, c) for r, c in enumerate(chosen, 1)], "route": route,
+                "pool_size": result.best_of, "notes": distance_notes(rc, chosen, result.within_tolerance),
+                "timing": result.timing}

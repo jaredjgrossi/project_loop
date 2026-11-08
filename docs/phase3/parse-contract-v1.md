@@ -103,7 +103,15 @@ The app saves it to the planned list. Opening it on the day calls `POST /v1/runs
 
 ## Events: `done` and `error`
 - `done`: `{"event": "done"}`.
-- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request", "text": "..."}`. The text comes from templates.
+- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request" | "expired", "text": "..."}`. The text comes from templates.
+- `expired`: the answer's `parse_id` is unknown or older than 15 minutes (pending questions are kept in memory for 15 minutes, and a server restart forgets them). The app resends the original request (Jared, 2026-11-08).
+
+## Built in step 5 (decision 029)
+- **`done` ends every clean stream**, including one that ends with a question, so the app can tell a finished stream from a dropped connection. `error` ends a stream that failed.
+- **`final`** also carries `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
+- **Can't-do lines from the engine:** `gap: "later"` for what a later step builds (end, via, along-avoids and past routes build nothing yet, and the stream ends after `parsed`; hills and a planned second run build the first run anyway), and `gap: "avoid_unknown"` for an avoid that isn't on the no-go list.
+- **Answers:** a tapped option settles what it names. Typed text is read by code (a distance, a place name or address, a borough, a recent route's name); text code can't read brings the same question back with a new `parse_id`. No Claude call either way.
+- **Auth:** `Authorization: Bearer <Loop token>` on everything but `GET /v1/health`. A missing or wrong token is HTTP 401; every other problem is an `error` event.
 
 ## Other endpoints
 - `GET /v1/routes/{id}`: a stored result, the same payload as `final`.

@@ -152,15 +152,27 @@ TEMPLATES: dict[str, str] = {
     "cant.G8": "Can't build routes around workout segments yet",
     "cant.G9": "Can't plan around street lighting or safety yet",
     "cant.bike_lanes": "Can't avoid bike lanes yet",
+    # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
+    "cant.later.end_place": "Can't end somewhere else yet, so no routes were built",
+    "cant.later.via_places": "Can't route through named places yet, so no routes were built",
+    "cant.later.avoid_along": "Can't avoid running along a street yet, so no routes were built",
+    "cant.later.reuse_route_id": "Can't rebuild a past route yet, so no routes were built",
+    "cant.later.hills": "Can't score hills yet; these routes ignore them",
+    "cant.later.planned": "Can't plan the second run yet; only the first was built",
+    "cant.avoid_unknown": "Can't avoid {name} yet: it isn't on the list of places Loop can avoid",
 
     # Notes: caveats that aren't refusals
     "note.crowds_estimated": "Crowds near schools and ferry landings are estimated for {time}; other stretches aren't scored",
     "note.fountains_seasonal": "Fountains may be off for the season",
+    "note.distance_off.short": "No route came within {tolerance}% of {miles} mi. The closest is {actual} mi, {pct}% short.",
+    "note.distance_off.long": "No route came within {tolerance}% of {miles} mi. The closest is {actual} mi, {pct}% long.",
+    "note.no_route": "Couldn't build a route from this start. Try another start or distance.",
 
     # Errors
     "error.parse_failed": "Couldn't read that request. Try saying it another way.",
     "error.engine_unavailable": "Can't build routes right now. Try again in a minute.",
     "error.bad_request": "Something was wrong with that request.",
+    "error.expired": "That question timed out, so the request is being sent again.",
 }
 
 

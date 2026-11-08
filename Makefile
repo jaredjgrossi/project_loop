@@ -1,5 +1,5 @@
 # Shortcuts. Run `make help` to list them.
-.PHONY: help setup up down data corridors closures crowds pulses places test eval-parse
+.PHONY: help setup up down data corridors closures crowds pulses places test eval-parse serve
 
 help:
 	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
@@ -13,6 +13,7 @@ help:
 	@echo "make places  build the places table for name lookups (needs make setup; decision 026)"
 	@echo "make test    run the unit tests"
 	@echo "make eval-parse run the parse evals and print a pass/fail table (PARSER=module:function, default the stub)"
+	@echo "make serve   run the API on HOST:PORT (default 127.0.0.1:8000; needs make up and LOOP_TOKEN in .env)"
 
 setup:
 	uv sync
@@ -58,3 +59,8 @@ EFFORT ?=
 THINKING ?=
 eval-parse:
 	uv run python -m evals.parse.run --parser $(PARSER) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(THINKING),--thinking $(THINKING))
+
+HOST ?= 127.0.0.1
+PORT ?= 8000
+serve:
+	uv run uvicorn api.server:app --host $(HOST) --port $(PORT)

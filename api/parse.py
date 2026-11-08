@@ -27,7 +27,7 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
-from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints
+from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints, field_sources
 from api.copy import render
 from api.places import is_streetlike, normalize
 
@@ -56,6 +56,7 @@ ASK_LONG_RUN = (6, 8, 10)  # R6: "long run" with no distance
 ASK_WORKOUT = (6, 7, 8)  # R11: total distance for a workout
 ASK_LONGER = (1, 2)  # H02: "but longer"
 MAX_OPTIONS = 4
+ADDRESS_LIKE = re.compile(r"\d+[A-Za-z]?\s+\S")  # "11 Madison Ave": a house number, then a street
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 CANT = {  # what Claude flags -> (gap id, copy key)
@@ -319,6 +320,8 @@ class _Build:
     texts: list = field(default_factory=list)
     start_borough: str | None = None
     start_point: tuple[float, float] | None = None
+    answers: dict = field(default_factory=dict)  # what earlier answers settled (see `answer_overrides`)
+    later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
 
     def say(self, key: str, **values) -> str:
         text = render(key, **values)
@@ -332,11 +335,16 @@ class _Build:
             self.constraints[name] = value
         self.sources[prefix + name] = source
 
-    def ask(self, about: str, frm: str, key: str, options: list[tuple[str, dict]] = (), allow_text: bool = True,
-            **values):
+    def ask(self, about: str, frm: str, key: str, options: list[tuple] = (), allow_text: bool = True,
+            typed: dict | None = None, **values):
+        """Raise the one question. Each option is (copy key, values, what choosing it settles); `typed` says how a
+        typed answer is read. Both stay on the server, in `_answer`, which `build` moves into the trace."""
+        options = list(options)[:MAX_OPTIONS]
         q = {"id": "q_1", "about": about, "from": frm, "text": self.say(key, **values),
-             "options": [{"id": chr(97 + i), "text": self.say(k, **v)} for i, (k, v) in enumerate(options[:MAX_OPTIONS])],
-             "allow_text": allow_text}
+             "options": [{"id": chr(97 + i), "text": self.say(o[0], **o[1])} for i, o in enumerate(options)],
+             "allow_text": allow_text,
+             "_answer": {"options": {chr(97 + i): (o[2] if len(o) > 2 else {}) for i, o in enumerate(options)},
+                         "typed": typed if allow_text else None}}
         raise _Ask(q)
 
 
@@ -425,58 +433,75 @@ def _saved_ref(b: _Build, saved_id: str) -> dict:
     return PlaceRef(**ref).model_dump(exclude_none=True)
 
 
-def _options(matches) -> list[tuple[str, dict]]:
+def _options(matches, target: str) -> list[tuple[str, dict, dict]]:
     with_at = [m for m in matches if getattr(m, "at", None)]
     if len(with_at) == len(matches) == 2:  # "86th St" at Central Park: by side, then the crossing street
         east, west = sorted(matches, key=lambda m: -m.lon)
-        return [("option.side", {"side": "East", "at": east.at}), ("option.side", {"side": "West", "at": west.at})]
-    return [("option.place", {"name": m.matched, "borough": m.borough}) for m in matches]
+        return [("option.side", {"side": "East", "at": east.at}, {f"place:{target}": east}),
+                ("option.side", {"side": "West", "at": west.at}, {f"place:{target}": west})]
+    return [("option.place", {"name": m.matched, "borough": m.borough}, {f"place:{target}": m}) for m in matches]
 
 
-def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, near_area=None) -> dict | None:
-    """A place ref for a start, end or via spec, or a question (R12, R13, R14, R19)."""
+def _typed_place(target: str) -> dict:
+    return {"kind": "place", "target": target}
+
+
+def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, near_area=None,
+                   target: str | None = None) -> dict | None:
+    """A place ref for a start, end or via spec, or a question (R12, R13, R14, R19). `target` names the spec for
+    answers ("start", "end", "planned.start"); an answer settles it before any rule runs."""
+    target = target or role
+    if f"place:{target}" in b.answers:  # an option was tapped
+        return _ref(b.answers[f"place:{target}"])
+    if f"text:{target}" in b.answers:  # a typed answer is a place name, or an address when it starts with a number
+        typed = b.answers[f"text:{target}"]
+        spec = {"kind": "address" if ADDRESS_LIKE.match(typed) else "place", "name": typed}
     kind, name = spec["kind"], (spec.get("name") or "").strip()
     about = role if role in ("start", "end") else "via"
+    typed = _typed_place(target)
     if spec.get("outside_nyc"):
-        b.ask(about, "places", "question.place.outside_nyc_end" if role == "end" else "question.place.outside_nyc")
+        b.ask(about, "places", "question.place.outside_nyc_end" if role == "end" else "question.place.outside_nyc",
+              typed=typed)
     if kind == "subjective":
-        b.ask(about, "parser", f"question.{'end' if role == 'end' else 'start'}.subjective")
+        b.ask(about, "parser", f"question.{'end' if role == 'end' else 'start'}.subjective", typed=typed)
     if kind == "saved":
         sid = spec.get("saved_id") or name or "home"
         if sid in b.ctx.saved:
             return _saved_ref(b, sid)
-        b.ask(about, "parser", "question.place.saved_unknown", word=sid)
+        b.ask(about, "parser", "question.place.saved_unknown", typed=typed, word=sid)
     if kind == "the_park":
         point = ref_point or b.ctx.location
         major = b.places.major_parks_near(*point) if point else []
         if major:
             return _ref(major[0])
-        options = [("option.place", {"name": p.name, "borough": p.borough})
+        options = [("option.place", {"name": p.name, "borough": p.borough}, {f"place:{target}": p})
                    for p in (b.places.parks_near(*point) if point else [])]
-        b.ask(about, "places", "question.place.which_park", options, allow_text=True)
+        b.ask(about, "places", "question.place.which_park", options, allow_text=True, typed=typed)
     if kind == "address":
         b.lookups.append({"name": name, "role": role, "via": "geocoder"})
-        hit, boroughs = b.places.geocode(name, None)
+        chosen_borough = b.answers.get(f"borough:{target}")
+        hit, boroughs = b.places.geocode(name, chosen_borough)
         if hit is None and boroughs:
             if ref_borough in boroughs:  # R19 step 1; addresses carry no distance, so step 2 can't apply
                 hit, _ = b.places.geocode(name, ref_borough)
             else:
-                b.ask(about, "places", "question.place.which", [("option.borough", {"borough": x}) for x in boroughs],
-                      name=name)
+                b.ask(about, "places", "question.place.which",
+                      [("option.borough", {"borough": x}, {f"borough:{target}": x}) for x in boroughs],
+                      typed={"kind": "borough", "target": target, "boroughs": list(boroughs)}, name=name)
         if hit is None:
-            b.ask(about, "places", "question.place.not_found", name=name)
+            b.ask(about, "places", "question.place.not_found", typed=typed, name=name)
         return PlaceRef(kind="address", name=name, borough=hit.borough, lat=hit.lat, lon=hit.lon,
                         source="NYC GeoSearch", trust="listed").model_dump(exclude_none=True)
     # A named place (R12)
     b.lookups.append({"name": name, "role": role})
     found = b.places.lookup(name, near=near_area or ref_point)
-    if not found and re.match(r"\d+[A-Za-z]?\s+\S", name):  # "11 Madison Ave" recorded as a place: it's an address
-        return _resolve_place(b, spec | {"kind": "address"}, role, ref_point, ref_borough)
+    if not found and ADDRESS_LIKE.match(name):  # "11 Madison Ave" recorded as a place: it's an address
+        return _resolve_place(b, spec | {"kind": "address"}, role, ref_point, ref_borough, target=target)
     if not found:
-        b.ask(about, "places", "question.place.not_found", name=name)
+        b.ask(about, "places", "question.place.not_found", typed=typed, name=name)
     chosen = found[0] if len(found) == 1 else b.places.pick(found, ref_borough)
     if chosen is None:
-        b.ask(about, "places", "question.place.which", _options(found), name=name)
+        b.ask(about, "places", "question.place.which", _options(found, target), typed=typed, name=name)
     return _ref(chosen)
 
 
@@ -529,7 +554,9 @@ def _start(b: _Build, ext: dict, vias: list) -> None:
     later = day is not None and date.fromisoformat(day) > b.ctx.now.date()
     loc = b.ctx.location
     loc_borough = b.places.borough_at(*loc) if loc else None
-    if spec is None or spec["kind"] == "here":
+    if "place:start" in b.answers or "text:start" in b.answers:  # the runner answered where to start
+        spec = {"kind": "place", "name": ""}
+    elif spec is None or spec["kind"] == "here":
         said = "said" if spec else "default"
         if not later and loc and loc_borough:
             b.set("use_my_location", True, said)
@@ -541,14 +568,15 @@ def _start(b: _Build, ext: dict, vias: list) -> None:
             b.start_point = (ref["lat"], ref["lon"]) if "lat" in ref else None
             b.start_borough = ref.get("borough")
             return
-        b.ask("start", "parser", "question.start.where")
+        b.ask("start", "parser", "question.start.where", typed=_typed_place("start"))
     if spec["kind"] == "neighborhood":
         b.lookups.append({"name": spec.get("name") or "", "role": "neighborhood"})
         if loc and b.places.in_neighborhood(spec.get("name") or "", *loc):
             b.set("use_my_location", True, "said")
             b.start_point, b.start_borough = loc, loc_borough
             return
-        b.ask("start", "parser", "question.place.neighborhood", name=spec.get("name") or "")
+        b.ask("start", "parser", "question.place.neighborhood", typed=_typed_place("start"),
+              name=spec.get("name") or "")
     ref_borough = loc_borough
     if later and "home" in b.ctx.saved:
         ref_borough = _saved_ref(b, "home").get("borough")
@@ -568,22 +596,29 @@ def _vias(b: _Build, ext: dict) -> list:
     out = []
     point = b.ctx.location
     borough = b.places.borough_at(*point) if point else None
-    for v in ext.get("via") or []:
+    for i, v in enumerate(ext.get("via") or []):
+        target = f"via.{i + 1}"
+        typed = _typed_place(target)
+        if f"place:{target}" in b.answers:  # an option was tapped
+            out.append((v, b.answers[f"place:{target}"]))
+            continue
+        if f"text:{target}" in b.answers:
+            v = {**v, "kind": "place", "name": b.answers[f"text:{target}"]}
         if v["kind"] == "the_park":
             major = b.places.major_parks_near(*point) if point else []
             if not major:
-                opts = [("option.place", {"name": p.name, "borough": p.borough})
+                opts = [("option.place", {"name": p.name, "borough": p.borough}, {f"place:{target}": p})
                         for p in (b.places.parks_near(*point) if point else [])]
-                b.ask("via", "places", "question.place.which_park", opts)
+                b.ask("via", "places", "question.place.which_park", opts, typed=typed)
             out.append((v, major[0]))
             continue
         b.lookups.append({"name": v["name"], "role": "via"})
         found = b.places.lookup(v["name"], near=point)
         if not found:
-            b.ask("via", "places", "question.place.not_found", name=v["name"])
+            b.ask("via", "places", "question.place.not_found", typed=typed, name=v["name"])
         chosen = found[0] if len(found) == 1 else b.places.pick(found, borough)
         if chosen is None:
-            b.ask("via", "places", "question.place.which", _options(found), name=v["name"])
+            b.ask("via", "places", "question.place.which", _options(found, target), typed=typed, name=v["name"])
         if v.get("whole_way") and chosen.kind == "street":
             continue  # "2nd Ave the whole way": a street isn't a via target; the can't-do line says so (G1)
         out.append((v, chosen))
@@ -592,17 +627,20 @@ def _vias(b: _Build, ext: dict) -> list:
 
 def _distance(b: _Build, ext: dict) -> None:
     """R2, R6, R7, R10, R11, R17: from the request, the usual distance, the route's places, or a question."""
-    got = _miles(ext.get("distance"))
+    got = (b.answers["distance"], None) if "distance" in b.answers else _miles(ext.get("distance"))
     if got:
         miles, tol = got
         if miles > MAX_MI:
             guess = round(miles / 10, 2)
             if MIN_MI <= guess <= MAX_MI:
-                b.ask("distance", "parser", "question.distance.typo", [("option.miles", {"miles": _fmt(guess)})],
+                b.ask("distance", "parser", "question.distance.typo",
+                      [("option.miles", {"miles": _fmt(guess)}, {"distance": guess})], typed=MILES_TYPED,
                       miles=_fmt(guess))
-            b.ask("distance", "parser", "question.distance.too_long", [("option.miles", {"miles": _fmt(MAX_MI)})])
+            b.ask("distance", "parser", "question.distance.too_long",
+                  [("option.miles", {"miles": _fmt(MAX_MI)}, {"distance": MAX_MI})], typed=MILES_TYPED)
         if miles < MIN_MI:
-            b.ask("distance", "parser", "question.distance.too_short", [("option.miles", {"miles": _fmt(MIN_MI)})])
+            b.ask("distance", "parser", "question.distance.too_short",
+                  [("option.miles", {"miles": _fmt(MIN_MI)}, {"distance": MIN_MI})], typed=MILES_TYPED)
         b.set("distance_mi", miles, "said")
         if tol is not None:
             b.set("tolerance_pct", min(tol, 25.0), "said")
@@ -610,17 +648,22 @@ def _distance(b: _Build, ext: dict) -> None:
     if "end_place" in b.constraints or "reuse_route_id" in b.constraints:
         return  # the end or the reused route sets the length (R10, R17)
     if ext.get("minutes"):
-        b.ask("distance", "parser", "question.distance.minutes", minutes=f"{ext['minutes']:g}")
+        b.ask("distance", "parser", "question.distance.minutes", typed=MILES_TYPED, minutes=f"{ext['minutes']:g}")
     if ext.get("workout"):
-        b.ask("distance", "parser", "question.distance.workout",
-              [("option.miles", {"miles": _fmt(m)}) for m in ASK_WORKOUT])
+        b.ask("distance", "parser", "question.distance.workout", _miles_options(ASK_WORKOUT), typed=MILES_TYPED)
     if ext.get("long_run"):
-        b.ask("distance", "parser", "question.distance.long_run",
-              [("option.miles", {"miles": _fmt(m)}) for m in ASK_LONG_RUN])
+        b.ask("distance", "parser", "question.distance.long_run", _miles_options(ASK_LONG_RUN), typed=MILES_TYPED)
     if b.ctx.usual_mi:
         b.set("distance_mi", b.ctx.usual_mi, "usual")
         return
-    b.ask("distance", "parser", "question.distance.how_far", [("option.miles", {"miles": _fmt(m)}) for m in ASK_HOW_FAR])
+    b.ask("distance", "parser", "question.distance.how_far", _miles_options(ASK_HOW_FAR), typed=MILES_TYPED)
+
+
+MILES_TYPED = {"kind": "miles"}
+
+
+def _miles_options(choices) -> list[tuple]:
+    return [("option.miles", {"miles": _fmt(m)}, {"distance": float(m)}) for m in choices]
 
 
 def _reuse(b: _Build, ext: dict) -> None:
@@ -631,9 +674,13 @@ def _reuse(b: _Build, ext: dict) -> None:
     recent = sorted(b.ctx.recent, key=lambda x: x["date"], reverse=True)
     today = b.ctx.now.date()
     before = [x for x in recent if date.fromisoformat(x["date"]) < today]
-    options = [("option.route", {"weekday": _weekday_of(x["date"]), "name": x["name"]}) for x in recent]
+    options = [("option.route", {"weekday": _weekday_of(x["date"]), "name": x["name"]}, {"reuse": x["id"]})
+               for x in recent]
+    typed = {"kind": "reuse"}
     source = "said"
-    if r["kind"] == "usual":
+    if "reuse" in b.answers:  # the runner picked the route
+        hits = [x for x in recent if x["id"] == b.answers["reuse"]]
+    elif r["kind"] == "usual":
         if not recent:
             b.set("familiar", "favor", "usual")
             return
@@ -652,16 +699,21 @@ def _reuse(b: _Build, ext: dict) -> None:
     else:
         hits = before[:1]
     if not hits:
-        b.ask("reuse", "parser", "question.reuse.none", options)
+        b.ask("reuse", "parser", "question.reuse.none", options, typed=typed)
     if len(hits) > 1:
         b.ask("reuse", "parser", "question.reuse.which",
-              [("option.route", {"weekday": _weekday_of(x["date"]), "name": x["name"]}) for x in hits])
+              [("option.route", {"weekday": _weekday_of(x["date"]), "name": x["name"]}, {"reuse": x["id"]})
+               for x in hits], typed=typed)
     b.set("reuse_route_id", hits[0]["id"], source)
     if r.get("reverse"):
         b.set("reverse", True, "said")
     if r.get("longer"):
+        if "plus_mi" in b.answers:  # step 10 builds it; until then the reused route is a can't-do line
+            b.later["plus_mi"] = b.answers["plus_mi"]
+            return
         b.ask("distance", "parser", "question.distance.longer",
-              [("option.plus_miles", {"miles": _fmt(m)}) for m in ASK_LONGER])
+              [("option.plus_miles", {"miles": _fmt(m)}, {"plus_mi": float(m)}) for m in ASK_LONGER],
+              typed={"kind": "plus_miles"})
 
 
 def _avoid_and_stops(b: _Build, ext: dict) -> None:
@@ -688,13 +740,15 @@ def _planned(b: _Build, ext: dict) -> None:
         b.set("distance_mi", got[0], "said", prefix="planned.")
     _time_and_day(b, s.get("time"), s.get("day"), prefix="planned.")
     spec = s.get("start")
-    if spec and spec["kind"] != "here":
-        ref = _resolve_place(b, spec, "start", b.ctx.location, b.start_borough)
+    answered = "place:planned.start" in b.answers or "text:planned.start" in b.answers
+    if answered or (spec and spec["kind"] != "here"):
+        ref = _resolve_place(b, spec or {"kind": "place", "name": ""}, "start", b.ctx.location, b.start_borough,
+                             target="planned.start")
         b.set("start_place", ref, "said", prefix="planned.")
     elif "home" in b.ctx.saved:
         b.set("start_place", _saved_ref(b, "home"), "default", prefix="planned.")
     else:
-        b.ask("start", "parser", "question.start.where")
+        b.ask("start", "parser", "question.start.where", typed=_typed_place("planned.start"))
 
 
 def _notes(b: _Build) -> None:
@@ -782,9 +836,10 @@ def _chip_place(p: dict) -> dict | None:
             "trust": p.get("trust", "listed"), "from": p.get("source")}
 
 
-def build(ext: dict, ctx: Context, places: Places) -> dict:
-    """The deterministic half: extraction + context -> the parsed event and its trace."""
-    b = _Build(ctx, places)
+def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) -> dict:
+    """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
+    trace. The question's answer map goes into the trace, never to the phone."""
+    b = _Build(ctx, places, answers=dict(answers or {}))
     _cant(b, ext)
     _prefs(b, ext)
     asked: list[dict] = []
@@ -817,6 +872,7 @@ def build(ext: dict, ctx: Context, places: Places) -> dict:
     step(lambda: _avoid_and_stops(b, ext))
     step(lambda: _planned(b, ext))
     question = asked[0] if asked else None
+    answer_map = question.pop("_answer") if question else None
     if asked:  # only the asked question's strings reach the runner
         shown = {question["text"], *(o["text"] for o in question["options"])}
         dropped = {q["text"] for q in asked[1:]} | {o["text"] for q in asked[1:] for o in q["options"]}
@@ -833,8 +889,67 @@ def build(ext: dict, ctx: Context, places: Places) -> dict:
     chips = _chips(b)
     parsed = {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": chips,
               "question": question, "cant": b.cant, "notes": b.notes, "constraints": b.constraints}
-    trace = {"sources": dict(b.sources), "lookups": b.lookups, "routing_calls": 0, "texts": b.texts}
+    trace = {"sources": dict(b.sources), "lookups": b.lookups, "routing_calls": 0, "texts": b.texts,
+             "answer_map": answer_map, "answers": b.answers, "later": b.later}
     return {"parsed": parsed, "trace": trace}
+
+
+# ---- answers and chip edits (step 5): no Claude call -------------------------------------------------------------
+
+BOROUGHS = ("Manhattan", "Brooklyn", "Queens", "Bronx", "Staten Island")
+TYPED_MILES = re.compile(r"^\D{0,12}?(\d+(?:\.\d+)?)\s*(mi|miles?|k|km|kilometers?|kilometres?)?\.?\s*$", re.I)
+
+
+def read_miles(text: str) -> float | None:
+    """A typed distance: "5", "5 mi", "about 6 miles", "8k". The runner's own digits, read by code (rule 1)."""
+    m = TYPED_MILES.match(text.strip())
+    if not m:
+        return None
+    value = float(m.group(1))
+    return round(value * KM_TO_MI, 2) if (m.group(2) or "").lower().startswith("k") else value
+
+
+def answer_overrides(answer_map: dict | None, option_id: str | None, text: str | None, ctx: Context) -> dict | None:
+    """What an answer settles, from the question's answer map. None means the option id isn't one of the question's
+    (a bad request). An empty dict means a typed answer code can't read, so the same question comes back (rule 4)."""
+    answer_map = answer_map or {"options": {}, "typed": None}
+    if option_id is not None:
+        return answer_map["options"].get(option_id)
+    typed, t = answer_map.get("typed"), (text or "").strip()
+    if not typed or not t:
+        return {}
+    kind = typed["kind"]
+    if kind in ("miles", "plus_miles"):
+        miles = read_miles(t)
+        return {} if miles is None else {"distance" if kind == "miles" else "plus_mi": miles}
+    if kind == "place":
+        return {f"text:{typed['target']}": t}
+    if kind == "borough":
+        hit = [x for x in typed.get("boroughs") or BOROUGHS if normalize(x).startswith(normalize(t))]
+        return {f"borough:{typed['target']}": hit[0]} if len(hit) == 1 else {}
+    if kind == "reuse":
+        words = [w for w in re.findall(r"\w+", t.casefold()) if w not in ("the", "one", "route", "run")]
+        hits = [r for r in ctx.recent if words and all(w in r["name"].casefold() for w in words)]
+        return {"reuse": hits[0]["id"]} if len(hits) == 1 else {}
+    return {}
+
+
+def resume(ext: dict, ctx: Context, places: Places, answers: dict) -> dict:
+    """The merged request after an answer: the same extraction and context, with everything answered so far."""
+    return build(ext, ctx, places, answers=answers)
+
+
+def parsed_for_constraints(constraints: dict, ctx: Context, places: Places) -> dict:
+    """A chip edit sends RunConstraints back (contract: it skips Claude). The parsed event for them: chips and notes
+    from the templates, with each field's source as the constraints carry it. Raises ValidationError."""
+    rc = RunConstraints.model_validate(constraints)
+    b = _Build(ctx, places)
+    b.constraints = rc.model_dump(mode="json", exclude_defaults=True)
+    b.constraints["shape"] = rc.shape
+    b.sources = field_sources(rc)
+    _notes(b)
+    return {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": _chips(b), "question": None,
+            "cant": [], "notes": b.notes, "constraints": b.constraints}
 
 
 # ---- the Claude call --------------------------------------------------------------------------------------------

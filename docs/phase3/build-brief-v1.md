@@ -62,7 +62,7 @@ Use prompt caching for the instructions. The API key comes from `.env`. Run the 
 
 **4. API and streaming.** Add FastAPI. Build `POST /v1/runs` as server-sent events, following the contract:
 - the `text`, `answer` and `constraints` paths
-- pending parses kept in memory with a short time limit
+- pending parses kept in memory for 15 minutes; after that the app resends the original request (Jared, 2026-11-08)
 - the engine's `on_top3` callbacks bridged from worker threads into the event stream
 - `GET /v1/routes/{id}` and `GET /v1/health`
 - the Loop token check
@@ -70,6 +70,8 @@ Use prompt caching for the instructions. The API key comes from `.env`. Run the 
 Add a small command-line client that prints the events, for testing without the phone. Done: a typed request streams `parsed`, then `top3`, `provisional` and `final` from the command line, with the first route under about 3 s after send.
 
 **5. Reach from the phone (Jared and the iPhone session).** Write Jared exact steps to install Tailscale on the Mac and the iPhone and run the server. Write `docs/phase3/ios-wiring.md` for the iPhone build session: the endpoint, the event shapes, how to read the stream on iOS, and a temporary debug text field until the UI chat designs the request screen. Code doesn't edit `ios/` in this session. **Milestone:** a typed request on Jared's phone draws a streamed route.
+
+**5b. A shorter tool input (added by Jared, 2026-11-08).** Right after the phone milestone: let the model leave unsaid fields out of `record_request`, to cut output tokens and latency. Three eval runs; keep it only if accuracy holds (44 or more cases passing all three runs).
 
 **6. Minimal storage.** A `saved_routes` table in Postgres: `route_id`, request, constraints and the final payload. The server stores every build. The phone's planned, saved and past lists stay on the phone and go out as `recent_routes` (that list is the iPhone session's job). Done: `GET /v1/routes/{id}` returns a stored route after a server restart.
 
@@ -98,5 +100,5 @@ The request-screen design (the UI chat), accounts and sync, cloud hosting, the w
 - Same address or crossing in several boroughs: always ask (decision 005), or use the one near the runner? Today it's ask.
 - The major-park list and radius for "the park".
 - How fuzzy place matching should be before it asks.
-- How long a pending question stays open.
+- How long a pending question stays open. Decided: 15 minutes, then the app resends the original request (Jared, 2026-11-08).
 - If Haiku 5.5 fails some cases, whether a larger model is worth its cost.
