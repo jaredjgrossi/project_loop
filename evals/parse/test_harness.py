@@ -21,6 +21,9 @@ BY_ID = {c["id"]: c for c in CASES}
 # ---- a parser that returns what each case expects ---------------------------------------------------------------
 
 def _actual(name, value):
+    if name == "avoid_places":
+        return [{"name": f"{v['street']}, E 26th–E 30th St", "how": v["how"]} if "street" in v else dict(v)
+                for v in value]
     if name in ("start_place", "end_place"):
         kind = next(k for k in ("place", "address", "saved") if k in value)
         ref = {"kind": kind, "id": value[kind]} if kind == "saved" else {"kind": kind, "name": value[kind]}
@@ -183,6 +186,10 @@ def test_unlisted_said_field_fails_but_code_default_passes():
     out["parsed"]["constraints"]["lights"] = "waits"
     out["trace"]["sources"]["lights"] = "said"
     assert any("unlisted field set: lights" in r for r in reasons("R08", out))
+    out = oracle(BY_ID["P28"])
+    out["parsed"]["constraints"]["distance_mi"] = 3.1
+    out["trace"]["sources"]["distance_mi"] = "usual"  # the profile's usual distance is code-filled (R2)
+    assert reasons("P28", out) == []
 
 
 def test_missing_cant_gap_and_note_key_fail():
@@ -281,3 +288,13 @@ def test_parser_error_and_missing_trace_fail():
     out = oracle(BY_ID["P01"])
     del out["trace"]
     assert any("no trace" in r for r in reasons("P01", out))
+
+
+def test_a_stretch_inside_the_range_passes_and_outside_or_whole_street_fails():
+    def with_avoid(name):
+        out = oracle(BY_ID["P23"])
+        out["parsed"]["constraints"]["avoid_places"] = [{"name": name, "how": "along"}]
+        return reasons("P23", out)
+    assert with_avoid("1st Ave, E 23rd St–E 34th St") == [] and with_avoid("First Avenue, E 25th–E 34th St") == []
+    assert with_avoid("1st Ave, E 20th–E 34th St") and with_avoid("2nd Ave, E 26th–E 34th St")
+    assert with_avoid("1st Ave")

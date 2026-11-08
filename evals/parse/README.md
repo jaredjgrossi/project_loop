@@ -27,3 +27,9 @@ the place lookups made, the routing calls made, and the template key behind ever
 ## Keys chosen here (Code owns the keys; the wording lives in `api/copy.py`)
 - Can't-do lines use the gap ids G1–G11, plus `bike_lanes` for P25 (the bike-lane rule has not landed).
 - Notes: `crowds_estimated` (R04, P24) and `fountains_seasonal` (P35).
+
+## Grading choices (2026-11-06)
+- Rule 3 ("no unlisted field beyond code-filled defaults") counts the runner's usual values (source `usual`) as
+  code-filled, alongside `default` and `preset` (R2). An unlisted day equal to the context's today is allowed too.
+- Rule 3 applies to PARSE outcomes. An ASK keeps what the runner said so the answer can continue the request; its
+  keep list is the minimum that must be kept. Must-nots still apply to every case.

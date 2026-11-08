@@ -53,5 +53,8 @@ test:
 	uv run pytest
 
 PARSER ?= evals.parse.stub:parse
+MODEL ?=
+EFFORT ?=
+THINKING ?=
 eval-parse:
-	uv run python -m evals.parse.run --parser $(PARSER)
+	uv run python -m evals.parse.run --parser $(PARSER) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(THINKING),--thinking $(THINKING))

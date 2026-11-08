@@ -171,8 +171,8 @@ PARSE · `avoid_places=["42nd St" (along)] (said)` · `crowds=avoid (said)` · `
 Must not: block crossing 42nd St (R15).
 
 **P23** · C1 · `6 miles, avoid 1st ave by the hospitals`
-PARSE · `distance_mi=6 (said)` · `avoid_places=["1st Ave, E 26th–E 34th St" (along)] (said)`
-Must not: avoid all of 1st Ave.
+PARSE · `distance_mi=6 (said)` · `avoid_places=[1st Ave (along), a stretch inside E 23rd–E 34th St] (said)`
+Must not: avoid all of 1st Ave. Loosened 2026-11-08: where the hospital stretch starts is a judgment (the VA is at E 23rd–25th St, Bellevue from E 26th).
 
 **P25** · C1 · `5mi no bike lanes`
 PARSE + CANT · `distance_mi=5 (said)` · `cant: avoiding bike lanes`

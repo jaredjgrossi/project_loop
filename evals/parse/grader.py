@@ -68,11 +68,13 @@ class Grade:
     passed: bool
     outcome: str | None  # what the parser produced: PARSE, PARSE+CANT, ASK, or None on error
     reasons: list[str] = field(default_factory=list)
+    stats: dict | None = None  # the parser's Claude call: model, tokens, cost, latency
 
 
 def norm(s: str) -> str:
-    s = s.casefold().replace("–", "-").replace("—", "-").replace(".", "")
-    return re.sub(r"\s+", " ", s).strip()
+    """Names compare as the places table compares them: "First Avenue" is "1st Ave" (api.places.normalize)."""
+    from api.places import normalize
+    return normalize(s.replace("–", "-").replace("—", "-"))
 
 
 def words(s: str) -> list[str]:
@@ -109,10 +111,25 @@ def _same_place(want: dict, got) -> bool:
     return got.get("kind") == "saved" and got.get("id") == want["saved"]
 
 
+def _cross_numbers(text: str) -> list[int]:
+    return [int(n) for n in re.findall(r"(\d+)(?:st|nd|rd|th)\b", text)]
+
+
 def _same_avoid(want: dict, got) -> bool:
-    if not isinstance(got, dict) or norm(str(got.get("name", ""))) != norm(want["name"]):
+    """want: {"name", "how"}, or a stretch: {"street", "within": [from, to], "how"}, which matches any stretch of that
+    street whose cross streets both lie inside `within` ("1st Ave, E 25th–E 34th St" inside E 23rd–E 34th)."""
+    if not isinstance(got, dict):
         return False
-    return "how" not in want or got.get("how") == want["how"]
+    if "how" in want and got.get("how") != want["how"]:
+        return False
+    if "street" not in want:
+        return norm(str(got.get("name", ""))) == norm(want["name"])
+    street, _, stretch = str(got.get("name", "")).partition(",")
+    if norm(street) != norm(want["street"]):
+        return False
+    lo, hi = (_cross_numbers(w)[0] for w in want["within"])
+    got_nums = _cross_numbers(stretch)
+    return len(got_nums) == 2 and all(lo <= n <= hi for n in got_nums) and got_nums[0] != got_nums[1]
 
 
 def _same_amenity(want: dict, got) -> bool:
@@ -196,15 +213,22 @@ def _check_fields(listed: dict, constraints: dict, sources: dict, chips: list, p
     return out
 
 
+CODE_FILLED = ("default", "preset", "usual")  # rule 3's "code-filled defaults": from code, the presets or the profile
+CONTEXT_TODAY = "2026-11-03"  # every context's day (contexts.json); a said "today" equals what code would fill in
+
+
 def _check_unlisted(listed: dict, constraints: dict, sources: dict) -> list[str]:
-    """Rule 3: nothing beyond the listed fields is set, except defaults code filled in (source default or preset)."""
+    """Rule 3: nothing beyond the listed fields is set, except values code filled in: defaults, presets and the
+    runner's usual values (R2). An unlisted day equal to today is what code fills in anyway."""
     out = []
     for name, value in constraints.items():
         if name == "sources":  # where values came from: graded through the trace and chips, not as a field
             continue
         if name not in SCHEMA_DEFAULTS:
             out.append(f"unknown field {name}")
-        elif name not in listed and not is_unset(name, value) and sources.get(name) not in ("default", "preset"):
+        elif name == "start_date" and str(value) == CONTEXT_TODAY:
+            continue
+        elif name not in listed and not is_unset(name, value) and sources.get(name) not in CODE_FILLED:
             out.append(f"unlisted field set: {name}={_show(value)} (source {sources.get(name)})")
     return out
 
@@ -319,7 +343,8 @@ def _grade_expectation(exp: dict, parsed: dict, trace: dict, template_keys: set 
     reasons = [] if got == exp["outcome"] else [f"outcome: expected {exp['outcome']}, got {got}"]
     listed = exp.get("fields") or exp.get("keep") or {}
     reasons += _check_fields(listed, constraints, sources, chips)
-    reasons += _check_unlisted(listed, constraints, sources)
+    if exp["outcome"] != "ASK":  # an ASK keeps what was said for the answer to continue; its keep list is a minimum
+        reasons += _check_unlisted(listed, constraints, sources)
     reasons += _check_lines(exp.get("cant", []), exp.get("notes", []), parsed)
     reasons += _check_question(exp.get("question") if exp["outcome"] == "ASK" else None, parsed.get("question"),
                                int(trace.get("routing_calls") or 0))

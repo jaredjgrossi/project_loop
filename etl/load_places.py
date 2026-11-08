@@ -1,14 +1,16 @@
 """Build the places table from our OSM extract:  python -m etl.load_places  (make places)
 
 Phase 3, step 2 (decision 026). One row per named place, each with its source and load time (decision 006):
-- named OSM nodes: rail and subway stations, subway entrances, squares, amenities, shops, tourism, leisure
+- named OSM nodes: rail and subway stations, subway entrances, squares, neighborhoods, amenities, shops, tourism,
+  leisure
 - named OSM areas, as a point plus outline: squares, pedestrian plazas, water (the Reservoir), station buildings,
   bridges; parks come from osm_parks
 - named streets and paths from osm_ways, one row per name and borough, with the merged line as outline
 - street crossings: where two differently named roads share an OSM node, one point per crossing
 - subway stations from station_flow (MTA, decision 016), when that table is loaded
 - corridors from the corridor catalog (decision 012), when built
-- curated aliases (etl/curated/place_aliases.json) for everyday names OSM lacks ("Central Park Reservoir")
+- curated aliases and redirects (etl/curated/place_aliases.json) for everyday names OSM lacks ("Central Park
+  Reservoir"; "West Side Highway" for the Hudson River Greenway)
 
 Borough outlines come from the OSM borough boundaries in routing/data/new-york-latest.osm.pbf. A row outside all
 five boroughs is dropped: the extract holds a few New Jersey features (Hoboken's ferry terminals), and Loop only
@@ -43,7 +45,8 @@ NOT_A_PLACE = ("service", "motorway_link", "trunk_link", "primary_link", "second
 CROSSING_HIGHWAYS = ("trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
                      "pedestrian")
 CROSSING_CLUSTER_M = 60  # the shared nodes of one crossing (dual carriageways, wide junctions) are this close
-NODE_FILTER = ["n/railway=station,halt,subway_entrance", "n/public_transport=station", "n/place=square", "n/amenity",
+NODE_FILTER = ["n/railway=station,halt,subway_entrance", "n/public_transport=station", "n/place=square",
+               "n/place=neighbourhood,suburb,quarter", "n/amenity",
                "n/shop", "n/tourism", "n/leisure"]
 AREA_FILTER = ["a/place=square", "a/highway=pedestrian", "a/natural=water", "a/railway=station",
                "a/public_transport=station", "a/man_made=bridge"]
@@ -71,6 +74,8 @@ CREATE TABLE places (
     norm               text,                   -- api.places.normalize(name)
     base               text,                   -- norm without a leading direction (street halves)
     alias_norms        text[] NOT NULL DEFAULT '{}',
+    redirects          text[] NOT NULL DEFAULT '{}',  -- curated names for a different thing that mean this place
+    redirect_norms     text[] NOT NULL DEFAULT '{}',
     streets            text[],                 -- crossings: the two street names, as OSM writes them
     street_norms       text[],
     street_bases       text[],
@@ -93,6 +98,7 @@ INDEXES = """
 CREATE INDEX ON places (norm);
 CREATE INDEX ON places (base);
 CREATE INDEX ON places USING gin (alias_norms);
+CREATE INDEX ON places USING gin (redirect_norms);
 CREATE INDEX ON places USING gin (street_bases);
 CREATE INDEX ON places (kind);
 CREATE INDEX ON places USING gist (geom);
@@ -111,6 +117,8 @@ def node_kind(p: dict) -> tuple[str, str] | None:
         return "subway_entrance", "railway=subway_entrance"
     if p.get("place") == "square":
         return "square", "place=square"
+    if p.get("place") in ("neighbourhood", "suburb", "quarter"):
+        return "neighborhood", f"place={p['place']}"
     for tag in ("tourism", "leisure", "amenity", "shop"):
         if tag in p:
             return tag, f"{tag}={p[tag]}"
@@ -296,28 +304,31 @@ def load_corridors(conn, loaded_at) -> int:
 
 
 def apply_curated_aliases(conn) -> int:
-    entries = json.loads(CURATED_ALIASES.read_text())["aliases"]
-    for e in entries:
-        n = conn.execute("UPDATE places SET aliases = array_append(aliases, %s) WHERE name = %s AND kind = %s",
-                         (e["alias"], e["name"], e["kind"])).rowcount
-        if n == 0:
-            raise SystemExit(f"curated alias {e['alias']!r}: no {e['kind']} named {e['name']!r} in places")
-    return len(entries)
+    curated = json.loads(CURATED_ALIASES.read_text())
+    for column, key, entries in (("aliases", "alias", curated["aliases"]),
+                                 ("redirects", "name_used", curated.get("redirects", []))):
+        for e in entries:
+            n = conn.execute(f"UPDATE places SET {column} = array_append({column}, %s) WHERE name = %s AND kind = %s",
+                             (e[key], e["name"], e["kind"])).rowcount
+            if n == 0:
+                raise SystemExit(f"curated {key} {e[key]!r}: no {e['kind']} named {e['name']!r} in places")
+    return len(curated["aliases"]) + len(curated.get("redirects", []))
 
 
 def fill_names(conn) -> None:
     """Normalized names for matching, computed in Python with the same code lookups use."""
-    rows = conn.execute("SELECT id, name, aliases, streets FROM places").fetchall()
-    conn.execute("CREATE TEMP TABLE names_in (id int, norm text, base text, alias_norms text[], street_norms text[], "
-                 "street_bases text[])")
+    rows = conn.execute("SELECT id, name, aliases, redirects, streets FROM places").fetchall()
+    conn.execute("CREATE TEMP TABLE names_in (id int, norm text, base text, alias_norms text[], redirect_norms text[], "
+                 "street_norms text[], street_bases text[])")
     with conn.cursor().copy("COPY names_in FROM STDIN") as copy:
-        for pid, name, als, streets in rows:
+        for pid, name, als, redirects, streets in rows:
             norm = normalize(name)
             sn = [normalize(s) for s in streets] if streets else None
-            copy.write_row((pid, norm, street_base(norm), [normalize(a) for a in als], sn,
-                            [street_base(s) for s in sn] if sn else None))
+            copy.write_row((pid, norm, street_base(norm), [normalize(a) for a in als],
+                            [normalize(r) for r in redirects], sn, [street_base(s) for s in sn] if sn else None))
     conn.execute("""UPDATE places p SET norm = n.norm, base = n.base, alias_norms = n.alias_norms,
-                    street_norms = n.street_norms, street_bases = n.street_bases FROM names_in n WHERE p.id = n.id""")
+                    redirect_norms = n.redirect_norms, street_norms = n.street_norms, street_bases = n.street_bases
+                    FROM names_in n WHERE p.id = n.id""")
 
 
 def assign_boroughs(conn) -> int:

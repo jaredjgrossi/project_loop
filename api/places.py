@@ -7,7 +7,8 @@ this module never invents a place and never guesses between two.
 How a name matches, in order:
 - A crossing ("1st Ave & E 23rd St"): the two streets must cross. A street written with a direction (E 23rd St)
   matches only that side; without one (23rd St) it matches either.
-- An exact name, alias or street base. A street without a direction matches both its East and West halves, which
+- An exact name, alias, curated redirect ("West Side Highway" means the Hudson River Greenway beside it) or street
+  base. A street without a direction matches both its East and West halves, which
   count as one street per borough ("42nd St" in Manhattan).
 - Failing that, a name holding every word of the query ("Penn Station" -> "New York Penn Station").
 
@@ -42,7 +43,7 @@ FT_PER_M = 3.28084
 
 # Which row speaks for a group of rows that are one place.
 KIND_PRIORITY = ("park", "water", "square", "plaza", "bridge", "station", "subway_station", "path", "corridor",
-                 "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance")
+                 "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance", "neighborhood")
 LINE_KINDS = ("street", "path", "bridge")
 # Kinds a partial name match keeps when any of them matched: a business or artwork that only shares words with a
 # landmark is not what the runner meant.
@@ -221,7 +222,8 @@ def _name_rows(conn, q: str) -> tuple[list[_Row], bool]:
     has_dir = street_base(q) != q
     rows = conn.execute(
         f"""SELECT {_ROW} FROM places WHERE kind <> 'crossing'
-            AND (norm = %(q)s OR %(q)s = ANY(alias_norms) OR (NOT %(dir)s AND base = %(q)s))""",
+            AND (norm = %(q)s OR %(q)s = ANY(alias_norms) OR %(q)s = ANY(redirect_norms)
+                 OR (NOT %(dir)s AND base = %(q)s))""",
         {"q": q, "dir": has_dir}).fetchall()
     if rows:
         return [_Row(*r) for r in rows], True
@@ -259,13 +261,15 @@ def _rep(group: list[_Row]) -> _Row:
                                      -(r.area_ha or 0), r.id))
 
 
-def _matched(rep: _Row, q: str) -> str:
+def _matched(rep: _Row, q: str, query: str, exact: bool, group_name: str) -> str:
+    """The name the runner's query matched: the place's own name, an alias ("Central Park Reservoir"), the street
+    ("42nd St" for both halves), or, for a match holding all the query's words, the query itself ("Penn Station")."""
     if rep.norm == q:
         return rep.name
     for alias, n in zip(rep.aliases or [], rep.alias_norms or []):
         if n == q:
             return alias
-    return rep.name
+    return group_name if exact else query.strip()
 
 
 def _name(group: list[_Row], rep: _Row, q: str) -> str:
@@ -278,14 +282,16 @@ def _name(group: list[_Row], rep: _Row, q: str) -> str:
     return display_name(rep.name)
 
 
-def _match(group, q, **kw) -> PlaceMatch:
+def _match(group, q, query: str = "", exact: bool = True, **kw) -> PlaceMatch:
     rep = _rep(group)
-    base = dict(name=_name(group, rep, q), kind=rep.kind, borough=rep.borough, lat=rep.lat, lon=rep.lon,
-                matched=_matched(rep, q), source=rep.source, ids=tuple(r.id for r in group), area_ha=rep.area_ha)
+    name = _name(group, rep, q)
+    base = dict(name=name, kind=rep.kind, borough=rep.borough, lat=rep.lat, lon=rep.lon,
+                matched=_matched(rep, q, query, exact, name), source=rep.source, ids=tuple(r.id for r in group),
+                area_ha=rep.area_ha)
     return PlaceMatch(**(base | kw))
 
 
-def _near_point(conn, group, q, lat, lon) -> PlaceMatch:
+def _near_point(conn, group, q, lat, lon, **kw) -> PlaceMatch:
     ids = [r.id for r in group]
     rep = _rep(group)
     plat, plon, dist = conn.execute(
@@ -295,10 +301,10 @@ def _near_point(conn, group, q, lat, lon) -> PlaceMatch:
            FROM g, p, LATERAL (SELECT CASE WHEN %(line)s THEN ST_ClosestPoint(g.g, p.p)
                                            ELSE (SELECT geom FROM places WHERE id = %(rep)s) END c) x""",
         {"ids": ids, "lat": lat, "lon": lon, "f": FT_PER_M, "line": rep.kind in LINE_KINDS, "rep": rep.id}).fetchone()
-    return _match(group, q, lat=plat, lon=plon, distance_m=round(dist, 1))
+    return _match(group, q, lat=plat, lon=plon, distance_m=round(dist, 1), **kw)
 
 
-def _near_area(conn, group, q, area: PlaceMatch) -> list[PlaceMatch]:
+def _near_area(conn, group, q, area: PlaceMatch, **kw) -> list[PlaceMatch]:
     ids = [r.id for r in group]
     rep = _rep(group)
     params = {"ids": ids, "area": list(area.ids), "touch": TOUCH_M * FT_PER_M, "split": CONTACT_SPLIT_M * FT_PER_M,
@@ -310,7 +316,7 @@ def _near_area(conn, group, q, area: PlaceMatch) -> list[PlaceMatch]:
     if not touches:
         return []
     if rep.kind not in LINE_KINDS:
-        return [_match(group, q)]
+        return [_match(group, q, **kw)]
     spots = conn.execute(
         """WITH area AS (SELECT ST_Buffer(ST_Transform(ST_Collect(coalesce(outline, geom)), 2263), %(touch)s) g
                          FROM places WHERE id = ANY(%(area)s)),
@@ -336,7 +342,7 @@ def _near_area(conn, group, q, area: PlaceMatch) -> list[PlaceMatch]:
                 at = display_name(other[0])
                 break
         lat, lon = conn.execute("SELECT ST_Y(%(p)s::geometry), ST_X(%(p)s::geometry)", {"p": point}).fetchone()
-        out.append(_match(group, q, lat=lat, lon=lon, at=at))
+        out.append(_match(group, q, lat=lat, lon=lon, at=at, **kw))
     return out
 
 
@@ -356,15 +362,18 @@ def lookup(name: str, near: tuple[float, float] | PlaceMatch | None = None, near
                 rows = [r for r in rows if r.kind in LINE_KINDS]
             if not exact and any(r.kind in LANDMARK_KINDS for r in rows):  # "Penn Station", not "Penn Station Eagle"
                 rows = [r for r in rows if r.kind in LANDMARK_KINDS]
+        else:
+            exact = True
         if not rows:
             return []
         groups = _groups(conn, rows, q)
+        kw = {"query": name, "exact": exact}
         if isinstance(near, PlaceMatch):
-            return [m for g in groups for m in _near_area(conn, g, q, near)]
+            return [m for g in groups for m in _near_area(conn, g, q, near, **kw)]
         if near is not None:
-            found = sorted((_near_point(conn, g, q, *near) for g in groups), key=lambda m: m.distance_m)
+            found = sorted((_near_point(conn, g, q, *near, **kw) for g in groups), key=lambda m: m.distance_m)
             return [m for m in found if near_m is None or m.distance_m <= near_m]
-        found = [_match(g, q) for g in groups]
+        found = [_match(g, q, **kw) for g in groups]
         return sorted(found, key=lambda m: (KIND_PRIORITY.index(m.kind) if m.kind in KIND_PRIORITY else 99, m.borough))
     finally:
         if own:
@@ -417,3 +426,58 @@ def major_parks_near(lat: float, lon: float, radius_m: float = MAJOR_PARK_RADIUS
     finally:
         if own:
             conn.close()
+
+
+def borough_at(lat: float, lon: float, conn=None) -> str | None:
+    """The borough holding the point, or None outside New York City."""
+    conn, own = _connect(conn)
+    try:
+        row = conn.execute("SELECT name FROM boroughs WHERE ST_Intersects(geom, ST_SetSRID(ST_Point(%s, %s), 4326))",
+                           (lon, lat)).fetchone()
+        return row[0] if row else None
+    finally:
+        if own:
+            conn.close()
+
+
+NEIGHBORHOOD_M = 1200  # "kip bay 3 mi" from inside Kips Bay: the runner is this close to the neighborhood's point
+
+
+def in_neighborhood(name: str, lat: float, lon: float, within_m: float = NEIGHBORHOOD_M, conn=None) -> bool:
+    """Whether the point is in (near the OSM point of) the named neighborhood."""
+    conn, own = _connect(conn)
+    try:
+        q = normalize(name)
+        (hit,) = conn.execute(
+            """SELECT EXISTS (SELECT 1 FROM places WHERE kind = 'neighborhood' AND (norm = %(q)s OR %(q)s = ANY(alias_norms))
+                 AND ST_DWithin(ST_Transform(geom, 2263), ST_Transform(ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326), 2263),
+                                %(ft)s))""",
+            {"q": q, "lat": lat, "lon": lon, "ft": within_m * FT_PER_M}).fetchone()
+        return hit
+    finally:
+        if own:
+            conn.close()
+
+
+def park_around(place: PlaceMatch, conn=None) -> PlaceMatch | None:
+    """The park a place sits in (the Reservoir is in Central Park), largest first; None if it isn't in one."""
+    conn, own = _connect(conn)
+    try:
+        row = conn.execute(
+            f"""SELECT {_ROW} FROM places WHERE kind = 'park' AND name IS NOT NULL
+                  AND ST_Intersects(outline, ST_SetSRID(ST_Point(%s, %s), 4326))
+                ORDER BY area_ha DESC NULLS LAST LIMIT 1""", (place.lon, place.lat)).fetchone()
+        if row is None:
+            return None
+        r = _Row(*row)
+        return PlaceMatch(name=r.name, kind=r.kind, borough=r.borough, lat=r.lat, lon=r.lon, matched=r.name,
+                          source=r.source, ids=(r.id,), area_ha=r.area_ha)
+    finally:
+        if own:
+            conn.close()
+
+
+def parks_near(lat: float, lon: float, limit: int = 4, radius_m: float = MAJOR_PARK_RADIUS_M,
+               conn=None) -> list[PlaceMatch]:
+    """The nearest named parks of any size, one per name: the options when 'the park' needs a question (R13)."""
+    return major_parks_near(lat, lon, radius_m=radius_m, min_ha=0, conn=conn)[:limit]

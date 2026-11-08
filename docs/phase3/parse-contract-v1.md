@@ -4,7 +4,7 @@
 ## The flow
 1. The runner types a request and the app sends it to `POST /v1/runs`.
 2. The server streams back server-sent events:
-   1. `parsed`: chips, can't-do lines, notes, and possibly one question. Target: under about 2 s.
+   1. `parsed`: chips, can't-do lines, notes, and possibly one question. Target: about 3 s (raised from 2 s, 2026-11-08).
    2. If `parsed.question` is set, the stream ends there. The app shows the question. The answer goes back as a new `POST /v1/runs` with `answer`, and the stream picks up from step 2.1 with the merged request.
    3. `top3` (repeats as the leader changes; first route target under about 1 s after `parsed`), then `provisional`, then `final`.
    4. A question can also come from the engine after `parsed` (for example "The greenway is far for 3 mi"). It arrives as a `question` event, and the stream ends.

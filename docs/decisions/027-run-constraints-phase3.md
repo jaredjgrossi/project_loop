@@ -39,8 +39,7 @@
 - The parse grader's field list is tested against `RunConstraints`, so the two can't drift apart.
 - The CLI still builds routes end to end (11 Madison Ave, 3 mi, Training, 7:00).
 
-## Open
-- **"Along" avoids have no build step.** R07 and P23 parse to them, but steps 7–10 don't route around a street
-  while still allowing crossings, so until a step does, those requests get a can't-do line from `unsupported`.
-  One way to do it: a GraphHopper custom-model penalty on a thin area around the street, with crossings costing
-  only a little. That needs a step in the plan.
+## Planned
+- **"Along" avoids are step 8b** (Jared, 2026-11-06), right after via places. Running along the named street or
+  stretch becomes costly in the router, while crossings stay cheap, so R07 and P23 work end to end. Each gets a
+  route eval. Until then, `unsupported` reports `avoid_along`.

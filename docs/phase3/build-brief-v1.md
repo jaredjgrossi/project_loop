@@ -58,7 +58,7 @@ Keep source and load time on every row (decision 006). Write `lookup(name, near=
 - applies rules R1–R18 from the evals doc
 - builds `RunConstraints`, chips, can't-do lines, notes, or the one question, from templates in `api/copy.py`
 
-Use prompt caching for the instructions. The API key comes from `.env`. Run the evals on Haiku 5.5 first, and try a larger model only if cases fail. Report the pass rate, cost per parse and median latency for each model tried. Done: every case passes except those marked for later steps (end, via, reuse, hills, planned), and the parsed result arrives in under about 2 s median.
+Use prompt caching for the instructions. The API key comes from `.env`. Run the evals on Haiku 5.5 first, and try a larger model only if cases fail. Report the pass rate, cost per parse and median latency for each model tried. Done: every case passes except those marked for later steps (end, via, reuse, hills, planned), and the parsed result arrives in about 3 s median (target raised from 2 s by Jared, 2026-11-08; the app designs the wait).
 
 **4. API and streaming.** Add FastAPI. Build `POST /v1/runs` as server-sent events, following the contract:
 - the `text`, `answer` and `constraints` paths
@@ -77,16 +77,18 @@ Add a small command-line client that prints the events, for testing without the 
 
 **8. Via.** Route through or along `via_places`, reusing the corridor-anchored generators. "The whole way" stays a can't-do line. If a via point is too far for the distance, the engine asks. Done: R02 (after its answer), R03 (the engine asks), R09 (after its answer), P49.
 
+**8b. "Along" avoids (added by Jared, 2026-11-06).** Make running along a named street, or a named stretch such as "1st Ave, E 26th–E 34th St", costly in the router, while crossings stay cheap. Done: R07 and P23 work end to end, with a route eval for each.
+
 **9. Hills.** A `hills` preference scored from the elevation every 0.1 mi (measured), with a provisional weight. Done: P33, and R11 after its answer; a route eval where "flat" changes #1 on a hilly start.
 
-**10. Past routes and planned runs.** `reuse_route_id` (rebuild the stored route's request for now), `reverse`, "longer" (ask how much), and `planned` (D6: build the second run for its day, store it, send it after `final`). Done: H01–H05 and P45.
+**10. Past routes and planned runs.** `reuse_route_id` (rebuild the stored route's request for now), `reverse`, "longer" (ask how much), and `planned` (D6: build the second run for its day, store it, send it after `final`). A part of a past route ("skip the ferry part") is matched in code against the `pulse_sources` ferry landings along the reused route, not by the model (Jared, 2026-11-08). Done: H01–H05 and P45.
 
 ## Out of scope
 The request-screen design (the UI chat), accounts and sync, cloud hosting, the watch, workout-segment routes, lighting and safety, "the whole way" routing, soft avoids, minutes instead of miles, commercial place search, and changing ranking weights.
 
 ## Done when
 - All 50 parse evals pass on the chosen model, and the earlier evals and unit tests still pass.
-- On Jared's phone over Tailscale, a typed request shows the parse in under about 2 s and the first route under about 3 s.
+- On Jared's phone over Tailscale, a typed request shows the parse in about 3 s and the first route under about 3 s after it.
 - Questions from the parser, places and the engine all reach the phone the same way, and answering one continues the build.
 - No API key in the app or in git. Claude never receives coordinates.
 - Jared's review: do the chips read right, and do the questions feel necessary?
