@@ -108,7 +108,9 @@ The app saves it to the planned list. Opening it on the day calls `POST /v1/runs
 
 ## Built in step 5 (decision 029)
 - **`done` ends every clean stream**, including one that ends with a question, so the app can tell a finished stream from a dropped connection. `error` ends a stream that failed.
-- **`final`** also carries `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
+- **Route entries** in `top3`, `provisional` and `final` carry `id`, the same for the same route in every event of one build (step 6).
+- **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
+- **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
 - **Can't-do lines from the engine:** `gap: "later"` for what a later step builds (end, via, along-avoids and past routes build nothing yet, and the stream ends after `parsed`; hills and a planned second run build the first run anyway), and `gap: "avoid_unknown"` for an avoid that isn't on the no-go list.
 - **Answers:** a tapped option settles what it names. Typed text is read by code (a distance, a place name or address, a borough, a recent route's name); text code can't read brings the same question back with a new `parse_id`. No Claude call either way.
 - **Auth:** `Authorization: Bearer <Loop token>` on everything but `GET /v1/health`. A missing or wrong token is HTTP 401; every other problem is an `error` event.

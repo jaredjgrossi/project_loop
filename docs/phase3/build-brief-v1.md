@@ -69,7 +69,7 @@ Use prompt caching for the instructions. The API key comes from `.env`. Run the 
 
 Add a small command-line client that prints the events, for testing without the phone. Done: a typed request streams `parsed`, then `top3`, `provisional` and `final` from the command line, with the first route under about 3 s after send.
 
-**5. Reach from the phone (Jared and the iPhone session).** Write Jared exact steps to install Tailscale on the Mac and the iPhone and run the server. Write `docs/phase3/ios-wiring.md` for the iPhone build session: the endpoint, the event shapes, how to read the stream on iOS, and a temporary debug text field until the UI chat designs the request screen. Code doesn't edit `ios/` in this session. **Milestone:** a typed request on Jared's phone draws a streamed route.
+**5. Reach from the phone (Jared and the iPhone session).** Write Jared exact steps to install Tailscale on the Mac and the iPhone and run the server. Write `docs/phase3/ios-wiring.md` for the iPhone build session: the endpoint, the event shapes, how to read the stream on iOS, and a temporary debug text field until the UI chat designs the request screen. Code doesn't edit `ios/` in this session. Written: `docs/phase3/tailscale-steps.md` (Tailscale serve gives the Mac an HTTPS address on the tailnet, so iOS needs no ATS exception) and `docs/phase3/ios-wiring.md` (2026-11-08). **Milestone:** a typed request on Jared's phone draws a streamed route.
 
 **5b. A shorter tool input (added by Jared, 2026-11-08).** Right after the phone milestone: let the model leave unsaid fields out of `record_request`, to cut output tokens and latency. Three eval runs; keep it only if accuracy holds (44 or more cases passing all three runs).
 

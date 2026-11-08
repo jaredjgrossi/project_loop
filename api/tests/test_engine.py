@@ -62,7 +62,7 @@ def test_a_miss_says_the_nearest_route_and_how_far_off():
 
 def test_an_entry_is_the_fixtures_top3_shape():
     e = entry(2, candidate(label="second"))
-    assert set(e) == {"rank", "kind", "label", "score", "distance", "geometry"}
+    assert set(e) == {"id", "rank", "kind", "label", "score", "distance", "geometry"}
     assert e["rank"] == 2 and e["distance"]["unit"] == "mi" and e["distance"]["status"] == "measured"
     assert e["geometry"]["type"] == "LineString"
 
@@ -100,6 +100,7 @@ def test_build_streams_top3_and_provisional_then_returns_final():
     assert all(e["route_id"] == "r_1" and e["v"] == 1 for e in sent)
     assert [r["label"] for r in sent[1]["routes"]] == ["first", "second"]
     assert final["event"] == "final" and final["pool_size"] == 17 and final["notes"] == []
+    assert final["pool"] == {"candidates": 20, "best_of": 17}  # as the fixture's pool, so the app reads it unchanged
     assert [r["label"] for r in final["routes"]] == ["first", "second"]
     props = final["route"]["features"][0]["properties"]
     assert props["rank"] == 1 and props["label"] == "first" and "summary" in props and "request" in props
@@ -108,3 +109,11 @@ def test_build_streams_top3_and_provisional_then_returns_final():
 def test_the_engine_down_is_engine_unavailable():
     with pytest.raises(EngineUnavailable):
         engine(fake_generate([]), ready_fn=lambda: False).build(rc(), Start(40.7, -73.9, "x"), print, "r_1")
+
+
+def test_a_route_keeps_its_id_across_events():
+    sent = []
+    first, second = candidate(label="first", score=90), candidate(label="second", score=80)
+    final = engine(fake_generate([first, second])).build(rc(), Start(40.7, -73.9, "x"), sent.append, "r_9")
+    ids = [[r["id"] for r in e["routes"]] for e in sent] + [[r["id"] for r in final["routes"]]]
+    assert ids == [["r_9.1"], ["r_9.1", "r_9.2"], ["r_9.1", "r_9.2"], ["r_9.1", "r_9.2"]]

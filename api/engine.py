@@ -9,6 +9,7 @@ the contract's payloads and adds `final`: the #1 in full, as the iPhone fixture'
 """
 
 import secrets
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -88,9 +89,11 @@ def before_build(rc: RunConstraints, zones=None) -> tuple[list[dict], bool]:
     return lines, any(k in BLOCKING for k in later)
 
 
-def entry(rank: int, c: Candidate) -> dict:
-    """One route of the top 3 as the fixture's `top3` holds it: outline, label, score and the measured distance."""
-    return {"rank": rank, "kind": c.kind, "label": c.label, "score": round(c.score),
+def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
+    """One route of the top 3 as the fixture's `top3` holds it: outline, label, score and the measured distance, plus
+    `id`, the same for the same route in every event of one build, so the app can tell a route that moved up from a
+    new one."""
+    return {"id": route_key, "rank": rank, "kind": c.kind, "label": c.label, "score": round(c.score),
             "distance": route_summary(c, [], [], {})["distance"],
             "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
 
@@ -148,11 +151,18 @@ class Engine:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
         route_fn, round_trip_fn, area_fn = ml.routers_for(zones, prefs["lights"], closures)
 
+        keys: dict[int, str] = {}  # candidate object -> its id in this build
+        keys_lock = threading.Lock()
+
+        def key(c: Candidate) -> str:
+            with keys_lock:
+                return keys.setdefault(id(c), f"{route_id}.{len(keys) + 1}")
+
         def on_top3(ev: dict) -> None:
             if ev["event"] in ("top3", "provisional"):  # "final" is sent below, with the #1 in full
                 send({"event": ev["event"], "v": 1, "route_id": route_id, "elapsed_s": ev["elapsed_s"],
                       "provisional": ev["provisional"],
-                      "routes": [entry(r, c) for r, c in enumerate(ev["candidates"], 1)]})
+                      "routes": [entry(r, c, key(c)) for r, c in enumerate(ev["candidates"], 1)]})
 
         try:
             result = self.generate_fn(
@@ -170,6 +180,6 @@ class Engine:
                                self.stretch_fn) if chosen else None)
         return {"event": "final", "v": 1, "route_id": route_id,
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
-                "routes": [entry(r, c) for r, c in enumerate(chosen, 1)], "route": route,
-                "pool_size": result.best_of, "notes": distance_notes(rc, chosen, result.within_tolerance),
+                "routes": [entry(r, c, key(c)) for r, c in enumerate(chosen, 1)], "route": route,
+                "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of}, "notes": distance_notes(rc, chosen, result.within_tolerance),
                 "timing": result.timing}

@@ -143,3 +143,11 @@ def test_an_edited_chip_reads_as_said():
     c = build(IDEAL["P36"], ctx, FakePlaces())["parsed"]["constraints"] | {"distance_mi": 8}
     again = parsed_for_constraints(c, ctx, None)
     assert next(x for x in again["chips"] if x["field"] == "distance")["text"] == "8 mi"
+
+
+def test_a_utc_clock_is_read_in_the_runners_time_zone():
+    """Swift's ISO8601DateFormatter sends UTC ("Z") by default; 11:40Z on Nov 3 is 06:40 in New York."""
+    req = build_request(CASES["P36"], CONTEXTS)
+    local = Context.from_request(req).now
+    req["client"] = req["client"] | {"now": "2026-11-03T11:40:00Z"}
+    assert Context.from_request(req).now == local

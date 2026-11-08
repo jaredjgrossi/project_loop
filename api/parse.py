@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 
@@ -274,7 +275,10 @@ class Context:
     @classmethod
     def from_request(cls, req: dict) -> "Context":
         client, profile = req.get("client") or {}, req.get("profile") or {}
-        now = datetime.fromisoformat(client["now"]).replace(tzinfo=None)
+        now = datetime.fromisoformat(client["now"])
+        if now.tzinfo is not None:  # "...Z" from Swift's default formatter: the runner's clock is New York time
+            now = now.astimezone(ZoneInfo(client.get("tz") or "America/New_York"))
+        now = now.replace(tzinfo=None)
         loc = client.get("location")
         return cls(text=(req.get("text") or "").strip(), now=now, location=(loc["lat"], loc["lon"]) if loc else None,
                    usual_mi=profile.get("usual_distance_mi"), usual_time=profile.get("usual_time"),
