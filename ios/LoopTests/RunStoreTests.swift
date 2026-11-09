@@ -82,4 +82,21 @@ final class RunStoreTests: XCTestCase {
         XCTAssertEqual(f[0].y, 20, accuracy: 1e-9)   // top of a 20-high shape centred in 10...50
         XCTAssertEqual(f[1].y, 40, accuracy: 1e-9)
     }
+
+    func testMatchesFilterByTitleNewestFirstUpToFour() throws {
+        let data = try LoopData(file: RouteFile.loadBundled())
+        let line = data.candidates[0].line
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = RunStore(saved: [SavedRun(id: "usual", name: "Usual", request: "3 miles from here", distanceMi: 3,
+                                              shape: [], savedAt: t0)])
+        for (i, r) in ["6 miles by the water", "3 miles by the water at 7.", "Tempo 4 miles", "5 miles in the park", "Water loop"].enumerated() {
+            store.addRecent(request: r, distanceMi: 3, line: line, now: t0.addingTimeInterval(Double(i + 1) * 60))
+        }
+        XCTAssertEqual(store.matches("").map(\.title), ["Water loop", "5 miles in the park", "Tempo 4 miles", "3 miles by the water at 7"],
+                       "nothing typed: the four most recent, without the header's full stop")
+        XCTAssertEqual(store.matches("WATER").map(\.title), ["Water loop", "3 miles by the water at 7", "6 miles by the water"])
+        XCTAssertEqual(store.matches("usu").map(\.title), ["Usual"], "saved runs match by name")
+        XCTAssertEqual(store.matches("usu").first?.request, "3 miles from here", "and send their request")
+        XCTAssertTrue(store.matches("zzz").isEmpty)
+    }
 }

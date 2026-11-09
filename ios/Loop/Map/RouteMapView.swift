@@ -13,6 +13,9 @@ struct CameraRequest: Equatable {
         case at(GeoPoint, zoom: Double)
         /// Fit a circle (the reach ring) between the header and the bottom.
         case circle(GeoPoint, radiusM: Double)
+        /// Centre a point in the map area between the header and `bottom` points from the screen's
+        /// bottom (the landing sheet and keyboard); keeps the zoom unless one is given.
+        case above(GeoPoint, bottom: CGFloat, zoom: Double?)
     }
     var id = 0
     var kind: Kind = .overview
@@ -59,6 +62,7 @@ struct RouteMapView: UIViewRepresentable {
     /// don't jump when it comes; on send they follow it down.
     @MainActor static func ornamentInset(_ model: MainModel) -> CGFloat {
         if model.sheetShown { return model.sheet.height }
+        if model.landingShown, model.keyboardHeight > 0 { return model.landing.height + model.keyboardHeight }
         let beforeLanding = model.stage == .logo || (model.stage == .landing && !model.landingShown)
         return beforeLanding ? max(model.landing.height, model.landing.openHeight) : model.landing.height
     }
@@ -468,6 +472,8 @@ struct RouteMapView: UIViewRepresentable {
         /// clears the selection. Mile marks and chips are SwiftUI views above the map, so their
         /// taps never get here.
         private func mapTapped(at tap: CGPoint) {
+            // Typing in the landing field: a tap on the map ends editing, nothing more.
+            if model.searchMode { model.endTyping(); return }
             guard let map = mapView?.mapboxMap, let line = model.shown?.line, model.shownDetail != nil else { return }
             let projected = line.points.map { map.point(for: $0.coordinate) }
             if let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
@@ -497,7 +503,7 @@ struct RouteMapView: UIViewRepresentable {
                 let coords = model.overviewCoordinates.map(\.coordinate)
                 let padding = UIEdgeInsets(top: model.headerBottom + 28, left: 44,
                                            bottom: model.sheet.restingHeight + 40 + 22, right: 44)
-                target = try? map.camera(for: coords, camera: CameraOptions(), coordinatesPadding: padding,
+                target = try? map.camera(for: coords, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
                                          maxZoom: 16, offset: nil)
             case let .focus(point):
                 // Pan only if the point is outside the band between the header and the sheet.
@@ -507,14 +513,18 @@ struct RouteMapView: UIViewRepresentable {
                 let goal = CGPoint(x: size.width * 0.62, y: (top + bottom) / 2)
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let shifted = CGPoint(x: center.x + (now.x - goal.x), y: center.y + (now.y - goal.y))
-                target = CameraOptions(center: map.coordinate(for: shifted))
+                target = CameraOptions(center: map.coordinate(for: shifted), padding: .zero)
             case let .at(point, zoom):
-                target = CameraOptions(center: point.coordinate, zoom: zoom)
+                target = CameraOptions(center: point.coordinate, padding: .zero, zoom: zoom)
             case let .circle(center, radiusM):
                 let ring = RouteFrame.circle(center, radiusM: radiusM, points: 32).map(\.coordinate)
                 let padding = UIEdgeInsets(top: model.headerBottom + 20, left: 24, bottom: 60, right: 24)
-                target = try? map.camera(for: ring, camera: CameraOptions(), coordinatesPadding: padding,
+                target = try? map.camera(for: ring, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
                                          maxZoom: 17, offset: nil)
+            case let .above(point, bottom, zoom):
+                // Camera padding moves the centre into the area left between the header and the sheet.
+                let padding = UIEdgeInsets(top: model.headerBottom, left: 0, bottom: min(bottom, size.height - model.headerBottom - 40), right: 0)
+                target = CameraOptions(center: point.coordinate, padding: padding, zoom: zoom.map { CGFloat($0) })
             }
             guard let target else { return }
             if request.animated && !reduceMotion {

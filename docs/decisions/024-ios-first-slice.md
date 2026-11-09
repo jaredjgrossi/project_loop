@@ -120,6 +120,14 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   while collapsed starts typing without opening the runs.
 - **Weather.** WeatherKit needs the paid developer program; the build uses a Personal Team, so
   Debug builds show fixed sample weather (48°, partly cloudy) and Release builds hide the line.
+- **Typing on the landing sheet.** Focusing the field stops the launch example and shows a static
+  "Describe your run", with "Cancel" to its right (clears and ends editing). The sheet fits the
+  field and up to four recent requests and saved runs matching the typed title, newest first;
+  a tap fills the field and sends. Tapping the map or the sheet ends editing (the text stays).
+  A drag down while typing only ends editing; the list under the field takes the keyboard down
+  with the finger (`scrollDismissesKeyboard(.interactively)`). Whenever the landing sheet or the
+  keyboard changes height, the map re-centres the location in the area above them (camera
+  padding), moving with the sheet.
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).

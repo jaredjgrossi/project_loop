@@ -58,6 +58,16 @@ final class MainModel {
     var requestText: String?
     /// The example the landing field types in its placeholder colour at launch.
     var fieldExample = ""
+    /// What the runner has typed in the landing field (kept when editing ends, cleared by Cancel).
+    var fieldText = ""
+    /// Bumped to focus the landing field (debug screenshots).
+    var focusFieldRequest = 0
+    /// The on-screen keyboard's height over the screen bottom (0 when hidden).
+    var keyboardHeight: CGFloat = 0
+    /// The runner is typing in the landing field: the sheet shows matching recent and saved runs.
+    var searchMode: Bool { stage == .typing && !demoTyping }
+    /// Recent requests and saved runs under the field, filtered by what's typed.
+    var fieldMatches: [RunMatch] { runs.matches(fieldText) }
     /// The logo covering the map at launch.
     var logoShown = false
     /// The landing sheet is up (it rises at launch and slides away on send).

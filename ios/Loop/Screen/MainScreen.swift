@@ -119,6 +119,13 @@ struct MainScreen: View {
             LookAroundScreen(scene: target.scene, title: target.title)
         }
         .task { await start() }
+        // The keyboard's height, so the landing sheet sits on it and the map re-centres above both.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+            let height = max(0, UIScreen.main.bounds.height - end.minY)
+            model.keyboardChanged(height: height, duration: reduceMotion ? 0 : duration)
+        }
     }
 
     /// The replay button exists only in Debug builds.
@@ -149,6 +156,16 @@ struct MainScreen: View {
             return
         }
         model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
+        if args.contains("-LoopFocusField") {
+            // Screenshots: focus the field once the sheet has risen; `-LoopType text` types into it.
+            while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(1.0))
+            model.focusFieldRequest += 1
+            if let i = args.firstIndex(of: "-LoopType"), i + 1 < args.count {
+                try? await Task.sleep(for: .seconds(0.8))
+                model.fieldText = args[i + 1]
+            }
+        }
         if args.contains("-LoopCollapsed") {
             // Screenshots: collapse the landing sheet once it has risen and typed its example.
             while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }

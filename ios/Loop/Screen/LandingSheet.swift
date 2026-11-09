@@ -12,6 +12,8 @@ struct LandingSheet: View {
 
     private var sheet: SheetState { model.landing }
     private var runs: RunStore { model.runs }
+    /// This drag began while typing: it only dismisses the keyboard.
+    @State private var keyboardDrag = false
 
     var body: some View {
         let height = sheet.height
@@ -39,6 +41,9 @@ struct LandingSheet: View {
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
 
+            if model.searchMode {
+                MatchList(model: model)
+            } else {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Your runs")
                     .typeStyle(.eyebrow)
@@ -70,6 +75,7 @@ struct LandingSheet: View {
                     .opacity(Double(sheet.readProgress))
                     .accessibilityHidden(sheet.readProgress < 0.5)
             }
+            }
         }
         // Measured in the content's own space, inside the slide offset (else each measurement
         // would move the sheet and feed the next).
@@ -86,12 +92,16 @@ struct LandingSheet: View {
         .clipped()
         .offset(y: offset)
         .contentShape(Rectangle())
+        // A tap on any part of the sheet that isn't a control ends editing.
+        .onTapGesture { model.endTyping() }
         .gesture(drag)
     }
 
-    /// Tapping the handle: collapsed opens; open (or taller) collapses.
+    /// Tapping the handle: collapsed opens; open (or taller) collapses. While typing it only ends editing.
     private func toggle() {
+        if model.searchMode { model.endTyping(); return }
         sheet.settle(rest: sheet.restingOpen ? .collapsed : .open, animated: !reduceMotion)
+        model.recenterLanding(animated: !reduceMotion)
     }
 
     private func bottomReader(_ report: @escaping (CGFloat) -> Void) -> some View {
@@ -114,6 +124,7 @@ struct LandingSheet: View {
 
     /// Taller: every recent row, up to three quarters of the screen; none with one recent.
     private func setFull(_ contentHeight: CGFloat) {
+        guard !model.searchMode else { return }
         let full = min((contentHeight + 14 + Self.bottomInset).rounded(), UIScreen.main.bounds.height * 0.75)
         let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
         guard read != sheet.readHeight else { return }
@@ -128,7 +139,7 @@ struct LandingSheet: View {
     }
 
     private func refresh() {
-        if model.landingShown, model.landingAnchor == nil { sheet.refreshRest() }
+        if model.landingShown, model.landingAnchor == nil, !model.searchMode { sheet.refreshRest() }
     }
 
     static var bottomInset: CGFloat {
@@ -147,24 +158,34 @@ struct LandingSheet: View {
     }
 
     /// Same as the route card: 1:1 under the finger, then the 320 ms settle to the nearest rest.
+    /// While typing, a drag down only dismisses the keyboard (the list under the field takes it
+    /// interactively); the next drag moves the sheet.
     private var drag: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { v in
+                if model.searchMode || keyboardDrag {
+                    keyboardDrag = true
+                    if model.searchMode, v.translation.height > 12 { model.endTyping() }
+                    return
+                }
                 guard model.landingAnchor == nil else { return }
                 sheet.drag(translation: v.translation.height)
             }
             .onEnded { v in
+                if keyboardDrag { keyboardDrag = false; return }
                 guard model.landingAnchor == nil else { return }
                 sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in }
+                model.recenterLanding(animated: !reduceMotion)
             }
     }
 }
 
 /// The request field at the top of the landing sheet: sunken, Fraunces placeholder. At launch it
-/// types an example in the placeholder colour; tapped, it takes the runner's words, and go sends.
+/// types an example in the placeholder colour; once the runner focuses it, the example stops and
+/// the field is empty with a static "Describe your run" until they type. While focused, "Cancel"
+/// sits to its right (ends editing, clears the field). Go sends.
 struct RequestField: View {
-    let model: MainModel
-    @State private var draft = ""
+    @Bindable var model: MainModel
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -172,40 +193,84 @@ struct RequestField: View {
 
     var body: some View {
         let typing = model.stage == .typing
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Palette.inkMuted.color)
-            ZStack(alignment: .leading) {
-                if !typing || (draft.isEmpty && !model.demoTyping) {
-                    Text(model.fieldExample.isEmpty ? "Describe your run" : model.fieldExample)
+        let editing = model.searchMode
+        HStack(spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Palette.inkMuted.color)
+                ZStack(alignment: .leading) {
+                    if model.fieldText.isEmpty {
+                        // The launch example (placeholder colour) until focused, then the static placeholder.
+                        Text(editing || model.fieldExample.isEmpty ? "Describe your run" : model.fieldExample)
+                            .typeStyle(Self.style)
+                            .foregroundStyle(Palette.inkMuted.color)
+                            .lineLimit(1)
+                            .accessibilityHidden(true)
+                    }
+                    TextField("", text: $model.fieldText)
                         .typeStyle(Self.style)
-                        .foregroundStyle(Palette.inkMuted.color)
-                        .lineLimit(1)
-                        .accessibilityHidden(true)
+                        .foregroundStyle(Palette.ink.color)
+                        .tint(Palette.focusRing.color)
+                        .focused($focused)
+                        .submitLabel(.go)
+                        .onSubmit { model.send(model.fieldText, reduceMotion: reduceMotion) }
+                        .accessibilityLabel("Describe your run")
                 }
-                TextField("", text: $draft)
-                    .typeStyle(Self.style)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 50)
+            .background(Capsule().fill(Palette.surfaceSunken.color))
+            .overlay(Capsule().strokeBorder(Palette.focusRing.color, lineWidth: 1.5).opacity(typing ? 1 : 0))
+            .contentShape(Capsule())
+            .onTapGesture { focused = true }
+
+            if editing {
+                Button("Cancel") { model.cancelTyping() }
+                    .typeStyle(.body)
                     .foregroundStyle(Palette.ink.color)
-                    .tint(Palette.focusRing.color)
-                    .focused($focused)
-                    .submitLabel(.go)
-                    .onSubmit { model.send(draft, reduceMotion: reduceMotion); draft = ""; focused = false }
-                    .opacity(typing ? 1 : 0.011)
-                    .accessibilityLabel("Describe your run")
+                    .frame(minHeight: Metrics.minTap)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 50)
-        .background(Capsule().fill(Palette.surfaceSunken.color))
-        .overlay(Capsule().strokeBorder(Palette.focusRing.color, lineWidth: 1.5).opacity(typing ? 1 : 0))
-        .contentShape(Capsule())
-        .onTapGesture { model.beginTyping(); focused = true }
-        .onChange(of: model.stage) { _, stage in
-            guard stage == .typing else { return }
-            // The debug demo "taps and sends" the example itself, without the keyboard.
-            if model.demoTyping { draft = model.fieldExample } else { focused = true }
+        .animation(reduceMotion ? nil : Motion.textArrive, value: editing)
+        .onChange(of: focused) { _, isFocused in
+            if isFocused { model.beginTyping() } else if model.searchMode { model.endTyping() }
         }
+        .onChange(of: model.stage) { _, stage in
+            if stage == .typing, model.demoTyping {
+                // The debug demo "taps and sends" the example itself, without the keyboard.
+                model.fieldText = model.fieldExample
+            } else if stage != .typing {
+                focused = false
+            }
+        }
+        .onChange(of: model.fieldText) { _, _ in model.layoutSearch(animated: !reduceMotion) }
+        .onChange(of: model.focusFieldRequest) { _, _ in focused = true }
+    }
+}
+
+/// While typing: recent requests and saved runs matching the text, newest first, up to four. A
+/// tap fills the field and sends. Dragging the list down takes the keyboard with the finger.
+private struct MatchList: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let matches = model.fieldMatches
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(matches) { m in
+                    RecentRow(title: m.title, date: m.date, shape: m.shape) {
+                        model.fieldText = m.request
+                        model.send(m.request, reduceMotion: reduceMotion)
+                    }
+                }
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .frame(height: CGFloat(matches.count) * 40)
+        .padding(.top, matches.isEmpty ? 0 : 6)
     }
 }
 
@@ -297,20 +362,30 @@ private struct SaveTile: View {
 }
 
 private struct RecentRow: View {
-    let recent: RecentRoute
+    let title: String
+    let date: Date
+    let shape: [[Double]]
     let action: () -> Void
+
+    init(recent: RecentRoute, action: @escaping () -> Void) {
+        self.init(title: RunStore.sentence(recent.request), date: recent.date, shape: recent.shape, action: action)
+    }
+
+    init(title: String, date: Date, shape: [[Double]], action: @escaping () -> Void) {
+        self.title = title; self.date = date; self.shape = shape; self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                RouteThumbnail(shape: recent.shape, lineWidth: 1.8, dot: 0, inset: 0.06)
+                RouteThumbnail(shape: shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
-                Text(Self.sentence(recent.request))
+                Text(title)
                     .typeStyle(.body)
                     .foregroundStyle(Palette.ink.color)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(RunStore.dayText(recent.date))
+                Text(RunStore.dayText(date))
                     .typeStyle(.label)
                     .foregroundStyle(Palette.inkMuted.color)
             }
@@ -319,9 +394,6 @@ private struct RecentRow: View {
         }
         .buttonStyle(.plain)
     }
-
-    /// The request as the runner typed it, without the full stop the header adds.
-    static func sentence(_ s: String) -> String { s.hasSuffix(".") ? String(s.dropLast()) : s }
 }
 
 /// A route's own shape as a small line drawing: route-water line, vermilion start dot. A suggestion

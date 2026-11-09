@@ -41,6 +41,17 @@ struct SuggestedRun: Identifiable, Equatable {
     let glyph: Glyph
 }
 
+/// A row under the landing field while typing: a recent request or a saved run.
+struct RunMatch: Identifiable, Equatable {
+    let id: String
+    /// What the row shows and what typing matches: a recent's request, a saved run's name.
+    let title: String
+    /// What tapping the row sends.
+    let request: String
+    let date: Date
+    let shape: [[Double]]
+}
+
 /// Saved runs and recent routes, kept in one small JSON file in Application Support (no account).
 @Observable
 @MainActor
@@ -102,6 +113,20 @@ final class RunStore {
                                timesRun: 1, request: request, shape: shape)]
         write()
     }
+
+    /// Recent requests and saved runs whose title contains the typed text (any case), newest
+    /// first, at most `limit`. With nothing typed, the most recent.
+    func matches(_ typed: String, limit: Int = 4) -> [RunMatch] {
+        let all = recents.map { RunMatch(id: "r_" + $0.id, title: Self.sentence($0.request), request: $0.request,
+                                         date: $0.date, shape: $0.shape) }
+            + saved.map { RunMatch(id: "s_" + $0.id, title: $0.name, request: $0.request, date: $0.savedAt, shape: $0.shape) }
+        let q = typed.trimmingCharacters(in: .whitespaces)
+        let hits = q.isEmpty ? all : all.filter { $0.title.localizedCaseInsensitiveContains(q) }
+        return Array(hits.sorted { $0.date > $1.date }.prefix(limit))
+    }
+
+    /// A request as the runner typed it, without the full stop the header adds.
+    static func sentence(_ s: String) -> String { s.hasSuffix(".") ? String(s.dropLast()) : s }
 
     /// A request that built a route goes to the top of Recent (the same request again moves up).
     /// `countsAsRun` false (dismissing a card) moves it up without counting another run.
