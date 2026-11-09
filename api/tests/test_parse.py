@@ -445,3 +445,15 @@ def test_a_quote_that_doesnt_fit_is_dropped_never_failing_the_parse():
     out = _conform(raw, TOOL["input_schema"], dropped=dropped)
     assert [q["chip"] for q in out["said"]] == ["time", "end"]  # "day" read as the time chip
     assert len(dropped) == 2
+
+
+def test_a_sparse_tool_input_reads_as_the_full_one():  # step 5b: the model leaves unsaid fields out
+    from api.parse import TOOL, _conform
+    sparse = {"distance": {"value": 5, "unit": "mi"}, "via": [{"name": "Prospect Park", "kind": "place"}],
+              "said": [{"chip": "distance", "words": "5 miles"}]}
+    full = _conform(sparse, TOOL["input_schema"])
+    assert full["distance"] == {"value": 5, "unit": "mi", "max_value": 0}
+    assert full["time"]["kind"] == "none" and full["start"]["kind"] == "none" and full["avoid"] == []
+    assert full["via"] == [{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": ""}]
+    assert full["said"] == [{"chip": "distance", "item": 0, "words": "5 miles"}]
+    assert TOOL["input_schema"]["required"] == []

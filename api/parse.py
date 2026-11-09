@@ -35,7 +35,8 @@ from api.past_routes import FERRY_WORDS
 from api.places import is_streetlike, normalize
 from api.spans import find_span
 
-PROMPT_VERSION = "parse_v6"  # v6 (2026-11-09): a part of a past route to skip is an avoid (H04, decision 038).
+PROMPT_VERSION = "parse_v7"  # v7 (2026-11-09, step 5b): unsaid fields are left out of the tool input.
+# v6: a part of a past route to skip is an avoid (H04, decision 038).
 # v5 records each via's `word` (around or through, decision 035); v4 quoted
 # the runner's words in `said`, for spans. Earlier versions stay in api/prompts/: their calls are in llm_calls by version.
 PROMPT = (Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.md").read_text()
@@ -85,23 +86,28 @@ CANT = {  # what Claude flags -> (gap id, copy key)
 # Nothing here is nullable: "not said" is "none" for an enum, "" for a string, 0 for a number, and kind "none" for an
 # object; _clean turns those back into None. The tool isn't strict: strict mode allows 16 nullable parameters and
 # rejected this schema's compiled grammar as too large (2026-11-06). _conform checks the input against the schema
-# instead, filling what the model left out with "not said" and refusing wrong types.
+# instead, filling what the model left out with "not said" and refusing wrong types. Since step 5b the model leaves
+# unsaid fields out (prompt v7), and the not-said values are only what _conform fills in.
 
 
-def _obj(props: dict) -> dict:
-    return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
+def _obj(props: dict, need: tuple[str, ...] = ()) -> dict:
+    """An object whose unsaid fields may be left out (step 5b: fewer output tokens). Only `need` is required: the
+    fields that make a value mean anything (a place's kind, an avoid's name). _conform fills the rest as not said."""
+    return {"type": "object", "properties": props, "required": list(need), "additionalProperties": False}
 
 
 _ENUM = lambda *v: {"type": "string", "enum": list(v)}  # noqa: E731
 _OPT = lambda *v: _ENUM("none", *v)  # noqa: E731
 _STR, _NUM, _BOOL = {"type": "string"}, {"type": "number"}, {"type": "boolean"}
-_DISTANCE = _obj({"value": _NUM, "unit": _ENUM("mi", "km", "half_marathon", "marathon"), "max_value": _NUM})
+_DISTANCE = _obj({"value": _NUM, "unit": _ENUM("mi", "km", "half_marathon", "marathon"), "max_value": _NUM},
+                 need=("value", "unit"))
 _TIME = _obj({"kind": _OPT("clock", "in_minutes", "morning", "lunch", "after_work", "tonight"),
-              "clock": _STR, "minutes": _NUM})
-_DAY = _obj({"kind": _OPT("today", "tomorrow", "weekday", "date"), "weekday": _OPT(*WEEKDAYS), "date": _STR})
+              "clock": _STR, "minutes": _NUM}, need=("kind",))
+_DAY = _obj({"kind": _OPT("today", "tomorrow", "weekday", "date"), "weekday": _OPT(*WEEKDAYS), "date": _STR},
+            need=("kind",))
 _PLACE = _obj({"kind": _OPT("place", "address", "saved", "here", "neighborhood", "the_park",
                             "subjective"),
-               "name": _STR, "saved_id": _STR, "outside_nyc": _BOOL})
+               "name": _STR, "saved_id": _STR, "outside_nyc": _BOOL}, need=("kind",))
 _PREFS = {
     "mode": _OPT("training", "exploring"), "lights": _OPT("waits", "zigzags"),
     "crowds": _OPT("avoid", "some", "dont_mind"), "scenery": _OPT("park_or_water", "some", "dont_mind"),
@@ -121,18 +127,21 @@ TOOL = {
         "start": _PLACE,
         "end": _PLACE,
         "via": {"type": "array", "items": _obj({"name": _STR, "kind": _ENUM("place", "the_park"),
-                                                "whole_way": _BOOL, "word": _STR})},
-        "avoid": {"type": "array", "items": _obj({"name": _STR, "how": _ENUM("along", "area")})},
+                                                "whole_way": _BOOL, "word": _STR}, need=("name", "kind"))},
+        "avoid": {"type": "array", "items": _obj({"name": _STR, "how": _ENUM("along", "area")},
+                                                 need=("name", "how"))},
         **_PREFS,
         "amenities": {"type": "array", "items": _obj({"kind": _ENUM("restroom", "water"), "at_mile": _NUM,
-                                                      "at_fraction": _NUM})},
+                                                      "at_fraction": _NUM}, need=("kind",))},
         "reuse": _obj({"kind": _OPT("usual", "weekday", "date", "name", "last_week", "last"),
                        "weekday": _OPT(*WEEKDAYS), "date": _STR, "name_words": _STR, "longer": _BOOL,
-                       "reverse": _BOOL}),
-        "second_run": _obj({"present": _BOOL, "distance": _DISTANCE, "day": _DAY, "time": _TIME, "start": _PLACE}),
+                       "reverse": _BOOL}, need=("kind",)),
+        "second_run": _obj({"present": _BOOL, "distance": _DISTANCE, "day": _DAY, "time": _TIME, "start": _PLACE},
+                           need=("present",)),
         "cant": {"type": "array", "items": _ENUM(*CANT)},
         # The runner's exact words behind each chip, quoted (spans; the request screen, 2026-11-08). Code finds them.
-        "said": {"type": "array", "items": _obj({"chip": _ENUM(*SAID_CHIPS), "item": _NUM, "words": _STR})},
+        "said": {"type": "array", "items": _obj({"chip": _ENUM(*SAID_CHIPS), "item": _NUM, "words": _STR},
+                                                need=("chip", "words"))},
     }),
 }
 
