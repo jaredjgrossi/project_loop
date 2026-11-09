@@ -168,8 +168,7 @@ struct RequestField: View {
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Fraunces 24/26 (numeral-l's metrics): the design system's Fraunces size that fits the field.
-    private static let style = TypeStyle.numeralL
+    private static let style = TypeStyle.field
 
     var body: some View {
         let typing = model.stage == .typing
@@ -440,7 +439,7 @@ struct WeatherLine: View {
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(Palette.inkMuted.color)
                     Text(r.temperature)
-                        .typeStyle(.numeralL)
+                        .typeStyle(.numeralS)
                         .foregroundStyle(Palette.inkSoft.color)
                     Text("· " + Self.dayTime(context.date))
                         .typeStyle(.body)

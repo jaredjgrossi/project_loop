@@ -123,8 +123,9 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).
-- **Type.** Only the brief's twelve type styles exist (`TypeStyle`'s initializer is private to
-  `Typography.swift`); the audit and what changed are in `docs/ios-type-audit.md`.
+- **Type.** Only the design system's fourteen type styles exist (the brief's twelve plus `field`,
+  Fraunces 18/24, and `numeral-s`, Fraunces 18/22, from the UI review); `TypeStyle`'s
+  initializer is private to `Typography.swift`. The audit is in `docs/ios-type-audit.md`.
 - **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
   dropped; the flat map stays.
 

@@ -1,14 +1,17 @@
 import XCTest
 @testable import Loop
 
-/// The twelve type styles from ios-build-brief-v1 ("Type styles"). Views can only use these:
-/// TypeStyle's initializer is private to Typography.swift.
+/// The fourteen type styles: the twelve from ios-build-brief-v1 ("Type styles") plus field and
+/// numeral-s (UI review, 2026-11-09). Views can only use these: TypeStyle's initializer is
+/// private to Typography.swift.
 final class TypeStyleTests: XCTestCase {
     func testStylesMatchTheBrief() {
         typealias Spec = (TypeStyle, FontFamily, CGFloat, CGFloat, CGFloat)
         let specs: [(String, Spec)] = [
             ("numeral-xl", (.numeralXL, .fraunces, 56, 56, 380)),
             ("numeral-l", (.numeralL, .fraunces, 24, 26, 400)),
+            ("numeral-s", (.numeralS, .fraunces, 18, 22, 400)),
+            ("field", (.field, .fraunces, 18, 24, 400)),
             ("request", (.request, .fraunces, 27, 31, 400)),
             ("wordmark", (.wordmark, .fraunces, 22, 26, 600)),
             ("body", (.body, .instrumentSans, 16, 22, 400)),
@@ -26,6 +29,10 @@ final class TypeStyleTests: XCTestCase {
             XCTAssertEqual(style.lineHeight, line, name)
             XCTAssertEqual(style.weight, weight, name)
         }
+        XCTAssertEqual(specs.count, 14)
+        // The temperature reads quieter than the wordmark.
+        XCTAssertLessThan(TypeStyle.numeralS.size, TypeStyle.wordmark.size)
+        XCTAssertLessThan(TypeStyle.numeralS.weight, TypeStyle.wordmark.weight)
         XCTAssertEqual(TypeStyle.eyebrow.tracking, 0.12)
         XCTAssertTrue(TypeStyle.eyebrow.uppercase)
         XCTAssertEqual(TypeStyle.mapLabel.tracking, 0.22)

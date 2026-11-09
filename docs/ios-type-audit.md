@@ -1,20 +1,21 @@
 # iPhone type audit (2026-11-09)
 
-Every text element on every screen of the iPhone app, against the twelve type styles in
-`ios-build-brief-v1.md` ("Type styles"). Sizes are point size / line height; weights are the
+Every text element on every screen of the iPhone app, against the design system's fourteen type
+styles: the twelve in `ios-build-brief-v1.md` ("Type styles") plus `field` (Fraunces 18/24) and
+`numeral-s` (Fraunces 18/22), added from the UI review on 2026-11-09. Sizes are point size / line height; weights are the
 variable-font `wght` value. Tracking on numeral-xl (−0.02 em), wordmark (−0.01 em) and body-strong
 (0.01 em) comes from the D mockup.
 
 Since this audit, `TypeStyle`'s initializer is private to `Typography.swift`: a view can only use
-the twelve styles, so an off-list size or family no longer compiles. `TypeStyleTests` pins the
-twelve to the brief.
+the fourteen styles, so an off-list size or family no longer compiles. `TypeStyleTests` pins all
+fourteen, and checks the temperature reads quieter than the wordmark.
 
 | Screen | Element | Style now | Font, size/line, weight | Before |
 |---|---|---|---|---|
 | Landing | Wordmark "Loop" | wordmark | Fraunces 22/26, 600 | same |
-| Landing | Temperature "48°" | numeral-l | Fraunces 24/26, 400 | off-list: Fraunces 18/22 |
+| Landing | Temperature "48°" | numeral-s | Fraunces 18/22, 400 | off-list Fraunces 18/22 (briefly numeral-l 24/26, louder than the wordmark) |
 | Landing | "· Mon 7:02" | body | Instrument Sans 16/22, 400, ink-muted | off-list: Instrument Sans 15/20 |
-| Landing | Field placeholder, typed text, launch example | numeral-l | Fraunces 24/26, 400 | off-list: Fraunces 20/24 |
+| Landing | Field placeholder, typed text, launch example | field | Fraunces 18/24, 400 | off-list Fraunces 20/24 (briefly numeral-l 24/26) |
 | Landing | "YOUR RUNS", "RECENT" | eyebrow | Instrument Sans 11.5/14, 600, 0.12 em, capitals | same |
 | Landing | Tile name ("Usual", "3 mi from here") | label | Instrument Sans 12.5/16, 500 | off-list: Instrument Sans 14/18, 500 |
 | Landing | Tile distance ("3.0 mi") | label | Instrument Sans 12.5/16, 500 | same |
