@@ -1,8 +1,8 @@
 import XCTest
 @testable import Loop
 
-/// The fourteen type styles: the twelve from ios-build-brief-v1 ("Type styles") plus field and
-/// numeral-s (UI review, 2026-11-09). Views can only use these: TypeStyle's initializer is
+/// The twelve type styles: the brief's ("Type styles", ios-build-brief-v1) less data and
+/// data-strong (no JetBrains Mono, calm pass), plus field and numeral-s (UI review, 2026-11-09). Views can only use these: TypeStyle's initializer is
 /// private to Typography.swift.
 final class TypeStyleTests: XCTestCase {
     func testStylesMatchTheBrief() {
@@ -20,8 +20,6 @@ final class TypeStyleTests: XCTestCase {
             ("eyebrow", (.eyebrow, .instrumentSans, 11.5, 14, 600)),
             ("stretch-name", (.stretchName, .instrumentSans, 12, 16, 600)),
             ("map-label", (.mapLabel, .instrumentSans, 11, 14, 500)),
-            ("data", (.data, .jetBrainsMono, 11, 14, 400)),
-            ("data-strong", (.dataStrong, .jetBrainsMono, 12, 16, 500)),
         ]
         for (name, (style, family, size, line, weight)) in specs {
             XCTAssertEqual(style.family, family, name)
@@ -29,7 +27,7 @@ final class TypeStyleTests: XCTestCase {
             XCTAssertEqual(style.lineHeight, line, name)
             XCTAssertEqual(style.weight, weight, name)
         }
-        XCTAssertEqual(specs.count, 14)
+        XCTAssertEqual(specs.count, 12)
         // The temperature reads quieter than the wordmark.
         XCTAssertLessThan(TypeStyle.numeralS.size, TypeStyle.wordmark.size)
         XCTAssertLessThan(TypeStyle.numeralS.weight, TypeStyle.wordmark.weight)

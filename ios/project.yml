@@ -45,7 +45,6 @@ targets:
         UIAppFonts:
           - Fraunces.ttf
           - InstrumentSans.ttf
-          - JetBrainsMono.ttf
         UILaunchScreen:
           UIColorName: LaunchBackground   # map-land, Paper and Night
         UISupportedInterfaceOrientations:

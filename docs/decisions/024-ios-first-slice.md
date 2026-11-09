@@ -123,9 +123,18 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).
-- **Type.** Only the design system's fourteen type styles exist (the brief's twelve plus `field`,
-  Fraunces 18/24, and `numeral-s`, Fraunces 18/22, from the UI review); `TypeStyle`'s
+- **Type.** Only the design system's twelve type styles exist: the brief's without `data` and
+  `data-strong`, plus `field` (Fraunces 18/24) and `numeral-s` (Fraunces 18/22). `TypeStyle`'s
   initializer is private to `Typography.swift`. The audit is in `docs/ios-type-audit.md`.
+- **Calm pass on the route sheet (UI review, 2026-11-09).** No JetBrains Mono (font and licence
+  removed). Trust words are hidden by default: measured values show none, estimates carry "≈",
+  and tapping a number (or the crowd sentence, or a note) shows its trust word and the file's
+  source in a popover; VoiceOver still reads the trust word. This keeps product rule 2 (every
+  fact carries a source and a trust label) one tap away instead of on screen. The crowd line is one
+  sentence, only when a stretch is moderate or busy. No strip legend. "How Loop read it" rows are
+  plain words with no source words and no distance-tolerance row.
+- **Mapbox logo and attribution** fade out while the route sheet is expanded past its open state,
+  where the sheet covers the map.
 - **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
   dropped; the flat map stays.
 
@@ -154,3 +163,5 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   (no recents) is about 290 pt; collapsed, about 120 pt.
 - The Save tile isn't a button yet: what it saves from the landing is undecided.
 - WeatherKit and its required Apple Weather attribution, once the paid program is in place.
+- Mapbox's terms ask for the logo wherever the map shows. It's hidden only while "How Loop read
+  it" covers the map; check this with Mapbox before any public release.

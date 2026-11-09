@@ -226,7 +226,7 @@ struct PlayBuildButton: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill").font(.system(size: 11, weight: .semibold))
-                Text("Replay build").typeStyle(.data)
+                Text("Replay build").typeStyle(.label)
             }
             .foregroundStyle(Palette.inkMuted.color)
             .padding(.horizontal, 12)

@@ -28,7 +28,6 @@
 	<array>
 		<string>Fraunces.ttf</string>
 		<string>InstrumentSans.ttf</string>
-		<string>JetBrainsMono.ttf</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict>

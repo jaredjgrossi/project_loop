@@ -20,5 +20,5 @@ cd ios && xcodebuild -project Loop.xcodeproj -scheme Loop \
 ```
 
 ## Fonts
-Fraunces, Instrument Sans and JetBrains Mono (variable TTFs from google/fonts), each under the
+Fraunces and Instrument Sans (variable TTFs from google/fonts), each under the
 SIL Open Font License 1.1. The licence files sit beside the fonts and ship in the app bundle.

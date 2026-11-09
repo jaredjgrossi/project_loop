@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Elevation line, stretch bars in route colors, mile axis, turnaround tick and the cursor.
+/// Elevation line, stretch bars in route colors, mile axis, turnaround tick and the cursor. No
+/// legend (calm pass, 2026-11-09): the bars use the map's own route colours.
 /// Scrubbing moves the cursor, ticks at each whole mile and selects the nearest mile.
 struct ProfileStrip: View {
     let detail: RouteDetail
@@ -23,7 +24,6 @@ struct ProfileStrip: View {
             let w = geo.size.width
             ZStack(alignment: .topLeading) {
                 Canvas { ctx, size in draw(ctx, width: size.width) }
-                legend(width: w)
                 axis(width: w)
             }
             .contentShape(Rectangle())
@@ -117,24 +117,6 @@ struct ProfileStrip: View {
         }
     }
 
-    /// Legend: only the kinds this route draws ("path" appears only when it has path).
-    private var kindsPresent: [DrawKind] {
-        DrawKind.allCases.filter { k in detail.drawn.contains { $0.kind == k } }
-    }
-
-    private func legend(width w: CGFloat) -> some View {
-        HStack(spacing: 10) {
-            ForEach(kindsPresent, id: \.self) { k in
-                HStack(spacing: 4) {
-                    LegendSwatch(kind: k)
-                    Text(k.legend).typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
-                }
-            }
-        }
-        .frame(width: w, alignment: .trailing)
-        .offset(y: -2)
-    }
-
     private func axis(width w: CGFloat) -> some View {
         var marks: [(String, Double)] = [("0", 0)]
         marks += detail.miles.map { ("\($0.mile)", $0.alongMi) }
@@ -142,7 +124,7 @@ struct ProfileStrip: View {
         return ZStack(alignment: .topLeading) {
             ForEach(marks, id: \.0) { label, mile in
                 Text(label)
-                    .typeStyle(.data)
+                    .typeStyle(.label)
                     .foregroundStyle(Palette.inkMuted.color)
                     .fixedSize()
                     .position(x: labelX(mile, label: label, w), y: 57)
@@ -152,7 +134,7 @@ struct ProfileStrip: View {
     }
 
     private func labelX(_ mile: Double, label: String, _ w: CGFloat) -> CGFloat {
-        let half = CGFloat(label.count) * 3.3
+        let half = CGFloat(label.count) * 3.4
         return min(max(x(mile, w), half), w - half)
     }
 
@@ -181,22 +163,5 @@ struct ProfileStrip: View {
         let names = detail.stripRuns(width: 342).map(\.kind.legend)
         let lo = elevationRange.0, hi = elevationRange.1
         return "Route profile by mile, elevation \(detail.profileTrust.text). Between \(CardText.trimmed(lo.rounded())) and \(CardText.trimmed(hi.rounded())) metres up. Turnaround at mile \(detail.turnaround.map { String(format: "%.2f", $0.alongMi) } ?? "none"). \(names.joined(separator: ", ")). Swipe up or down to change the selected mile."
-    }
-}
-
-/// A short bar in the run's color: solid for waterfront and street, dashed for path.
-private struct LegendSwatch: View {
-    let kind: DrawKind
-    var body: some View {
-        Canvas { ctx, size in
-            var line = Path()
-            line.move(to: CGPoint(x: 0, y: size.height / 2))
-            line.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-            let style = kind == .path
-                ? StrokeStyle(lineWidth: 4, lineCap: .butt, dash: [4, 2.5])
-                : StrokeStyle(lineWidth: 4, lineCap: .round)
-            ctx.stroke(line, with: .color(Palette.drawColor(kind).color), style: style)
-        }
-        .frame(width: kind == .path ? 14.5 : 12, height: 8)
     }
 }

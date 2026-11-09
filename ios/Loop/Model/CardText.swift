@@ -47,61 +47,46 @@ enum CardText {
         let value: String
         let label: String
         let trust: Trust
+        var source: String? = nil
+        /// As shown: "≈ 8 m" for an estimate, the bare value when measured.
+        var shown: String { CardText.approx(value, trust) }
     }
 
     static func stats(_ s: RouteFile.Summary) -> [Stat] {
         [
-            Stat(value: oneDecimal(s.lightsPerMile.value), label: "lights a mile", trust: Trust(s.lightsPerMile.status)),
-            Stat(value: "\(Int(s.waterfrontPct.value.rounded()))%", label: "waterfront", trust: Trust(s.waterfrontPct.status)),
-            Stat(value: "\(trimmed(s.climb.value)) m", label: "climb", trust: Trust(s.climb.status)),
+            Stat(value: oneDecimal(s.lightsPerMile.value), label: "lights a mile", trust: Trust(s.lightsPerMile.status), source: s.lightsPerMile.source),
+            Stat(value: "\(Int(s.waterfrontPct.value.rounded()))%", label: "waterfront", trust: Trust(s.waterfrontPct.status), source: s.waterfrontPct.source),
+            Stat(value: "\(trimmed(s.climb.value)) m", label: "climb", trust: Trust(s.climb.status), source: s.climb.source),
         ]
     }
 
-    /// "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate"
-    /// Names stretches, not percentages. Only the busiest band present is named (high "busy",
-    /// medium "moderate", low "quiet"), then the stretches with no crowd data by bare name,
-    /// longest first, at most two names per part. Out-and-back repeats of a street count once.
-    static func crowdLine(_ d: RouteDetail, startTime: String) -> String {
-        func names(_ stretches: [Stretch], bare: Bool = false) -> [String] {
+    /// Trust words are hidden by default: estimates get "≈ " before the number, measured values nothing.
+    static func approx(_ value: String, _ trust: Trust?) -> String {
+        trust?.isEstimate == true ? "≈ " + value : value
+    }
+
+    /// One sentence, only when a stretch is moderate or busy at the start time: "Busier on E 31st St
+    /// around 7." Names the busiest band present (busy, else moderate), longest first, at most two.
+    /// nil when every scored stretch is quiet or nothing is scored: then the sheet shows no line.
+    static func crowdSentence(_ d: RouteDetail, startTime: String) -> String? {
+        for band in ["high", "medium"] {
+            let hits = d.stretches.filter { $0.crowd == band }
+            guard !hits.isEmpty else { continue }
             var total: [String: Double] = [:]
             var order: [String] = []
-            for s in stretches {
-                let n = bare ? bareName(s.name) : shortName(s.name)
+            for s in hits {
+                let n = shortName(s.name)
                 if total[n] == nil { order.append(n) }
                 total[n, default: 0] += s.lengthM
             }
-            return order.sorted { total[$0]! > total[$1]! }
+            let names = order.sorted { total[$0]! > total[$1]! }.prefix(2).joined(separator: " and ")
+            return "Busier on \(names) around \(hourText(startTime))."
         }
-        func list(_ n: [String]) -> String {
-            let shown = Array(n.prefix(2))
-            let rest = n.count - shown.count
-            let joined = shown.joined(separator: " and ")
-            return rest > 0 ? "\(joined) and \(rest) more" : joined
-        }
-        var parts = ["Crowds at \(startTime)"]
-        let scored = d.stretches.filter { $0.crowd != nil }
-        for (band, word) in [("high", "busy"), ("medium", "moderate"), ("low", "quiet")] {
-            let hits = scored.filter { $0.crowd == band }
-            if !hits.isEmpty { parts.append("\(word) on \(list(names(hits)))"); break }
-        }
-        let unscored = d.stretches.filter { $0.crowd == nil }
-        if !unscored.isEmpty { parts.append("\(list(names(unscored, bare: true))) not scored") }
-        parts.append(Trust(d.summary.crowds.status).text)
-        return parts.joined(separator: " · ")
+        return nil
     }
 
-    /// Breaks a " · " line into lines of at most `maxChars`, only at the separators.
-    static func wrapAtSeparators(_ line: String, maxChars: Int) -> [String] {
-        var lines: [String] = []
-        var current = ""
-        for part in line.components(separatedBy: " · ") {
-            let candidate = current.isEmpty ? part : current + " · " + part
-            if candidate.count <= maxChars || current.isEmpty { current = candidate }
-            else { lines.append(current); current = part }
-        }
-        if !current.isEmpty { lines.append(current) }
-        return lines
-    }
+    /// "7:00" → "7", "7:30" → "7:30".
+    static func hourText(_ t: String) -> String { t.hasSuffix(":00") ? String(t.dropLast(3)) : t }
 
     /// The shortest recognisable name: "East River Esplanade" → "esplanade", "FDR Drive" → "FDR",
     /// "East 31st Street" → "E 31st".

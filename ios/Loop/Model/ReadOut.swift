@@ -62,10 +62,8 @@ struct ReadOut: Equatable {
         if start == nil {
             r.filled.append(Filled(field: "start", main: "Starting where you are", detail: "Kips Bay Library", source: "default"))
         }
-        r.filled.append(Filled(field: "mode", main: "\(req.mode): fewer lights, fewer crowds, fewer turns", detail: "", source: "preset"))
-        let miles = r.understood.first { $0.field == "distance" }?.value ?? "the distance"
-        r.filled.append(Filled(field: "tolerance", main: "Within 5% of \(miles)", detail: "", source: "default"))
-        r.filled.append(Filled(field: "shape", main: "Any shape: a loop or out and back", detail: "", source: "default"))
+        r.filled.append(Filled(field: "mode", main: "\(req.mode): fewer lights, crowds and turns", detail: "", source: "preset"))
+        r.filled.append(Filled(field: "shape", main: "Any shape, a loop or out and back", detail: "", source: "default"))
         return r
     }
 }

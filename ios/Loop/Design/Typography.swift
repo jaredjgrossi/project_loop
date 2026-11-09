@@ -1,15 +1,15 @@
 import SwiftUI
 import UIKit
 
-/// The three bundled variable fonts (SIL OFL 1.1; licence files ship in the app bundle).
+/// The two bundled variable fonts (SIL OFL 1.1; licence files ship in the app bundle). JetBrains
+/// Mono was removed in the calm pass (UI review, 2026-11-09).
 enum FontFamily {
-    case fraunces, instrumentSans, jetBrainsMono
+    case fraunces, instrumentSans
 
     var postScriptName: String {
         switch self {
         case .fraunces: return "Fraunces-Regular"
         case .instrumentSans: return "InstrumentSans-Regular"
-        case .jetBrainsMono: return "JetBrainsMono-Regular"
         }
     }
 }
@@ -84,9 +84,9 @@ struct TypeStyle {
     var lineSpacing: CGFloat { max(0, lineHeight * Self.scale - uiFont.lineHeight) }
 }
 
-/// The design system's fourteen type styles: the brief's twelve ("Type styles", ios-build-brief-v1)
-/// plus field and numeral-s (UI review, 2026-11-09). Tracking on numeral-xl, wordmark and
-/// body-strong is the D mockup's.
+/// The design system's twelve type styles: the brief's ("Type styles", ios-build-brief-v1) less
+/// data and data-strong (no mono in the app), plus field and numeral-s (UI review, 2026-11-09).
+/// Tracking on numeral-xl, wordmark and body-strong is the D mockup's.
 extension TypeStyle {
     static let numeralXL = TypeStyle(family: .fraunces, size: 56, lineHeight: 56, weight: 380, tracking: -0.02, tabularNumerals: true)
     static let numeralL = TypeStyle(family: .fraunces, size: 24, lineHeight: 26, weight: 400, tabularNumerals: true)
@@ -102,8 +102,6 @@ extension TypeStyle {
     static let eyebrow = TypeStyle(family: .instrumentSans, size: 11.5, lineHeight: 14, weight: 600, tracking: 0.12, uppercase: true)
     static let stretchName = TypeStyle(family: .instrumentSans, size: 12, lineHeight: 16, weight: 600)
     static let mapLabel = TypeStyle(family: .instrumentSans, size: 11, lineHeight: 14, weight: 500, tracking: 0.22, uppercase: true)
-    static let data = TypeStyle(family: .jetBrainsMono, size: 11, lineHeight: 14, weight: 400)
-    static let dataStrong = TypeStyle(family: .jetBrainsMono, size: 12, lineHeight: 16, weight: 500)
 }
 
 extension View {
@@ -122,8 +120,6 @@ enum Metrics {
     static let radiusBar: CGFloat = 3, radiusThumb: CGFloat = 8, radiusButton: CGFloat = 14, radiusSheet: CGFloat = 24
     static let sheetCollapsed: CGFloat = 216
     static let sheetOpen: CGFloat = 398
-    /// The crowd sentence: two data lines at 16 pt, as in the mockup.
-    static let dataLinesHeight: CGFloat = 32
     static let selectedMileMarker: CGFloat = 30
     static let routeCasing: CGFloat = 10
     static let minTap: CGFloat = 44

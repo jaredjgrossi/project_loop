@@ -73,7 +73,7 @@ struct EditorPanel: View {
             Text(understood?.value ?? filled?.detail ?? "")
                 .typeStyle(.body).foregroundStyle(Palette.ink.color)
             Text("Choosing another start comes with place search.")
-                .typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                .typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
         default:
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(options, id: \.self) { o in

@@ -50,6 +50,7 @@ struct RouteMapView: UIViewRepresentable {
         c.reduceMotion = reduceMotion
         c.setDark(colorScheme == .dark)
         c.setBottomInset(Self.ornamentInset(model))
+        c.setOrnamentAlpha(Self.ornamentAlpha(model))
         c.handle(model.cameraRequest)
     }
 
@@ -60,6 +61,12 @@ struct RouteMapView: UIViewRepresentable {
         if model.sheetShown { return model.sheet.height }
         let beforeLanding = model.stage == .logo || (model.stage == .landing && !model.landingShown)
         return beforeLanding ? max(model.landing.height, model.landing.openHeight) : model.landing.height
+    }
+
+    /// Hidden while the route sheet is expanded past its open state ("How Loop read it" covers
+    /// the map): they fade out over that stretch of the drag and back in below it.
+    @MainActor static func ornamentAlpha(_ model: MainModel) -> CGFloat {
+        model.sheetShown ? 1 - model.sheet.readProgress : 1
     }
 
     static func dismantleUIView(_ uiView: MapView, coordinator: Coordinator) {
@@ -107,6 +114,7 @@ struct RouteMapView: UIViewRepresentable {
             model.sheet.onHeightChange = { [weak self, weak model] h in
                 guard let model, model.sheetShown else { return }
                 self?.setBottomInset(h)
+                self?.setOrnamentAlpha(RouteMapView.ornamentAlpha(model))
             }
             model.landing.onHeightChange = { [weak self, weak model] _ in
                 guard let model, !model.sheetShown else { return }
@@ -429,6 +437,13 @@ struct RouteMapView: UIViewRepresentable {
             guard let map = mapView?.mapboxMap else { return }
             model.cameraDidChange(zoom: map.cameraState.zoom)
             updateRoadLabels()
+        }
+
+        func setOrnamentAlpha(_ alpha: CGFloat) {
+            guard let mapView, mapView.ornaments.logoView.alpha != alpha else { return }
+            mapView.ornaments.logoView.alpha = alpha
+            mapView.ornaments.attributionButton.alpha = alpha
+            mapView.ornaments.attributionButton.isUserInteractionEnabled = alpha > 0.5
         }
 
         func setBottomInset(_ inset: CGFloat) {

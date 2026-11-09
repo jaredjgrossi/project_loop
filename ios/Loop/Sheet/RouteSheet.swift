@@ -152,24 +152,23 @@ struct OpenSection: View {
                     .padding(.top, 12)
                 StatRow(stats: CardText.stats(detail.summary))
                     .padding(.top, 10)
-                let crowd = CardText.crowdLine(detail, startTime: model.data.request.startHourText)
-                VStack(alignment: .leading, spacing: 2) {
-                    // 11 pt mono fits about 50 characters across the sheet; wrap only at " · ".
-                    ForEach(Array(CardText.wrapAtSeparators(crowd, maxChars: 50).prefix(2).enumerated()), id: \.offset) {
-                        Text($0.element)
+                // One sentence, only when a stretch is moderate or busy; otherwise no line.
+                if let crowd = CardText.crowdSentence(detail, startTime: model.data.request.startHourText) {
+                    let trust = Trust(detail.summary.crowds.status)
+                    TrustTap(trust: trust, source: detail.summary.crowds.source) {
+                        Text(crowd)
+                            .typeStyle(.body)
+                            .foregroundStyle(Palette.inkSoft.color)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .padding(.top, 10)
+                    .accessibilityLabel("\(crowd) \(trust.text)")
                 }
-                .typeStyle(.data)
-                .foregroundStyle(Palette.inkMuted.color)
-                .lineLimit(1)
-                .frame(height: Metrics.dataLinesHeight, alignment: .topLeading)
-                .padding(.top, 8)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(crowd)
             }
         } else if model.cardRevealed {
             Text("Details for this route aren't in the saved file.")
-                .typeStyle(.data)
+                .typeStyle(.label)
                 .foregroundStyle(Palette.inkMuted.color)
                 .padding(.top, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,23 +194,19 @@ struct CardBlock: View {
             Group {
                 if model.cardRevealed, let shown = model.shown {
                     VStack(alignment: .leading, spacing: 0) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(CardText.distance(shown.distanceMi))
-                                .typeStyle(.numeralXL)
-                                .foregroundStyle(Palette.ink.color)
-                            Text("mi")
-                                .typeStyle(.numeralL)
-                                .foregroundStyle(Palette.unitInk.color)
-                            // Only the file's own label, never a default.
-                            if let trust = shown.distanceTrust {
-                                Text(trust.text)
-                                    .typeStyle(.data)
-                                    .foregroundStyle(Palette.inkMuted.color)
+                        // No trust word beside "mi": tapping the distance shows it (and the source).
+                        TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
+                                    .typeStyle(.numeralXL)
+                                    .foregroundStyle(Palette.ink.color)
+                                Text("mi")
+                                    .typeStyle(.numeralL)
+                                    .foregroundStyle(Palette.unitInk.color)
                             }
                         }
                         .frame(height: 56)
                         .padding(.top, 2)
-                        .accessibilityElement(children: .ignore)
                         .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
@@ -250,8 +245,8 @@ struct CardBlock: View {
     }
 }
 
-/// "How Loop read it" (UI chat, 2026-11-08): can't-do lines first, then what Loop filled in (each
-/// line opens the editor), then notes with their trust word. What the runner said isn't repeated:
+/// "How Loop read it" (UI chat, 2026-11-08; calm pass 2026-11-09): can't-do lines first, then what
+/// Loop filled in in plain words (each line opens the editor), then notes (trust word on tap). What the runner said isn't repeated:
 /// it's underlined in the sentence.
 struct ReadItSection: View {
     let model: MainModel
@@ -271,14 +266,15 @@ struct ReadItSection: View {
                     .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineHairline.color).frame(height: 1) }
                 }
                 if !r.filled.isEmpty {
-                    Text("Loop filled in").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 14)
+                    // What Loop filled in, in plain words: no heading, no source words.
                     ForEach(r.filled) { f in
                         Button { model.openEditor(.filled(f.field)) } label: {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(f.main).typeStyle(.body).foregroundStyle(Palette.ink.color)
-                                    Text([f.detail, f.source].filter { !$0.isEmpty }.joined(separator: " · "))
-                                        .typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                                    if !f.detail.isEmpty {
+                                        Text(f.detail).typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
+                                    }
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
@@ -293,9 +289,15 @@ struct ReadItSection: View {
                     }
                 }
                 if !r.notes.isEmpty {
-                    Text("Notes").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 14)
+                    Text("Notes").typeStyle(.label).foregroundStyle(Palette.inkMuted.color).padding(.top, 14)
+                    // Each note's trust word shows on tap, like the numbers.
                     ForEach(r.notes, id: \.key) { n in
-                        Text("\(n.text) · \(n.trust)").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 6)
+                        TrustTap(trust: Trust(n.trust), source: nil) {
+                            Text(n.text).typeStyle(.label).foregroundStyle(Palette.inkSoft.color)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.top, 6)
+                        .accessibilityLabel("\(n.text), \(Trust(n.trust).text)")
                     }
                 }
             }
@@ -305,24 +307,61 @@ struct ReadItSection: View {
     }
 }
 
-/// Value (Fraunces, tabular), label, trust label: three columns.
+/// Value (Fraunces, tabular; "≈" for an estimate) over its label: three columns. The trust word
+/// and source show on tap.
 struct StatRow: View {
     let stats: [CardText.Stat]
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             ForEach(stats, id: \.label) { s in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(s.value).typeStyle(.numeralL).foregroundStyle(Palette.ink.color)
-                    Text(s.label).typeStyle(.label).foregroundStyle(Palette.inkSoft.color)
-                    Text(s.trust.text).typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                TrustTap(trust: s.trust, source: s.source) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(s.shown).typeStyle(.numeralL).foregroundStyle(Palette.ink.color)
+                        Text(s.label).typeStyle(.label).foregroundStyle(Palette.inkSoft.color)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(s.value) \(s.label), \(s.trust.text)")
             }
         }
-        .frame(height: 58, alignment: .top)
+        .frame(height: 44, alignment: .top)
+    }
+}
+
+/// Trust words are hidden by default (UI review, 2026-11-09): tapping a number, or a crowd or note
+/// line, shows its trust word and the file's source in a small popover.
+struct TrustTap<Content: View>: View {
+    let trust: Trust?
+    let source: String?
+    @ViewBuilder let content: Content
+    @State private var shown = false
+
+    var body: some View {
+        if let trust {
+            Button { shown = true } label: { content.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .popover(isPresented: $shown, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(trust.text.prefix(1).uppercased() + trust.text.dropFirst())
+                            .typeStyle(.label).foregroundStyle(Palette.ink.color)
+                        if let source, !source.isEmpty {
+                            Text(source)
+                                .typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(14)
+                    .frame(width: 260, alignment: .leading)
+                    .presentationCompactAdaptation(.popover)
+                    .presentationBackground(Palette.surfaceSheet.color)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Shows how this was worked out")
+        } else {
+            content
+        }
     }
 }
 

@@ -31,13 +31,24 @@ final class CardTextTests: XCTestCase {
     func testWholeRouteLinesFromFixture() throws {
         let data = try LoopData(file: RouteFile.loadBundled())
         let s = data.candidate(rank: 1)!.detail!.summary
-        XCTAssertEqual(CardText.stats(s), [
-            .init(value: "3.6", label: "lights a mile", trust: Trust("measured")),
-            .init(value: "51%", label: "waterfront", trust: Trust("measured")),
-            .init(value: "8 m", label: "climb", trust: Trust("estimate")),
-        ])
-        XCTAssertEqual(CardText.crowdLine(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),
-                       "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate")
+        let stats = CardText.stats(s)
+        XCTAssertEqual(stats.map(\.value), ["3.6", "51%", "8 m"])
+        XCTAssertEqual(stats.map(\.label), ["lights a mile", "waterfront", "climb"])
+        XCTAssertEqual(stats.map(\.trust.raw), ["measured", "measured", "estimate"])
+        // Trust words hidden: measured values bare, estimates with "≈".
+        XCTAssertEqual(stats.map(\.shown), ["3.6", "51%", "≈ 8 m"])
+        XCTAssertTrue(stats.allSatisfy { $0.source?.isEmpty == false }, "every number keeps its source for the popover")
+        // One sentence, only for moderate or busy stretches.
+        XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),
+                       "Busier on E 31st St around 7.")
+    }
+
+    func testApproxAndHour() {
+        XCTAssertEqual(CardText.approx("3.03", Trust("measured")), "3.03")
+        XCTAssertEqual(CardText.approx("8 m", Trust("estimate")), "≈ 8 m")
+        XCTAssertEqual(CardText.approx("3.03", nil), "3.03")
+        XCTAssertEqual(CardText.hourText("7:00"), "7")
+        XCTAssertEqual(CardText.hourText("7:30"), "7:30")
     }
 
     func testRequestCard() throws {
@@ -45,15 +56,6 @@ final class CardTextTests: XCTestCase {
         XCTAssertEqual(data.request.text, "3 miles from the Kips Bay Library at 7 am.")
         XCTAssertEqual(data.request.provenance, "3 mi · 7:00 am you said · Training preset")
         XCTAssertEqual(data.request.mode, "Training")
-    }
-
-    func testWrapAtSeparators() {
-        let line = "Crowds at 7:00 · moderate on E 31st St · esplanade and FDR not scored · estimate"
-        XCTAssertEqual(CardText.wrapAtSeparators(line, maxChars: 50), [
-            "Crowds at 7:00 · moderate on E 31st St",
-            "esplanade and FDR not scored · estimate",
-        ])
-        XCTAssertEqual(CardText.wrapAtSeparators("a · b", maxChars: 50), ["a · b"])
     }
 
     func testShortNames() {
@@ -99,7 +101,9 @@ final class ReadOutTests: XCTestCase {
         XCTAssertEqual(r.understood[0].value, "3 mi")
         XCTAssertEqual(r.cant.map(\.gap), ["G9"])
         XCTAssertEqual(r.filled.first?.main, "Starting where you are")
-        XCTAssertTrue(r.filled.contains { $0.main == "Within 5% of 3 mi" && $0.source == "default" })
+        XCTAssertEqual(r.filled.map(\.main), ["Starting where you are", "Training: fewer lights, crowds and turns",
+                                               "Any shape, a loop or out and back"])
+        XCTAssertFalse(r.filled.contains { $0.field == "tolerance" }, "no distance-tolerance row")
     }
 
     func testStartPlaceStopsAtTheName() throws {

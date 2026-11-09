@@ -93,7 +93,7 @@ struct MileMarkButton: View {
     var body: some View {
         Button(action: action) {
             Text("\(mile)")
-                .typeStyle(.data)
+                .typeStyle(.label)
                 .foregroundStyle(Palette.ink.color)
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(Palette.surfaceSheet.color))
