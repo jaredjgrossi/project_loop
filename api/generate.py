@@ -31,6 +31,7 @@ from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
+from api.along import runs_along
 from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
@@ -238,6 +239,7 @@ class _Rules:
     # step 9: (GeoJSON shape, meters, None) the route must pass, each one; decision 035: (ring, meters, share) a lap
     # it must run along
     through: tuple[tuple[dict, float, float | None], ...] = ()
+    along: tuple = ()  # step 8b: streets (along.Along) a route may cross but not run along
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -260,6 +262,8 @@ def _evaluate(
         return Rejection(method, label, "no_go_zone")
     if passed(route.coordinates, rules.closures):  # decision 017: a hard rule, like a no-go zone
         return Rejection(method, label, "closure")
+    if rules.along and runs_along(route.coordinates, rules.along):  # step 8b (decision 036)
+        return Rejection(method, label, "runs_along")
     for shape, tol, share in rules.through:  # step 9: through or along every via place; 035: a lap of each ring
         if share is None and not passes_through(route.coordinates, shape, tol):
             return Rejection(method, label, "misses_via")
@@ -489,10 +493,11 @@ def generate_loops(
     only_anchored: bool = False,
     extra_jobs: Callable[["_Rules"], list[tuple[int, Callable]]] | None = None,
     through: Sequence[tuple[dict, float, float | None]] = (),
+    along: Sequence = (),  # step 8b: streets not to run along (along.Along)
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through))
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along))
     notes: list[str] = []
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:

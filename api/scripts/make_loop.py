@@ -175,10 +175,13 @@ def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable,
             _Reused(partial(request_round_trip, custom_model=model)))
 
 
-def routers_for(zones: list[NoGoZone], lights: Lights, closures=()) -> tuple[Callable, Callable, Callable]:
+def routers_for(zones: list[NoGoZone], lights: Lights, closures=(), alongs=()) -> tuple[Callable, Callable, Callable]:
     """Route, round-trip and feature-area route functions for a runner: a signal penalty in every request when they
-    wait at lights, none when they zig-zag (decision 015), and around reported closures (decision 017)."""
-    extra = _merged(signal_penalty_model() if lights == Lights.WAITS else None, closures_model(closures))
+    wait at lights, none when they zig-zag (decision 015), around reported closures (decision 017), and off the
+    streets they won't run along (decision 036)."""
+    from api.along import custom_model as along_model
+    extra = _merged(signal_penalty_model() if lights == Lights.WAITS else None, closures_model(closures),
+                    along_model(alongs))
     route_fn, round_trip_fn = routers(zones, extra)
     return route_fn, round_trip_fn, area_router(zones, extra)
 

@@ -7,7 +7,8 @@
   "context": "C1",
   "text": "I want to head out for a run, please avoid the chaos of 42nd st",
   "tags": [
-    "lookup"
+    "lookup",
+    "engine"
   ],
   "needs": [],
   "doc": "PARSE · avoid_places=[\"42nd St\" (along)] (said) · crowds=avoid (said) · distance_mi=3.1 (usual) · use_my_location (default)",

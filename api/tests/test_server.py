@@ -237,11 +237,19 @@ def test_bad_constraints_are_a_bad_request():
 
 def test_what_the_engine_cant_build_yet_is_a_cant_line_and_no_routes():
     eng = FakeEngine()
+    c, _ = client_for({"same as Tuesday": IDEAL["H01"]}, engine=eng)  # past routes: step 10
+    evs = post(c, body("H01", text="same as Tuesday"))
+    assert [e["event"] for e in evs] == ["parsed", "done"]
+    assert [x["gap"] for x in evs[0]["cant"]] == ["later"] and "past route" in evs[0]["cant"][0]["text"]
+    assert eng.calls == []
+
+
+def test_an_along_avoid_builds():  # step 8b (decision 036)
+    eng = FakeEngine()
     c, _ = client_for({"6 miles, avoid 1st ave by the hospitals": IDEAL["P23"]}, engine=eng)
     evs = post(c, body("P23", text="6 miles, avoid 1st ave by the hospitals"))
-    assert [e["event"] for e in evs] == ["parsed", "done"]
-    assert [x["gap"] for x in evs[0]["cant"]] == ["later"] and "along a street" in evs[0]["cant"][0]["text"]
-    assert eng.calls == []
+    assert [e["event"] for e in evs][:2] == ["parsed", "top3"] and evs[-1]["event"] == "done"
+    assert evs[0]["cant"] == [] and len(eng.calls) == 1
 
 
 def test_hills_are_built_with_a_cant_line():
@@ -306,9 +314,9 @@ def test_answers_and_chip_edits_are_stored_with_their_kind():
 
 def test_a_question_or_a_blocked_build_stores_nothing():
     routes = FakeRouteStore()
-    c, _ = client_for({"exploring run": IDEAL["R06"], "avoid 1st ave": IDEAL["P23"]}, route_store=routes)
+    c, _ = client_for({"exploring run": IDEAL["R06"], "same as Tuesday": IDEAL["H01"]}, route_store=routes)
     post(c, body("R06", text="exploring run"))
-    post(c, body("P23", text="avoid 1st ave"))
+    post(c, body("H01", text="same as Tuesday"))
     assert routes.rows == {}
 
 

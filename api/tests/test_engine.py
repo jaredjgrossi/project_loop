@@ -45,8 +45,7 @@ def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
     assert before_build(a_to_b, zones=[]) == ([], False)  # step 8 builds it
     lines, blocked = before_build(rc(hills="avoid"), zones=[])
     assert [x["key"] for x in lines] == ["hills"] and not blocked
-    lines, blocked = before_build(rc(avoid_places=[{"name": "1st Ave", "how": "along"}]), zones=[])
-    assert [x["key"] for x in lines] == ["avoid_along"] and blocked
+    assert before_build(rc(avoid_places=[{"name": "1st Ave", "how": "along"}]), zones=[]) == ([], False)  # step 8b
     assert before_build(rc(), zones=[]) == ([], False)
 
 

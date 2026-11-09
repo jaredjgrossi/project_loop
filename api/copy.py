@@ -160,7 +160,6 @@ TEMPLATES: dict[str, str] = {
     "cant.G9": "Can't plan around street lighting or safety yet",
     "cant.bike_lanes": "Can't avoid bike lanes yet",
     # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
-    "cant.later.avoid_along": "Can't avoid running along a street yet, so no routes were built",
     "cant.later.reuse_route_id": "Can't rebuild a past route yet, so no routes were built",
     "cant.later.hills": "Can't score hills yet; these routes ignore them",
     "cant.later.planned": "Can't plan the second run yet; only the first was built",
@@ -174,6 +173,7 @@ TEMPLATES: dict[str, str] = {
     "note.distance_off.short": "No route came within {tolerance}% of {miles} mi. The closest is {actual} mi, {pct}% short.",
     "note.distance_off.long": "No route came within {tolerance}% of {miles} mi. The closest is {actual} mi, {pct}% long.",
     "note.no_route": "Couldn't build a route from this start. Try another start or distance.",
+    "note.avoid_not_found": "Couldn't find {name} near the start, so these routes don't avoid it",
 
     # Errors
     "error.parse_failed": "Couldn't read that request. Try saying it another way.",

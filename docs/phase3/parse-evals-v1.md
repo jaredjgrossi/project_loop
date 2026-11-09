@@ -171,11 +171,11 @@ PARSE · `start_place=place:"Grand Army Plaza" (Brooklyn, said)` · `via_places=
 Must not: use the usual 3.1 mi; the lap sets the length (R20). End to end, a full lap of the Prospect Park drive and back to the plaza.
 
 ### E. Avoid
-**R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup]
+**R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup] [engine]
 PARSE · `avoid_places=["42nd St" (along)] (said)` · `crowds=avoid (said)` · `distance_mi=3.1 (usual)` · `use_my_location (default)`
 Must not: block crossing 42nd St (R15).
 
-**P23** · C1 · `6 miles, avoid 1st ave by the hospitals`
+**P23** · C1 · `6 miles, avoid 1st ave by the hospitals` · [engine]
 PARSE · `distance_mi=6 (said)` · `avoid_places=[1st Ave (along), a stretch inside E 23rd–E 34th St] (said)`
 Must not: avoid all of 1st Ave. Loosened 2026-11-08: where the hospital stretch starts is a judgment (the VA is at E 23rd–25th St, Bellevue from E 26th).
 

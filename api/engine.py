@@ -32,7 +32,7 @@ from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
-BLOCKING = ("avoid_along", "reuse_route_id")
+BLOCKING = ("reuse_route_id",)
 # These leave a buildable run: hills aren't scored (step 9) and the second run isn't planned (step 10). The first run
 # is built, with a can't-do line.
 TOP_N = 3
@@ -201,6 +201,21 @@ def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
             "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
 
 
+def db_alongs_near(names: list[str], near: tuple[float, float]):
+    """The streets and stretches not to run along, from the places table near the start (step 8b)."""
+    from api.along import db_alongs
+    from etl.load import database_url
+
+    with psycopg.connect(database_url()) as conn:
+        return db_alongs(names, near, conn)
+
+
+def along_notes(lost: list[str]) -> list[dict]:
+    """Rule 3: a street Loop couldn't find near the start isn't avoided, and the runner is told."""
+    return [{"id": f"n_a{i}", "key": "avoid_not_found", "trust": "listed",
+             "text": render("note.avoid_not_found", name=name)} for i, name in enumerate(lost, 1)]
+
+
 def distance_notes(rc: RunConstraints, chosen: list[Candidate], within: bool) -> list[dict]:
     """Rule 3: a miss is said, with the nearest route and how far off it is."""
     if not chosen:
@@ -244,6 +259,7 @@ class Engine:
     ready_fn: Callable[[], bool] = graphhopper_ready
     routers_fn: Callable = ml.routers_for  # (zones, lights, closures) -> route, round-trip and area routers
     vias_fn: Callable = db_vias  # via PlaceRefs -> [Via] with their shapes
+    alongs_fn: Callable = None  # (names, (lat, lon)) -> ([along.Along], names not found); default db_alongs_near
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
@@ -268,7 +284,15 @@ class Engine:
                 closures = list({c.id: c for c in [*closures, *self.closures_fn(*end, reach_mi)]}.values())
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
-        route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures)
+        along_names = [a.name for a in rc.avoid_places if a.how == "along"]
+        try:
+            alongs, lost = (self.alongs_fn or db_alongs_near)(along_names, (start.lat, start.lon)) \
+                if along_names else ([], [])
+        except psycopg.Error as exc:
+            raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures,
+                                                           **({"alongs": alongs} if alongs else {}))
+        along_kw = {"along": alongs} if alongs else {}  # step 8b: crossing is fine, running along isn't
         try:
             vias = self.vias_fn(rc.via_places) if rc.via_places else []
         except psycopg.Error as exc:
@@ -312,7 +336,7 @@ class Engine:
                     prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn, anchor_fn=self.anchor_fn,
                     feature_anchor_fn=self.feature_anchor_fn, area_route_fn=area_fn if self.feature_anchor_fn else None,
                     on_top3=on_top3, on_candidate=on_candidate, vias=tour(here, vias, end)[1:-1],
-                    through=through)
+                    through=through, **along_kw)
             elif vias:  # through or along named places, back to the start (step 9)
                 sources = self.feature_anchor_fn or []
                 sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
@@ -323,14 +347,14 @@ class Engine:
                     anchor_fn=None, feature_anchor_fn=[features_on_vias(f, passed) for f in sources] if passed else [],
                     area_route_fn=area_fn if sources and passed else None, on_top3=on_top3, on_candidate=on_candidate,
                     only_anchored=True, extra_jobs=via_jobs(here, vias, miles, route_fn, shortest, rc.shape),
-                    through=through)
+                    through=through, **along_kw)
             else:
                 result = self.generate_fn(
                     start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
                     shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
                     anchor_fn=self.anchor_fn, feature_anchor_fn=self.feature_anchor_fn,
                     area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3,
-                    on_candidate=on_candidate)
+                    on_candidate=on_candidate, **along_kw)
         except RoutingError as exc:
             raise EngineUnavailable(f"GraphHopper: {exc}") from exc
         except psycopg.Error as exc:
@@ -342,5 +366,5 @@ class Engine:
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
                 "routes": [entry(r, c, key(c)) for r, c in enumerate(chosen, 1)], "route": route,
                 "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of},
-                "notes": distance_notes(rc, chosen, result.within_tolerance),
+                "notes": distance_notes(rc, chosen, result.within_tolerance) + along_notes(lost),
                 "timing": result.timing}

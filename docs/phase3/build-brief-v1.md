@@ -79,7 +79,7 @@ Add a small command-line client that prints the events, for testing without the 
 
 **8. Via.** Route through or along `via_places`, reusing the corridor-anchored generators. "The whole way" stays a can't-do line. If a via point is too far for the distance, the engine asks. Done: R02 (after its answer), R03 (the engine asks), R09 (after its answer), P49. Built (decision 034): `api/via.py`; route evals in `evals/routes/test_via.py`. Around or through (added by Jared, 2026-11-09; decision 035): a via is passed or lapped. "Around", "loop of" and "lap of" run a full lap; four known running loops (`etl/curated/running_loops.json`) mean their lap when named on their own; the lap counts toward the distance. R02 becomes a full Reservoir lap between 86th St (west) and Central Park South; P50 ("Loop of Prospect Park from Grand Army Plaza") joins the parse and route evals.
 
-**8b. "Along" avoids (added by Jared, 2026-11-06).** Make running along a named street, or a named stretch such as "1st Ave, E 26th–E 34th St", costly in the router, while crossings stay cheap. Done: R07 and P23 work end to end, with a route eval for each.
+**8b. "Along" avoids (added by Jared, 2026-11-06).** Make running along a named street, or a named stretch such as "1st Ave, E 26th–E 34th St", costly in the router, while crossings stay cheap. Done: R07 and P23 work end to end, with a route eval for each. Built (decision 036): `api/along.py`; route evals in `evals/routes/test_along.py`.
 
 **9. Hills.** A `hills` preference scored from the elevation every 0.1 mi (measured), with a provisional weight. Done: P33, and R11 after its answer; a route eval where "flat" changes #1 on a hilly start.
 
