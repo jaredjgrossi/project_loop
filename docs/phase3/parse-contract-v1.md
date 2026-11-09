@@ -75,12 +75,16 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 - `field` is one of: `start`, `end`, `via`, `distance`, `time`, `shape`, `mode`, `lights`, `crowds`, `scenery`, `surface`, `turns`, `familiar`, `hills`, `avoid`, `amenity`, `reuse`, `reverse`. A chip can repeat for lists (`via`, `avoid`, `amenity`).
 - `source` is one of: `said`, `preset`, `default`, `usual`. These are request words, not the five trust words (measured, estimate, listed, verified, not scored), which only appear on data such as `place.trust`.
 - `text` is short and plain ("5 mi", "Avoid crowds", "End: McCarren Park"). It always comes from templates.
+- `span` (2026-11-09, for the request screen: the runner's sentence is the header and the understood words light up): `{"text", "start", "end"}`, the runner's exact words behind the chip and where they are in the request `text`. Positions count Unicode code points (Swift: `text.unicodeScalars`), start inclusive, end exclusive; `text` is always the request's own characters at those positions. Claude quotes the words; code finds them and never guesses: words that aren't in the request give `span: null`. `null` for `preset`, `default` and `usual` values. One phrase may feed two chips, so spans can overlap. A chip code set from another one's words (park scenery from "a few miles in the park") shares that chip's span. Example: `{"id": "c_distance", "field": "distance", "text": "8 mi", "source": "said", "editable": true, "span": {"text": "8 miles", "start": 19, "end": 26}}`.
+- Source words (`source`) stay in the chip data; the app shows them only in the chip editor.
+- `constraints.spans` carries the same spans by chip id, so a chip edit (which sends `constraints`, not text) keeps the other chips' spans. When the runner edits a chip, the app drops that chip's entry from `constraints.spans` (and from `constraints.sources`): an edited value is said, but not in the sentence. Spans are never stored with a build (R8).
 
 ### Question
 - At most one per response.
 - `about` is one of: `distance`, `start`, `end`, `via`, `time`, `reuse`, `amount`.
 - `from` is one of: `parser`, `places`, `engine`.
 - `options`: 0–4 tap answers. `allow_text`: whether typing is offered.
+- `chip_id` (2026-11-09): the chip the question is about, so the app can mark its words in the sentence; null when the runner said nothing about it ("How far?" after "what do you suggest"). When nothing was built for it yet ("Which 86th St?"), the event carries a chip for it made from the runner's own words, with its span.
 - While a question is open, no routes stream.
 
 ### Can't-do lines and notes

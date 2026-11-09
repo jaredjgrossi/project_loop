@@ -31,8 +31,10 @@ from pydantic import ValidationError
 from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints, field_sources
 from api.copy import render
 from api.places import is_streetlike, normalize
+from api.spans import find_span
 
-PROMPT_VERSION = "parse_v3"  # earlier versions stay in api/prompts/: their calls are in llm_calls by version
+PROMPT_VERSION = "parse_v4"  # v4 (2026-11-09) quotes the runner's words in `said`, for spans. Earlier versions stay in
+# api/prompts/: their calls are in llm_calls by version.
 PROMPT = (Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.md").read_text()
 DEFAULT_MODEL = "claude-haiku-5-5"
 DEFAULT_EFFORT = "low"
@@ -60,6 +62,11 @@ MAX_OPTIONS = 4
 ADDRESS_LIKE = re.compile(r"\d+[A-Za-z]?\s+\S")  # "11 Madison Ave": a house number, then a street
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+# The chips whose words Claude quotes (contract: chip fields). via, avoid and amenity carry their 1-based item.
+SAID_CHIPS = ("start", "end", "via", "distance", "time", "shape", "mode", "lights", "crowds", "scenery", "surface",
+              "turns", "familiar", "hills", "avoid", "amenity", "reuse", "reverse")
+LIST_CHIPS = ("via", "avoid", "amenity")
+SAID_ALIASES = {"day": "time", "amenities": "amenity", "distance_mi": "distance"}  # names Haiku used for a chip
 CANT = {  # what Claude flags -> (gap id, copy key)
     "lighting_safety": ("G9", "cant.G9"),
     "bike_lanes": ("bike_lanes", "cant.bike_lanes"),
@@ -121,6 +128,8 @@ TOOL = {
                        "reverse": _BOOL}),
         "second_run": _obj({"present": _BOOL, "distance": _DISTANCE, "day": _DAY, "time": _TIME, "start": _PLACE}),
         "cant": {"type": "array", "items": _ENUM(*CANT)},
+        # The runner's exact words behind each chip, quoted (spans; the request screen, 2026-11-08). Code finds them.
+        "said": {"type": "array", "items": _obj({"chip": _ENUM(*SAID_CHIPS), "item": _NUM, "words": _STR})},
     }),
 }
 
@@ -147,6 +156,17 @@ def _conform(v, schema: dict, path: str = "input", dropped: list | None = None):
         if not isinstance(v, list):
             raise SchemaError(f"{path}: expected a list")
         items = schema["items"]
+        if path == "input.said":  # quotes only place words on screen: one that doesn't fit is dropped, never fatal
+            kept = []
+            for i, x in enumerate(v):
+                if isinstance(x, dict) and isinstance(x.get("chip"), str):
+                    x = {**x, "chip": SAID_ALIASES.get(x["chip"].strip(), x["chip"].strip())}
+                try:
+                    kept.append(_conform(x, items, f"{path}[{i}]", dropped))
+                except SchemaError as exc:
+                    if dropped is not None:
+                        dropped.append(str(exc))
+            return kept
         if "enum" in items:  # a list of choices: keep the known ones
             keep = [str(x).strip().strip('"').strip() for x in v if isinstance(x, str)]
             if dropped is not None:
@@ -271,6 +291,7 @@ class Context:
     usual_time: str | None
     saved: dict  # id -> {"label", "lat", "lon"}
     recent: list[dict]
+    raw: str = ""  # the request text exactly as sent: span positions count from its first character
 
     @classmethod
     def from_request(cls, req: dict) -> "Context":
@@ -280,7 +301,8 @@ class Context:
             now = now.astimezone(ZoneInfo(client.get("tz") or "America/New_York"))
         now = now.replace(tzinfo=None)
         loc = client.get("location")
-        return cls(text=(req.get("text") or "").strip(), now=now, location=(loc["lat"], loc["lon"]) if loc else None,
+        return cls(text=(req.get("text") or "").strip(), raw=req.get("text") or "", now=now,
+                   location=(loc["lat"], loc["lon"]) if loc else None,
                    usual_mi=profile.get("usual_distance_mi"), usual_time=profile.get("usual_time"),
                    saved={p["id"]: p for p in profile.get("saved_places") or []},
                    recent=list(req.get("recent_routes") or []))
@@ -325,6 +347,9 @@ class _Build:
     start_borough: str | None = None
     start_point: tuple[float, float] | None = None
     answers: dict = field(default_factory=dict)  # what earlier answers settled (see `answer_overrides`)
+    via_from: list = field(default_factory=list)  # for each via chip, its 1-based item in the extraction's via list
+    amenity_from: list = field(default_factory=list)  # the same for amenity chips
+    span_from: dict = field(default_factory=dict)  # a chip code set from another chip's words: chip id -> that id
     later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
 
     def say(self, key: str, **values) -> str:
@@ -348,8 +373,19 @@ class _Build:
              "options": [{"id": chr(97 + i), "text": self.say(o[0], **o[1])} for i, o in enumerate(options)],
              "allow_text": allow_text,
              "_answer": {"options": {chr(97 + i): (o[2] if len(o) > 2 else {}) for i, o in enumerate(options)},
-                         "typed": typed if allow_text else None}}
+                         "typed": typed if allow_text else None},
+             "_chip": _question_chip(about, (typed or {}).get("target"))}
         raise _Ask(q)
+
+
+def _question_chip(about: str, target: str | None) -> str | None:
+    """The chip a question is about, so the app can mark its words. A planned run's start has no chip here."""
+    if target == "planned.start":
+        return None
+    if about == "via":
+        return f"c_via_{target.split('.')[1]}" if target and target.startswith("via.") else None
+    return {"start": "c_start", "end": "c_end", "distance": "c_distance", "amount": "c_distance", "time": "c_time",
+            "reuse": "c_reuse"}.get(about)
 
 
 def _miles(d: dict | None) -> tuple[float, float | None] | None:
@@ -605,6 +641,7 @@ def _vias(b: _Build, ext: dict) -> list:
         typed = _typed_place(target)
         if f"place:{target}" in b.answers:  # an option was tapped
             out.append((v, b.answers[f"place:{target}"]))
+            b.via_from.append(i + 1)
             continue
         if f"text:{target}" in b.answers:
             v = {**v, "kind": "place", "name": b.answers[f"text:{target}"]}
@@ -615,6 +652,7 @@ def _vias(b: _Build, ext: dict) -> list:
                         for p in (b.places.parks_near(*point) if point else [])]
                 b.ask("via", "places", "question.place.which_park", opts, typed=typed)
             out.append((v, major[0]))
+            b.via_from.append(i + 1)
             continue
         b.lookups.append({"name": v["name"], "role": "via"})
         found = b.places.lookup(v["name"], near=point)
@@ -626,6 +664,7 @@ def _vias(b: _Build, ext: dict) -> list:
         if v.get("whole_way") and chosen.kind == "street":
             continue  # "2nd Ave the whole way": a street isn't a via target; the can't-do line says so (G1)
         out.append((v, chosen))
+        b.via_from.append(i + 1)
     return out
 
 
@@ -724,12 +763,13 @@ def _avoid_and_stops(b: _Build, ext: dict) -> None:
     if ext.get("avoid"):
         b.set("avoid_places", [{"name": a["name"], "how": a["how"]} for a in ext["avoid"]], "said")
     stops = []
-    for a in ext.get("amenities") or []:
+    for i, a in enumerate(ext.get("amenities") or []):
         mile = a.get("at_mile")
         if mile is None and a.get("at_fraction") is not None and b.constraints.get("distance_mi"):
             mile = round(a["at_fraction"] * b.constraints["distance_mi"], 2)
         if mile is not None:
             stops.append({"kind": a["kind"], "at_mile": mile})
+            b.amenity_from.append(i + 1)
     if stops:
         b.set("amenities", stops, "said")
 
@@ -854,6 +894,63 @@ def reach_m(constraints: dict) -> int | None:
     return int(round(miles * (1 + tol / 100) * METERS_PER_MILE / 2, -1))
 
 
+def _attach_spans(b: _Build, ext: dict, chips: list[dict], question: dict | None) -> str | None:
+    """Give every chip its `span`: where the words behind it are in the request text. Said chips only, from Claude's
+    quotes, found by code (api/spans.py); null for preset, default and usual values, and null when the words can't be
+    found. A chip code set from another one's words (park scenery from a via park) takes that chip's span. Returns
+    the chip the question is about, making one from the runner's words when nothing was built for it yet."""
+    quotes: dict[tuple[str, int], str] = {}
+    for q in ext.get("said") or []:
+        if q and q.get("words") and q.get("chip") in SAID_CHIPS:
+            item = int(q.get("item") or 0) if q["chip"] in LIST_CHIPS else 0
+            quotes.setdefault((q["chip"], item), q["words"])
+
+    def key_of(cid: str) -> tuple[str, int] | None:
+        """A chip id -> (chip, item) in the extraction. A via or amenity chip may skip an item code dropped."""
+        name = cid[2:]
+        for chip, made_from in (("via", b.via_from), ("amenity", b.amenity_from), ("avoid", None)):
+            if name.startswith(chip + "_"):
+                k = int(name.rsplit("_", 1)[1])
+                if made_from is None:
+                    return chip, k
+                return (chip, made_from[k - 1]) if k <= len(made_from) else None
+        return name, 0
+
+    taken: set[tuple[int, int]] = set()
+
+    def span_of(words: str | None) -> dict | None:
+        found = find_span(b.ctx.raw, words, taken)
+        if found:
+            taken.add((found["start"], found["end"]))
+        return found
+
+    for c in chips:
+        words = None
+        if c["source"] == "said":
+            own = key_of(c["id"])
+            words = quotes.get(own) if own else None
+            if words is None and c["id"] in b.span_from:
+                other = key_of(b.span_from[c["id"]])
+                words = quotes.get(other) if other else None
+        c["span"] = span_of(words)
+
+    cid = question.pop("_chip", None) if question else None
+    if cid is None or any(c["id"] == cid for c in chips):
+        return cid
+    # Nothing was built for it yet ("Which 86th St?"): a chip from the runner's own words, when they said any.
+    if cid.startswith("c_via_"):
+        fieldname, key = "via", ("via", int(cid.rsplit("_", 1)[1]))
+    else:
+        fieldname = cid[2:]
+        key = (fieldname, 0)
+    span = span_of(quotes.get(key))
+    if span is None:
+        return None
+    chips.append({"id": cid, "field": fieldname, "text": b.say("chip.asked", words=span["text"]), "source": "said",
+                  "editable": True, "span": span})
+    return cid
+
+
 def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) -> dict:
     """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
     trace. The question's answer map goes into the trace, never to the phone."""
@@ -883,6 +980,8 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
         b.set("via_places", [_ref(m) for _, m in vias], "said")
         if "scenery" not in b.constraints and any(m.kind in ("park", "water") for _, m in vias):
             b.set("scenery", "park_or_water", "said")  # "a few miles in the park" asks for park scenery
+            first = next(k for k, (_, m) in enumerate(vias, 1) if m.kind in ("park", "water"))
+            b.span_from["c_scenery"] = f"c_via_{first}"
     if b.start_borough is None and ctx.location:
         b.start_point, b.start_borough = ctx.location, places.borough_at(*ctx.location)
     step(end)
@@ -905,6 +1004,12 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
         b.constraints["shape"] = rc.shape
     _notes(b) if question is None else None
     chips = _chips(b)
+    chip_id = _attach_spans(b, ext, chips, question)
+    if question is not None:
+        question["chip_id"] = chip_id
+    spans = {c["id"]: c["span"] for c in chips if c.get("span")}
+    if spans:
+        b.constraints["spans"] = spans
     parsed = {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": chips,
               "question": question, "cant": b.cant, "notes": b.notes, "reach_m": reach_m(b.constraints),
               "constraints": b.constraints}
@@ -967,7 +1072,11 @@ def parsed_for_constraints(constraints: dict, ctx: Context, places: Places) -> d
     b.constraints["shape"] = rc.shape
     b.sources = field_sources(rc)
     _notes(b)
-    return {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": _chips(b), "question": None,
+    chips = _chips(b)
+    for c in chips:  # the spans the parse found ride in the constraints; an edited chip's was dropped by the app
+        span = rc.spans.get(c["id"]) if c["source"] == "said" else None
+        c["span"] = span.model_dump() if span else None
+    return {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": chips, "question": None,
             "cant": [], "notes": b.notes, "reach_m": reach_m(b.constraints), "constraints": b.constraints}
 
 

@@ -75,7 +75,7 @@ class FakePlaces:
 def ext(**kw) -> dict:
     """An extraction with every field the strict schema requires."""
     base = {k: None for k in TOOL["input_schema"]["properties"]}
-    base |= {"long_run": False, "workout": False, "via": [], "avoid": [], "amenities": [], "cant": []}
+    base |= {"long_run": False, "workout": False, "via": [], "avoid": [], "amenities": [], "cant": [], "said": []}
     return base | kw
 
 
@@ -151,6 +151,69 @@ IDEAL = {  # the extraction a correct model returns, per case
     "P49": ext(distance=mi(15), surface="paths",
                via=[{"name": "East River Path", "kind": "place", "whole_way": True}], cant=["whole_way"]),
 }
+
+
+def said(*pairs):
+    """Quotes as a correct model gives them: (chip, words) or (chip, words, item)."""
+    return [{"chip": p[0], "words": p[1], "item": p[2] if len(p) > 2 else 0} for p in pairs]
+
+
+QUOTES = {  # the runner's words behind each chip, per case (spans, 2026-11-09)
+    "P01": [],
+    "P04": said(("start", "kip bay"), ("distance", "3 mi")),
+    "R05": said(("mode", "New to this area")),
+    "R06": said(("mode", "New to this area")),
+    "P05": said(("distance", "3 mi"), ("shape", "loop")),
+    "P09": said(("distance", "13"), ("time", "today")),
+    "P10": said(("distance", "3-4 miles")),
+    "P11": said(("distance", "45 min")),
+    "R04": said(("time", "in 30"), ("distance", "5 miles"), ("crowds", "low pedestrian areas")),
+    "P14": said(("distance", "4 mi"), ("time", "tonight")),
+    "P24": said(("time", "leaving 7:45"), ("crowds", "steer clear of schools at drop off")),
+    "R01": said(("time", "Today"), ("distance", "8 miles"), ("scenery", "on the water"),
+                ("end", "ending at McCarren Park")),
+    "R02": said(("via", "Central park reservor", 1), ("start", "starting at 86th st"),
+                ("end", "ending at central park south")),
+    "R03": said(("via", "the west side highway", 1), ("distance", "3 easy miles")),
+    "R10": said(("distance", "5 miles"), ("end", "the best italian spot")),
+    "P15": said(("time", "lunch"), ("start", "from the office"), ("distance", "3mi")),
+    "P16": said(("distance", "5 mi"), ("start", "11 madison ave")),
+    "P17": said(("start", "1st and 23rd"), ("distance", "4 mi")),
+    "P18": said(("distance", "6"), ("start", "penn station")),
+    "P19": said(("distance", "5 mi"), ("start", "hoboken path")),
+    "P20": said(("start", "the park"), ("distance", "3 mi")),
+    "P46": said(("end", "120 broadway"), ("distance", "5 mi")),
+    "R07": said(("crowds", "the chaos"), ("avoid", "42nd st", 1)),
+    "P23": said(("distance", "6 miles"), ("avoid", "1st ave by the hospitals", 1)),
+    "P25": said(("distance", "5mi")),
+    "P27": said(("familiar", "something new")),
+    "P28": said(("lights", "no lights if possible")),
+    "P29": said(("lights", "i just zig zag"), ("distance", "5")),
+    "P31": said(("crowds", "crowds dont bother me"), ("scenery", "water views")),
+    "P32": said(("surface", "soft surface"), ("distance", "4")),
+    "P33": said(("distance", "6mi"), ("hills", "flat")),
+    "P34": said(("distance", "6"), ("amenity", "bathroom around mile 3", 1)),
+    "P35": said(("distance", "8 miles"), ("amenity", "water halfway", 1)),
+    "P36": said(("mode", "tempo"), ("distance", "6"), ("lights", "long stretches w no lights")),
+    "P38": said(("distance", "5k"), ("mode", "race pace"), ("lights", "uninterrupted")),
+    "R11": said(("mode", "workout"), ("hills", "avoid hills"), ("distance", "4xmile workout")),
+    "R08": said(("familiar", "new from everything else I have tried")),
+    "R09": said(("time", "today"), ("via", "the park", 1), ("distance", "Long run")),
+    "P39": said(("distance", "7 miler"), ("mode", "showing a friend around")),
+    "H01": said(("reuse", "same as Tuesday")),
+    "H02": said(("reuse", "my usual"), ("distance", "longer")),
+    "H03": said(("reuse", "the river one"), ("reverse", "other direction")),
+    "H04": said(("reuse", "last week's route"), ("avoid", "the ferry part", 1)),
+    "H05": said(("reuse", "my usual")),
+    "P42": said(("shape", "out and back"), ("distance", "5mi")),
+    "P44": said(("lights", "no lights"), ("via", "2nd ave the whole way", 1)),
+    "P45": said(("distance", "5k"), ("time", "tonight")),
+    "P47": said(("distance", "100 mile"), ("shape", "loop")),
+    "P48": said(("distance", "0.3 mi"), ("shape", "loop")),
+    "P49": said(("distance", "15 miles"), ("via", "the east river path", 1), ("surface", "staying on the east river path")),
+}
+for _cid, _q in QUOTES.items():
+    IDEAL[_cid]["said"] = _q
 
 
 def test_every_case_has_an_ideal_extraction():
@@ -231,7 +294,7 @@ def test_conform_tidies_formatting_slips_and_drops_unknown_choices():
 def test_a_malformed_tool_call_is_retried_once():
     from api.parse import parse
 
-    good = ext(distance=mi(3), shape="loop_word") | {"time": {"kind": "none", "clock": "", "minutes": 0},
+    good = ext(distance=mi(3), shape="loop_word", said=QUOTES["P05"]) | {"time": {"kind": "none", "clock": "", "minutes": 0},
                                                       "day": {"kind": "none", "weekday": "none", "date": ""}}
     bad = dict(good, shape="none</shape><parameter>")
     replies = [bad, good]
@@ -267,3 +330,89 @@ def test_scenic_scenery_is_dropped_in_build():
     ctx = Context.from_request(build_request(case, CONTEXTS))
     out = build(IDEAL["P39"] | {"scenery": "some"}, ctx, FakePlaces())
     assert "scenery" not in out["parsed"]["constraints"] and grade(case, out).passed
+
+
+
+# ---- spans (2026-11-09) ------------------------------------------------------------------------------------------
+
+def _built(case_id):
+    ctx = Context.from_request(build_request(CASES[case_id], CONTEXTS))
+    return build(IDEAL[case_id], ctx, FakePlaces())
+
+
+@pytest.mark.parametrize("case_id,chip,words", [
+    ("R01", "c_distance", "8 miles"), ("R01", "c_end", "ending at McCarren Park"), ("R01", "c_time", "Today"),
+    ("P34", "c_amenity_1", "bathroom around mile 3"), ("R07", "c_avoid_1", "42nd st"), ("H03", "c_reverse",
+                                                                                     "other direction")])
+def test_a_said_chip_carries_the_runners_words_and_where_they_are(case_id, chip, words):
+    out = _built(case_id)
+    c = next(x for x in out["parsed"]["chips"] if x["id"] == chip)
+    text = CASES[case_id]["text"]
+    assert c["span"]["text"] == words and text[c["span"]["start"]:c["span"]["end"]] == words
+    assert out["parsed"]["constraints"]["spans"][chip] == c["span"]
+
+
+def test_defaults_presets_and_usual_values_have_no_span():
+    out = _built("R01")
+    for c in out["parsed"]["chips"]:
+        assert (c["span"] is None) == (c["source"] != "said"), c
+
+
+def test_words_the_request_doesnt_have_give_no_span_rather_than_a_guess():
+    ctx = Context.from_request(build_request(CASES["P05"], CONTEXTS))
+    e = dict(IDEAL["P05"], said=said(("distance", "three miles"), ("shape", "loop")))
+    chips = {c["id"]: c for c in build(e, ctx, FakePlaces())["parsed"]["chips"]}
+    assert chips["c_distance"]["span"] is None and chips["c_shape"]["span"]["text"] == "loop"
+
+
+def test_park_scenery_from_a_via_park_takes_the_vias_words():
+    out = _built("R02")
+    chips = {c["id"]: c for c in out["parsed"]["chips"]}
+    assert chips["c_scenery"]["span"] == chips["c_via_1"]["span"]
+    assert chips["c_via_1"]["span"]["text"] == "Central park reservor"
+
+
+def test_a_question_names_its_chip_and_a_chip_is_made_from_the_runners_words():
+    out = _built("R02")  # "Which 86th St?": no start chip until it's answered
+    q = out["parsed"]["question"]
+    chip = next(c for c in out["parsed"]["chips"] if c["id"] == q["chip_id"])
+    assert q["chip_id"] == "c_start" and chip["field"] == "start" and chip["text"] == "starting at 86th st"
+    assert chip["span"]["text"] == "starting at 86th st" and chip["source"] == "said"
+
+
+def test_a_question_with_nothing_said_about_it_has_no_chip():
+    out = _built("R06")  # "what do you suggest": how far?
+    assert out["parsed"]["question"]["chip_id"] is None
+
+
+def test_a_question_about_an_existing_chip_names_it():
+    out = _built("P47")  # "100 mile loop": did you mean 10?
+    q = out["parsed"]["question"]
+    assert q["chip_id"] == "c_distance"
+    assert next(c for c in out["parsed"]["chips"] if c["id"] == "c_distance")["span"]["text"] == "100 mile"
+
+
+def test_spans_survive_a_chip_edit():
+    from api.parse import parsed_for_constraints
+    out = _built("P36")
+    ctx = Context.from_request(build_request(CASES["P36"], CONTEXTS))
+    again = parsed_for_constraints(out["parsed"]["constraints"], ctx, None)
+    assert [c["span"] for c in again["chips"]] == [c["span"] for c in out["parsed"]["chips"]]
+
+
+def test_spans_count_from_the_text_as_sent_even_with_leading_spaces():
+    req = build_request(CASES["P05"], CONTEXTS) | {"text": "  3 mi loop"}
+    out = build(IDEAL["P05"], Context.from_request(req), FakePlaces())
+    span = next(c for c in out["parsed"]["chips"] if c["id"] == "c_distance")["span"]
+    assert span == {"text": "3 mi", "start": 2, "end": 6}
+
+
+
+def test_a_quote_that_doesnt_fit_is_dropped_never_failing_the_parse():
+    from api.parse import _conform
+    raw = {"said": [{"chip": "day", "item": 0, "words": "Today"}, {"chip": "soft_avoid", "item": 0, "words": "x"},
+                    {"chip": "distance", "item": "two", "words": "8 miles"}, {"chip": "end", "item": 0, "words": "x"}]}
+    dropped = []
+    out = _conform(raw, TOOL["input_schema"], dropped=dropped)
+    assert [q["chip"] for q in out["said"]] == ["time", "end"]  # "day" read as the time chip
+    assert len(dropped) == 2

@@ -301,8 +301,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                 keep_route(final)  # kept even if the phone has gone, for GET /v1/routes/{id}
                 # Stored before the phone gets final, so the id it holds always works, after a restart too.
                 # No text and no location (decision 030); a few ms for the insert.
-                route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), parsed["constraints"],
-                                 final)
+                stored = {k: v for k, v in parsed["constraints"].items() if k != "spans"}  # spans are the runner's words
+                route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), stored, final)
                 send(final)
             except EngineQuestion as q:  # e.g. the end is farther than the distance: ask, and keep the parse open
                 pid = f"p_{secrets.token_hex(4)}"

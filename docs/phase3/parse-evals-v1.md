@@ -294,6 +294,7 @@ A case passes when:
 5. For an ASK: exactly one question; `about` and `from` match; the options match where listed; no routing call is made.
 6. No "must not" is violated. Any violation fails the case.
 7. Every text the runner sees comes from the templates (R1).
+8. Spans (2026-11-09): every chip whose source is `said` has a span, the request's own words at its positions; every other chip has `span: null`; and the question's `chip_id` is a chip in the event, or null.
 
 Cases marked [lookup] run against the places table. Cases marked [engine] also have an end-to-end check in Phase 3's route evals.
 

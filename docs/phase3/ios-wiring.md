@@ -94,6 +94,10 @@ for try await line in bytes.lines {
    - `question` (or null)
    - `constraints` and `parse_id`
 
+   Each chip also has `span`: `{text, start, end}`, the runner's words behind it, counted in Unicode scalars
+   (`text.unicodeScalars`), end exclusive; null for preset, default and usual values. Light those words up in the
+   sentence. `question.chip_id` names the chip a question is about. When the runner edits a chip, drop that chip's
+   entry from `constraints.spans` and `constraints.sources` before sending the constraints back.
    Show every string as sent; they all come from the server's templates. Lines with `gap: "later"` say what the
    engine can't build yet. When the request needs one of those (an end place, a via place, an along-avoid, a past
    route), the stream goes straight to `done` with no routes.

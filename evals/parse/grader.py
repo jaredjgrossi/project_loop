@@ -43,7 +43,7 @@ SCHEMA_DEFAULTS = {
     "distance_mi": None, "tolerance_pct": 5, "shape": "any", "avoid_places": [], "amenities": [],
     "start_time": None, "start_date": None, "mode": None, "lights": None, "crowds": None, "scenery": None,
     "surface": None, "turns": None, "familiar": None, "hills": None, "reuse_route_id": None, "reverse": False,
-    "planned": None, "sources": {},
+    "planned": None, "sources": {}, "spans": {},
 }
 KNOWN_FIELDS = tuple(SCHEMA_DEFAULTS)
 
@@ -54,7 +54,7 @@ FIELD_CHIP = {
     "start_date": "time", "shape": "shape", "mode": "mode", "lights": "lights", "crowds": "crowds",
     "scenery": "scenery", "surface": "surface", "turns": "turns", "familiar": "familiar", "hills": "hills",
     "avoid_places": "avoid", "amenities": "amenity", "reuse_route_id": "reuse", "reverse": "reverse", "planned": None,
-    "sources": None,
+    "sources": None, "spans": None,
 }
 NUMBER_TOL = {"distance_mi": 0.05, "tolerance_pct": 0.1, "at_mile": 0.05}
 PARSED_KEYS = {"event", "v", "parse_id", "chips", "question", "cant", "notes", "reach_m", "constraints"}  # reach_m: step 7b
@@ -222,7 +222,7 @@ def _check_unlisted(listed: dict, constraints: dict, sources: dict) -> list[str]
     runner's usual values (R2). An unlisted day equal to today is what code fills in anyway."""
     out = []
     for name, value in constraints.items():
-        if name == "sources":  # where values came from: graded through the trace and chips, not as a field
+        if name in ("sources", "spans"):  # where values and words came from: graded through chips (rules 2, 8)
             continue
         if name not in SCHEMA_DEFAULTS:
             out.append(f"unknown field {name}")
@@ -335,6 +335,35 @@ def _check_must_not(rules: list[dict], output: dict) -> list[str]:
     return out
 
 
+def _check_spans(text: str, parsed: dict) -> list[str]:
+    """Rule 8 (the request screen, 2026-11-08): every chip the runner said has a span, the runner's own words at
+    those positions in the request text; every other chip has span null. The question names the chip it's about
+    (chip_id), which is a chip in the event, or null."""
+    out = []
+    chips = parsed.get("chips") or []
+    for c in chips:
+        if "span" not in c:
+            out.append(f"chip {c.get('id')}: no span field")
+            continue
+        span = c["span"]
+        if c.get("source") != "said":
+            if span is not None:
+                out.append(f"chip {c['id']}: a {c.get('source')} value has a span")
+            continue
+        if not isinstance(span, dict):
+            out.append(f"chip {c['id']} ({c.get('text')!r}): said, but no span")
+        elif not (0 <= span.get("start", -1) < span.get("end", -1) <= len(text)) \
+                or text[span["start"]:span["end"]] != span.get("text"):
+            out.append(f"chip {c['id']}: span {span} isn't the request's words at those positions")
+    q = parsed.get("question")
+    if q is not None:
+        if "chip_id" not in q:
+            out.append("question: no chip_id field")
+        elif q["chip_id"] is not None and q["chip_id"] not in {c.get("id") for c in chips}:
+            out.append(f"question: chip_id {q['chip_id']} isn't a chip")
+    return out
+
+
 def _grade_expectation(exp: dict, parsed: dict, trace: dict, template_keys: set | None) -> list[str]:
     constraints = parsed.get("constraints") or {}
     sources = trace.get("sources") or {}
@@ -360,7 +389,7 @@ def grade(case: dict, output: dict | None, template_keys: set | None = None) -> 
     parsed, trace = output["parsed"], output.get("trace")
     if not isinstance(trace, dict):
         return Grade(case["id"], False, outcome_of(parsed), ["no trace: sources, lookups and template keys are needed"])
-    must_not = _check_must_not(case.get("must_not", []), output)
+    must_not = _check_must_not(case.get("must_not", []), output) + _check_spans(case["text"], parsed)
     attempts = [_grade_expectation(e, parsed, trace, template_keys)
                 for e in [case["expect"], *case.get("alternatives", [])]]
     best = next((a for a in attempts if not a), attempts[0])

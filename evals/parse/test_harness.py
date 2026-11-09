@@ -60,8 +60,10 @@ def oracle(case: dict, exp: dict | None = None) -> dict:
             continue
         if name == "start_date" and "start_time" in listed:
             continue
+        said = spec.get("source", "said") == "said"  # rule 8: the whole sentence is a valid span for the oracle
         chips.append({"id": f"c_{name}", "field": chip, "text": say(f"chip {name}", f"chip.{chip}"),
-                      "source": spec.get("source", "said"), "editable": True})
+                      "source": spec.get("source", "said"), "editable": True,
+                      "span": {"text": case["text"], "start": 0, "end": len(case["text"])} if said else None})
     question = None
     if exp["outcome"] == "ASK":
         want = exp["question"]
@@ -69,7 +71,7 @@ def oracle(case: dict, exp: dict | None = None) -> dict:
         question = {"id": "q_1", "about": want["about"], "from": want["from"],
                     "text": say("question", f"question.{want['about']}"),
                     "options": [{"id": f"o{i}", "text": say(o, "option")} for i, o in enumerate(opts)],
-                    "allow_text": want.get("allow_text", False)}
+                    "allow_text": want.get("allow_text", False), "chip_id": None}
     cant = [{"id": f"k_{i}", "gap": g, "text": say(f"cant {g}", f"cant.{g}")} for i, g in enumerate(exp.get("cant", []))]
     notes = [{"id": f"n_{i}", "key": k, "text": say(f"note {k}", f"note.{k}"), "trust": "listed"}
              for i, k in enumerate(exp.get("notes", []))]
@@ -298,3 +300,29 @@ def test_a_stretch_inside_the_range_passes_and_outside_or_whole_street_fails():
     assert with_avoid("1st Ave, E 23rd St–E 34th St") == [] and with_avoid("First Avenue, E 25th–E 34th St") == []
     assert with_avoid("1st Ave, E 20th–E 34th St") and with_avoid("2nd Ave, E 26th–E 34th St")
     assert with_avoid("1st Ave")
+
+
+
+# ---- rule 8: spans ---------------------------------------------------------------------------------------------
+
+def test_a_said_chip_without_a_span_fails():
+    out = oracle(BY_ID["P05"])
+    out["parsed"]["chips"][0]["span"] = None
+    assert any("said, but no span" in r for r in reasons("P05", out))
+
+
+def test_a_span_must_be_the_requests_own_words_at_its_positions():
+    out = oracle(BY_ID["P05"])  # "3 mi loop"
+    out["parsed"]["chips"][0]["span"] = {"text": "3 mi", "start": 1, "end": 5}
+    assert any("isn't the request's words" in r for r in reasons("P05", out))
+    out["parsed"]["chips"][0]["span"] = {"text": "3 mi", "start": 0, "end": 4}
+    assert not any("span" in r for r in reasons("P05", out))
+
+
+def test_a_default_has_no_span_and_a_question_names_a_real_chip():
+    out = oracle(BY_ID["R06"])
+    out["parsed"]["chips"].append({"id": "c_shape", "field": "shape", "text": "x", "source": "default",
+                                   "editable": True, "span": {"text": "New", "start": 0, "end": 3}})
+    out["parsed"]["question"]["chip_id"] = "c_nope"
+    got = reasons("R06", out)
+    assert any("has a span" in r for r in got) and any("isn't a chip" in r for r in got)

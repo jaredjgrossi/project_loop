@@ -33,3 +33,5 @@ the place lookups made, the routing calls made, and the template key behind ever
   code-filled, alongside `default` and `preset` (R2). An unlisted day equal to the context's today is allowed too.
 - Rule 3 applies to PARSE outcomes. An ASK keeps what the runner said so the answer can continue the request; its
   keep list is the minimum that must be kept. Must-nots still apply to every case.
+- Rule 8 (spans, 2026-11-09) applies to every outcome: a said chip without a span, or a span that isn't the request's
+  words at its positions, fails the case. The oracle gives each said chip the whole sentence as its span.

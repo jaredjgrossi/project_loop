@@ -88,6 +88,16 @@ class PlaceRef(BaseModel):
         return render("request.place", name=self.name, borough=self.borough)
 
 
+class Span(BaseModel):
+    """Where a chip's words sit in the request text: the runner's own characters, Unicode code points, end exclusive
+    (api/spans.py)."""
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    start: int = Field(ge=0)
+    end: int = Field(ge=1)
+
+
 class AvoidPlace(BaseModel):
     """Somewhere not to run. A street is avoided along its length; crossing it is fine (R15)."""
     model_config = ConfigDict(extra="forbid")
@@ -143,6 +153,10 @@ class RunConstraints(BaseModel):
 
     # Where a value came from, for fields that weren't simply said: {"distance_mi": "usual"} (decision 027).
     sources: dict[str, Source] = Field(default_factory=dict)
+    # Where each said chip's words are in the request text, by chip id (the request screen, 2026-11-08). Carried so a
+    # chip edit, which sends constraints and no text, keeps the other chips' spans; the app drops an edited chip's.
+    # Never stored with a build (R8: the runner's words). The engine ignores it.
+    spans: dict[str, Span] = Field(default_factory=dict)
 
     @field_validator("avoid_places", mode="before")
     @classmethod
@@ -217,7 +231,7 @@ def field_sources(c: RunConstraints, prefix: str = "") -> dict[str, str]:
     """Every field that holds a value, with where it came from. A planned run's fields are 'planned.<field>'."""
     out = {}
     for name in type(c).model_fields:
-        if name == "sources" or not _is_set(c, name):
+        if name in ("sources", "spans") or not _is_set(c, name):
             continue
         if name == "planned":
             out[prefix + name] = c.sources.get(name, "said")

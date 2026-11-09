@@ -74,6 +74,7 @@ TEMPLATES: dict[str, str] = {
     "pref.hills.dont_mind": "don't mind",
 
     # Chips in the parsed event (contract): short and plain
+    "chip.asked": "{words}",  # a chip the question is about, before it has a value: the runner's own words
     "chip.start.my_location": "From your location",
     "chip.start.place": "From {name}, {borough}",
     "chip.start.saved": "From {name}",

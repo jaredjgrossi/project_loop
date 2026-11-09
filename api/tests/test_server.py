@@ -283,11 +283,13 @@ def test_a_build_is_stored_and_served_after_a_restart():
 
 def test_the_stored_row_keeps_no_text_and_no_location():
     routes = FakeRouteStore()
-    c, _ = client_for({"6 mi, my knee is sore": IDEAL["P36"]}, route_store=routes)
+    e = dict(IDEAL["P36"], said=[{"chip": "distance", "item": 0, "words": "6 mi"}])
+    c, _ = client_for({"6 mi, my knee is sore": e}, route_store=routes)
     evs = post(c, body(text="6 mi, my knee is sore"))
     row = routes.rows[evs[-2]["route_id"]]
     assert row["request"]["kind"] == "text" and row["request"]["parse_id"] == evs[0]["parse_id"]
-    assert row["constraints"] == evs[0]["constraints"]
+    assert row["constraints"] == {k: v for k, v in evs[0]["constraints"].items() if k != "spans"}
+    assert "spans" in evs[0]["constraints"] and "spans" not in row["constraints"]  # the runner's words stay out
     flat = repr(row["request"]) + repr(row["constraints"])
     assert "knee" not in flat and "40.7438" not in flat
 
