@@ -31,10 +31,12 @@ from pydantic import ValidationError
 from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints, field_sources
 from api.copy import render
 from api.loops import loop_by_id, loop_named, mode_for, place_for
+from api.past_routes import FERRY_WORDS
 from api.places import is_streetlike, normalize
 from api.spans import find_span
 
-PROMPT_VERSION = "parse_v5"  # v5 (2026-11-09) records each via's `word` (around or through, decision 035); v4 quoted
+PROMPT_VERSION = "parse_v6"  # v6 (2026-11-09): a part of a past route to skip is an avoid (H04, decision 038).
+# v5 records each via's `word` (around or through, decision 035); v4 quoted
 # the runner's words in `said`, for spans. Earlier versions stay in api/prompts/: their calls are in llm_calls by version.
 PROMPT = (Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.md").read_text()
 DEFAULT_MODEL = "claude-haiku-5-5"
@@ -234,6 +236,8 @@ class Places(Protocol):
     def major_parks_near(self, lat: float, lon: float) -> list: ...
     def parks_near(self, lat: float, lon: float) -> list: ...
     def geocode(self, address: str, borough: str | None): ...  # -> (GeocodeResult | None, [boroughs])
+    def past_route(self, route_id: str): ...  # -> past_routes.PastRoute | None (step 11)
+    def ferry_landings_along(self, coords) -> list[dict]: ...  # avoid entries with a place (step 11, H04)
 
 
 class DbPlaces:
@@ -269,6 +273,18 @@ class DbPlaces:
     def parks_near(self, lat, lon):
         from api.places import parks_near
         return parks_near(lat, lon, conn=self.conn)
+
+    def past_route(self, route_id):
+        from api.past_routes import from_final, split_id
+        if not self.conn.execute("SELECT to_regclass('saved_routes') IS NOT NULL").fetchone()[0]:
+            return None
+        row = self.conn.execute("SELECT final FROM saved_routes WHERE route_id = %s",
+                                (split_id(route_id)[0],)).fetchone()
+        return from_final(route_id, row[0] if row else None)
+
+    def ferry_landings_along(self, coords):
+        from api.past_routes import ferry_landings_along
+        return ferry_landings_along(coords, self.conn)
 
     def geocode(self, address, borough):
         from api.geocoding import AmbiguousAddressError, GeocodeError, geocode
@@ -350,6 +366,8 @@ class _Build:
     answers: dict = field(default_factory=dict)  # what earlier answers settled (see `answer_overrides`)
     via_from: list = field(default_factory=list)  # for each via chip, its 1-based item in the extraction's via list
     via_modes: list = field(default_factory=list)  # for each via chip, its loops.Mode (decision 035)
+    reuse_ids: list = field(default_factory=list)  # the past routes the request may mean, before any question (step 11)
+    avoid_from: list = field(default_factory=list)  # for each avoid chip, its item (one "ferry part" can be two piers)
     amenity_from: list = field(default_factory=list)  # the same for amenity chips
     span_from: dict = field(default_factory=dict)  # a chip code set from another chip's words: chip id -> that id
     later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
@@ -746,6 +764,7 @@ def _reuse(b: _Build, ext: dict) -> None:
         hits = [x for x in recent if monday - timedelta(days=7) <= date.fromisoformat(x["date"]) < monday]
     else:
         hits = before[:1]
+    b.reuse_ids = [x["id"] for x in hits]  # "skip the ferry part" is matched along these (step 11)
     if not hits:
         b.ask("reuse", "parser", "question.reuse.none", options, typed=typed)
     if len(hits) > 1:
@@ -756,17 +775,40 @@ def _reuse(b: _Build, ext: dict) -> None:
     if r.get("reverse"):
         b.set("reverse", True, "said")
     if r.get("longer"):
-        if "plus_mi" in b.answers:  # step 10 builds it; until then the reused route is a can't-do line
+        if "plus_mi" in b.answers:  # "+1 mi": the past route's distance plus the answer (step 11)
             b.later["plus_mi"] = b.answers["plus_mi"]
+            past_mi = hits[0].get("distance_mi")
+            if past_mi:
+                b.set("distance_mi", round(past_mi + b.answers["plus_mi"], 2), "said")
             return
         b.ask("distance", "parser", "question.distance.longer",
               [("option.plus_miles", {"miles": _fmt(m)}, {"plus_mi": float(m)}) for m in ASK_LONGER],
               typed={"kind": "plus_miles"})
 
 
+def _ferry_part(b: _Build, avoid: dict) -> list[dict]:
+    """'Skip the ferry part' of a past route (H04, step 11): the ferry landings along the route(s) the request may
+    mean, matched in code (decision 038). The words alone, or a route with no line on file, stay as said, and the
+    engine says it can't avoid them."""
+    if not FERRY_WORDS.search(avoid["name"]) or not b.reuse_ids:
+        return [avoid]
+    found: dict = {}
+    for rid in b.reuse_ids:
+        past = b.places.past_route(rid)
+        for landing in b.places.ferry_landings_along(past.coords) if past else []:
+            found.setdefault(landing["name"], landing)
+    named = [x for n, x in found.items() if normalize(n).startswith(normalize(avoid["name"]).split(" ferry")[0])]
+    return named or list(found.values()) or [avoid]
+
+
 def _avoid_and_stops(b: _Build, ext: dict) -> None:
     if ext.get("avoid"):
-        b.set("avoid_places", [{"name": a["name"], "how": a["how"]} for a in ext["avoid"]], "said")
+        avoids = []
+        for i, a in enumerate(ext["avoid"], 1):
+            for x in _ferry_part(b, {"name": a["name"], "how": a["how"]}):
+                avoids.append(x)
+                b.avoid_from.append(i)
+        b.set("avoid_places", avoids, "said")
     stops = []
     for i, a in enumerate(ext.get("amenities") or []):
         mile = a.get("at_mile")
@@ -870,7 +912,8 @@ def _chips(b: _Build) -> list[dict]:
         if c.get(name):
             chips.append(_chip(b, f"c_{name}", name, f"chip.{name}.{c[name]}", src[name]))
     for i, a in enumerate(c.get("avoid_places") or []):
-        chips.append(_chip(b, f"c_avoid_{i + 1}", "avoid", f"chip.avoid.{a['how']}", src["avoid_places"],
+        how = a.get("how", "area")  # dumped constraints leave out the default
+        chips.append(_chip(b, f"c_avoid_{i + 1}", "avoid", f"chip.avoid.{how}", src["avoid_places"],
                            name=a["name"]))
     for i, a in enumerate(c.get("amenities") or []):
         chips.append(_chip(b, f"c_amenity_{i + 1}", "amenity", f"chip.amenity.{a['kind']}", src["amenities"],
@@ -918,7 +961,7 @@ def _attach_spans(b: _Build, ext: dict, chips: list[dict], question: dict | None
     def key_of(cid: str) -> tuple[str, int] | None:
         """A chip id -> (chip, item) in the extraction. A via or amenity chip may skip an item code dropped."""
         name = cid[2:]
-        for chip, made_from in (("via", b.via_from), ("amenity", b.amenity_from), ("avoid", None)):
+        for chip, made_from in (("via", b.via_from), ("amenity", b.amenity_from), ("avoid", b.avoid_from or None)):
             if name.startswith(chip + "_"):
                 k = int(name.rsplit("_", 1)[1])
                 if made_from is None:

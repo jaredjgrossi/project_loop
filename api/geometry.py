@@ -105,8 +105,11 @@ def line_length_m(coords: list[list[float]]) -> float:
 
 
 def covered_share(coords: list[list[float]], line: dict, tolerance_m: float) -> float:
-    """The share of a GeoJSON line (a lap's ring) that a [lon, lat] route runs along: the length of the line within
-    `tolerance_m` of the route over the line's length (decision 035)."""
+    """The share of a GeoJSON line (a lap's ring, a past route) that a [lon, lat] route runs along: the length of the
+    line within `tolerance_m` of the route over the line's length (decision 035). Measured segment by segment, so a
+    line that runs its path twice (an out-and-back, step 11) counts both ways: one intersection of the whole line
+    would merge the two and count it once."""
+    import numpy as np
     import shapely
     from shapely.geometry import LineString
     from shapely.geometry import shape as to_shape
@@ -115,11 +118,17 @@ def covered_share(coords: list[list[float]], line: dict, tolerance_m: float) -> 
         return 0.0
     flat = _flat(coords[0][:2])
     route = shapely.transform(LineString([c[:2] for c in coords]), flat)
-    ring = shapely.transform(to_shape(line), flat)
-    if ring.length == 0:
+    target = shapely.transform(to_shape(line), flat)
+    parts = getattr(target, "geoms", [target])
+    segs = [np.array(p.coords) for p in parts if not p.is_empty]
+    pairs = np.concatenate([np.stack([s[:-1], s[1:]], axis=1) for s in segs if len(s) > 1]) if segs else []
+    if len(pairs) == 0:
         return 0.0
-    return ring.intersection(route.buffer(tolerance_m)).length / ring.length
-
+    pieces = shapely.linestrings(pairs)
+    total = shapely.length(pieces).sum()
+    if total == 0:
+        return 0.0
+    return float(shapely.length(shapely.intersection(pieces, route.buffer(tolerance_m))).sum() / total)
 
 def oriented(coords: list, direction: str) -> list:
     """A closed ring's [lon, lat] coordinates, turned to run counterclockwise or clockwise."""

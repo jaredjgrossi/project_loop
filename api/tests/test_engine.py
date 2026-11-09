@@ -34,9 +34,8 @@ def test_the_start_comes_from_the_phone_a_place_or_the_profile():
         start_for(saved, None, {})
 
 
-def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
-    lines, blocked = before_build(rc(reuse_route_id="rt_a"), zones=[])
-    assert [x["key"] for x in lines] == ["reuse_route_id"] and blocked
+def test_every_phase3_field_builds_with_no_cant_line():
+    assert before_build(rc(reuse_route_id="rt_a"), zones=[]) == ([], False)  # step 11 rebuilds past routes
     via = rc(via_places=[{"kind": "place", "name": "McCarren Park", "borough": "Brooklyn", "lat": 40.7204,
                           "lon": -73.9512}])
     assert before_build(via, zones=[]) == ([], False)  # step 9 builds it
@@ -44,9 +43,8 @@ def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
                            "lon": -73.9512})
     assert before_build(a_to_b, zones=[]) == ([], False)  # step 8 builds it
     assert before_build(rc(hills="avoid"), zones=[]) == ([], False)  # step 10 scores hills
-    lines, blocked = before_build(rc(planned={"use_my_location": True, "distance_mi": 3,
-                                              "start_date": "2026-11-12"}), zones=[])
-    assert [x["key"] for x in lines] == ["planned"] and not blocked
+    assert before_build(rc(planned={"use_my_location": True, "distance_mi": 3, "start_date": "2026-11-12"}),
+                        zones=[]) == ([], False)  # step 11 builds the planned run too
     assert before_build(rc(avoid_places=[{"name": "1st Ave", "how": "along"}]), zones=[]) == ([], False)  # step 8b
     assert before_build(rc(), zones=[]) == ([], False)
 
@@ -267,3 +265,79 @@ def test_a_lap_with_no_distance_is_the_lap_and_the_way_there():
     assert final["routes"] and final["notes"] == []
     d = final["routes"][0]["distance"]["value"]
     assert d >= (2 * 1200 + 2400) / 1609.344 * 0.95  # there (1.2 km), a 2.4 km lap, back
+
+
+# ---- past routes and the ferry part (step 11, decision 038) --------------------------------------------------------
+
+import math  # noqa: E402
+
+from api.geometry import covered_share  # noqa: E402
+from api.past_routes import PastRoute  # noqa: E402
+
+SQUARE_M = 600  # a past loop: a 600 m square from Kips Bay, east, north, west, south (counterclockwise)
+KX = 111_320 * math.cos(math.radians(KIPS_POINT[0]))
+
+
+def square_route(side=SQUARE_M):
+    lat, lon = KIPS_POINT
+    pts = [(0, 0), (side, 0), (side, side), (0, side), (0, 0)]
+    return PastRoute("r_old.1", tuple((lon + e / KX, lat + n / M_LAT) for e, n in pts))
+
+
+def past_engine(past=square_route(), **kw) -> Engine:
+    from api.generate import generate_loops
+    return engine(generate_loops, routers_fn=lambda zones, lights, closures: (straight_route, None, area_route),
+                  past_route_fn=lambda rid: past if rid == past.id else None, **kw)
+
+
+def test_a_past_route_is_rebuilt_from_its_own_start():
+    final = past_engine().build(rc(distance_mi=None, reuse_route_id="r_old.1"), Start(40.75, -73.99, "here"),
+                                lambda e: None, "r_p")
+    route = final["routes"][0]["geometry"]["coordinates"]
+    line = {"type": "LineString", "coordinates": [list(c) for c in square_route().coords]}
+    assert covered_share(route, line, 30) >= 0.9
+    assert abs(route[0][1] - KIPS_POINT[0]) < 1e-4 and abs(route[0][0] - KIPS_POINT[1]) < 1e-4
+    assert abs(final["routes"][0]["distance"]["value"] - 4 * SQUARE_M / 1609.344) < 0.05
+
+
+def test_the_other_direction_runs_it_backwards():
+    fwd = past_engine().build(rc(distance_mi=None, reuse_route_id="r_old.1"), Start(*KIPS_POINT, "x"),
+                              lambda e: None, "r_f")["routes"][0]["geometry"]["coordinates"]
+    back = past_engine().build(rc(distance_mi=None, reuse_route_id="r_old.1", reverse=True), Start(*KIPS_POINT, "x"),
+                               lambda e: None, "r_b")["routes"][0]["geometry"]["coordinates"]
+    def first_step(line):  # the first point that isn't the start (the router repeats waypoints)
+        return next(c for c in line if abs(c[0] - line[0][0]) + abs(c[1] - line[0][1]) > 1e-6)
+    f, b = first_step(fwd), first_step(back)
+    assert f[0] > fwd[0][0] and abs(f[1] - fwd[0][1]) < 1e-6  # east first
+    assert b[1] > back[0][1] and abs(b[0] - back[0][0]) < 1e-6  # north first
+
+
+def test_longer_keeps_the_route_and_adds_distance():
+    final = past_engine().build(rc(distance_mi=2.5, reuse_route_id="r_old.1"), Start(*KIPS_POINT, "x"),
+                                lambda e: None, "r_l")
+    line = {"type": "LineString", "coordinates": [list(c) for c in square_route().coords]}
+    assert final["routes"] and final["notes"] == []
+    for r in final["routes"]:
+        assert covered_share(r["geometry"]["coordinates"], line, 30) >= 0.9
+        assert abs(r["distance"]["value"] - 2.5) <= 0.2
+
+
+def test_a_past_route_with_no_line_on_file_is_said():
+    final = past_engine().build(rc(distance_mi=None, reuse_route_id="r_gone.1"), Start(*KIPS_POINT, "x"),
+                                lambda e: None, "r_g")
+    assert final["routes"] == [] and final["notes"][0]["key"] == "past_route_not_found"
+
+
+def test_an_avoid_with_coordinates_is_a_no_go_circle():
+    from api.engine import PIER_RADIUS_M, place_zone
+    from api.constraints import AvoidPlace
+    pier = AvoidPlace(name="E 34th St ferry landing", how="area",
+                      place={"kind": "place", "name": "E 34th St ferry landing", "borough": "Manhattan",
+                             "lat": 40.7439, "lon": -73.9707, "source": "NYC Ferry GTFS", "trust": "listed"})
+    z = place_zone(pier, 1)
+    ring = z.rings[0]
+    assert z.id == "avoid_1" and len(ring) == 17 and ring[0] == ring[-1]
+    kx = 111_320 * math.cos(math.radians(40.7439))
+    assert all(abs(math.hypot((x + 73.9707) * kx, (y - 40.7439) * M_LAT) - PIER_RADIUS_M) < 1 for x, y in ring)
+    lines, blocked = before_build(rc(avoid_places=[pier.model_dump()]), zones=[])
+    assert lines == [] and not blocked  # not "can't avoid": it has coordinates

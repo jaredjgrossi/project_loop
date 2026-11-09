@@ -45,6 +45,9 @@ class Via:
     name: str
     shape: dict  # GeoJSON, [lon, lat]: the place's outline, line or point
     lap: tuple | None = None  # around (decision 035): the ring's [lon, lat] coordinates, in the running direction
+    closed: bool = True  # False: the lap is an open line, start to end (a past A-to-B route, step 11)
+    phrase: str | None = None  # how labels name it ("along the route you ran"); default "through X", "with a lap of X"
+    skip: tuple = ()  # (lat, lon, meters): spots on the lap the run must miss ("skip the ferry part", step 11)
 
     @property
     def point(self) -> tuple[float, float]:
@@ -56,13 +59,41 @@ class Via:
 
     def stops(self, came_from: tuple[float, float]) -> list[tuple[float, float]]:
         """The waypoints that pass this via, coming from `came_from`: its point, or a full lap of its ring."""
-        return [self.point] if self.lap is None else lap_points(self.lap, came_from)
+        if self.lap is None:
+            return [self.point]
+        pts = lap_points(self.lap, came_from, closed=self.closed)
+        return [pts[0], *(p for p in pts[1:-1] if not _in_skip(p, self.skip)), pts[-1]]
+
+    def ring(self) -> dict:
+        """The line a lap must run along: the whole lap, less the spots it must miss."""
+        line = {"type": "LineString", "coordinates": [list(c) for c in self.lap]}
+        return _minus_spots(line, self.skip) if self.skip else line
 
 
-def lap_points(ring: Sequence, came_from: tuple[float, float], step_m: float = LAP_STEP_M) -> list:
+def _in_skip(p: tuple[float, float], skip) -> bool:
+    return any(_meters(p, (lat, lon)) <= r for lat, lon, r in skip)
+
+
+def _minus_spots(line: dict, skip) -> dict:
+    """A [lon, lat] line without the parts within each spot's radius."""
+    import shapely
+    from shapely.geometry import Point, mapping
+    from shapely.geometry import shape as to_shape
+
+    lon0, lat0 = line["coordinates"][0][:2]
+    kx, ky = 111_320 * math.cos(math.radians(lat0)), 110_574
+    flat = shapely.transform(to_shape(line), lambda xy: (xy - [lon0, lat0]) * [kx, ky])
+    holes = shapely.union_all([Point((lon - lon0) * kx, (lat - lat0) * ky).buffer(r) for lat, lon, r in skip])
+    left = shapely.transform(flat.difference(holes), lambda xy: xy / [kx, ky] + [lon0, lat0])
+    return mapping(left)
+
+
+def lap_points(ring: Sequence, came_from: tuple[float, float], step_m: float = LAP_STEP_M,
+               closed: bool = True) -> list:
     """(lat, lon) waypoints for one full lap of a closed [lon, lat] ring, in the ring's direction: from the point on
     it nearest `came_from`, back to that point. Between them, a point every `step_m` along the ring and at every
-    corner sharper than LAP_CORNER_DEG, so the router can't cut across."""
+    corner sharper than LAP_CORNER_DEG, so the router can't cut across. `closed=False`: an open line (a past A-to-B
+    route, step 11), from its first point to its last."""
     import numpy as np
     import shapely
     from shapely.geometry import LineString, Point
@@ -72,14 +103,14 @@ def lap_points(ring: Sequence, came_from: tuple[float, float], step_m: float = L
     line = shapely.transform(LineString([c[:2] for c in ring]), lambda xy: (xy - origin) * scale)
     xy = np.array(line.coords)
     total = line.length
-    entry = line.project(Point((np.array([came_from[1], came_from[0]]) - origin) * scale))
+    entry = line.project(Point((np.array([came_from[1], came_from[0]]) - origin) * scale)) if closed else 0.0
     along = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))])  # each vertex's distance along
     corners = []
     for i in range(1, len(xy) - 1):  # the closing vertex is the first one: check it against both neighbors
         a, b = xy[i] - xy[i - 1], xy[i + 1] - xy[i]
         if _turn_deg(a, b) > LAP_CORNER_DEG:
             corners.append(along[i])
-    if _turn_deg(xy[-1] - xy[-2], xy[1] - xy[0]) > LAP_CORNER_DEG:
+    if closed and _turn_deg(xy[-1] - xy[-2], xy[1] - xy[0]) > LAP_CORNER_DEG:
         corners.append(0.0)
     ahead = sorted({round((d - entry) % total, 3) for d in corners} - {0.0, round(total, 3)})
     stops, last = [0.0], 0.0
@@ -93,7 +124,7 @@ def lap_points(ring: Sequence, came_from: tuple[float, float], step_m: float = L
     stops.append(total)
     out = []
     for d in stops:
-        p = line.interpolate((entry + d) % total)
+        p = line.interpolate((entry + d) % total if closed else d)
         out.append((p.y / scale[1] + lat0, p.x / scale[0] + lon0))
     return out
 
@@ -112,8 +143,7 @@ def tolerance(shape: dict) -> float:
 
 def through_rules(vias: Sequence[Via]) -> list[tuple[dict, float, float | None]]:
     """The hard rule for each via: (shape, meters, None) to pass it, or (ring, meters, share) to run its lap."""
-    return [(v.shape, tolerance(v.shape), None) if v.lap is None
-            else ({"type": "LineString", "coordinates": [list(c) for c in v.lap]}, LAP_TOLERANCE_M, LAP_SHARE)
+    return [(v.shape, tolerance(v.shape), None) if v.lap is None else (v.ring(), LAP_TOLERANCE_M, LAP_SHARE)
             for v in vias]
 
 
@@ -147,7 +177,7 @@ def features_on_vias(fetch: Callable, vias: Sequence[Via]) -> Callable:
 def via_jobs(start: tuple[float, float], vias: Sequence[Via], miles: float, route_fn: RouteFn, shortest: Route,
              shape: str) -> Callable[[_Rules], list[tuple[int, Callable]]]:
     """Jobs for a run through the vias and back to the start, built from the generator's rules."""
-    names = " and ".join(("with a lap of " if v.lap else "through ") + v.name for v in vias)
+    names = " and ".join(v.phrase or (("with a lap of " if v.lap else "through ") + v.name) for v in vias)
     pts = tour(start, vias)[1:-1]
     target_m = miles_to_meters(miles)
     factor = street_factor(shortest, tour(start, vias))

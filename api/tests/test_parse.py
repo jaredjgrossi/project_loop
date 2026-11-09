@@ -42,7 +42,30 @@ AT_CENTRAL_PARK = {"86th st": [pm("86th St", "street", "Manhattan", 40.7814, -73
                                pm("86th St", "street", "Manhattan", 40.7854, -73.9697, at="Central Park West")]}
 
 
+# Past routes on file (step 11): rt_a runs the East River esplanade past the E 34th St ferry landing; rt_c is a
+# Gramercy street rectangle, nowhere near a ferry.
+E34_LANDING = (40.7439, -73.9707)
+PAST_LINES = {
+    "rt_a": ((-73.9799, 40.7438), (-73.9712, 40.7398), (-73.9707, 40.7439), (-73.9690, 40.7480),
+             (-73.9707, 40.7439), (-73.9712, 40.7398), (-73.9799, 40.7438)),
+    "rt_c": ((-73.9799, 40.7438), (-73.9850, 40.7380), (-73.9880, 40.7395), (-73.9830, 40.7455), (-73.9799, 40.7438)),
+}
+
+
 class FakePlaces:
+    def past_route(self, route_id):
+        from api.past_routes import PastRoute
+        line = PAST_LINES.get(route_id)
+        return PastRoute(route_id, line) if line else None
+
+    def ferry_landings_along(self, coords):
+        near = any(abs(lat - E34_LANDING[0]) * 110_574 < 100 and abs(lon - E34_LANDING[1]) * 84_300 < 100
+                   for lon, lat in coords)
+        return [{"name": "E 34th St ferry landing", "how": "area",
+                 "place": {"kind": "place", "name": "E 34th St ferry landing", "borough": "Manhattan",
+                           "lat": E34_LANDING[0], "lon": E34_LANDING[1], "source": "NYC Ferry GTFS",
+                           "trust": "listed"}}] if near else []
+
     def lookup(self, name, near=None):
         if isinstance(near, PlaceMatch):
             return AT_CENTRAL_PARK.get(name.casefold(), [])
@@ -141,7 +164,7 @@ IDEAL = {  # the extraction a correct model returns, per case
     "H03": ext(reuse={"kind": "name", "weekday": None, "date": None, "name_words": "river", "longer": False,
                       "reverse": True}),
     "H04": ext(reuse={"kind": "last_week", "weekday": None, "date": None, "name_words": None, "longer": False,
-                      "reverse": False}, avoid=[{"name": "E 34th St ferry landing", "how": "area"}]),
+                      "reverse": False}, avoid=[{"name": "ferry", "how": "area"}]),  # code finds the landing
     "H05": ext(reuse={"kind": "usual", "weekday": None, "date": None, "name_words": None, "longer": False,
                       "reverse": False}),
     "P42": ext(shape="out_and_back", distance=mi(5)),

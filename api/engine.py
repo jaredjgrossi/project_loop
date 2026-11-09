@@ -22,19 +22,19 @@ from api.constraints import RunConstraints, resolve_preferences, unsupported
 from api.copy import render
 from api.generate import TOLERANCE_PCT, Candidate, generate_loops
 from api.geocoding import GeocodeError, geocode
-from api.geometry import outline
+from api.geometry import line_length_m, outline
 from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
 from api.units import meters_to_miles
 from api.via import Via, features_on_vias, through_rules, tour, via_jobs
+from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url
 from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
-BLOCKING = ("reuse_route_id",)
-# A planned second run leaves a buildable run: it isn't planned yet (step 11), so the first run is built, with a can't-do
-# line.
+BLOCKING: tuple[str, ...] = ()  # step 11 builds the last of them (past routes)
+# Nothing in Phase 3 is left for later: a planned second run is built after the first (step 11, the server).
 TOP_N = 3
 
 
@@ -186,7 +186,7 @@ def before_build(rc: RunConstraints, zones=None) -> tuple[list[dict], bool]:
     later = unsupported(rc)
     for key in later:
         lines.append({"gap": "later", "key": key, "text": render(f"cant.later.{key}")})
-    _, unknown = resolve_zones([a.name for a in rc.avoid_places if a.how == "area"], zones)
+    _, unknown = resolve_zones([a.name for a in rc.avoid_places if a.how == "area" and a.place is None], zones)
     for name in unknown:
         lines.append({"gap": "avoid_unknown", "key": "avoid_unknown", "text": render("cant.avoid_unknown", name=name)})
     return lines, any(k in BLOCKING for k in later)
@@ -199,6 +199,47 @@ def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
     return {"id": route_key, "rank": rank, "kind": c.kind, "label": c.label, "score": round(c.score),
             "distance": route_summary(c, [], [], {})["distance"],
             "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
+
+
+def db_past_route(route_id: str):
+    """A past route's line from saved_routes (step 11)."""
+    from api.past_routes import load
+    from api.saved_routes import PgRouteStore
+    return load(route_id, PgRouteStore())
+
+
+PAST_ROUTE_SHARE = 0.9  # a rebuilt route runs along this much of the one they ran (the lap rule, decision 035)
+PIER_RADIUS_M = 120.0  # "skip the ferry part": a circle this size around each landing is a no-go zone for the request;
+# the landing point is out on the pier, about 55 m from the esplanade, so 120 m takes the stretch beside it
+SKIP_MARGIN_M = 40.0  # and the past route's waypoints and coverage leave out this much more around it
+
+
+def past_route_via(past, reverse: bool, spots=()) -> tuple[Start, tuple[float, float] | None, Via]:
+    """The run's start and end and a lap along the past route: a loop or out-and-back is a closed lap from its
+    start; a run that ended elsewhere is an open one, to its end. Reversed for 'the other direction'."""
+    from api.past_routes import is_closed
+    coords = [list(c[:2]) for c in (reversed(past.coords) if reverse else past.coords)]
+    start = Start(coords[0][1], coords[0][0], render("request.start.past_route"))
+    closed = is_closed(coords)
+    if closed:
+        coords[-1] = coords[0]
+    line = {"type": "LineString", "coordinates": coords}
+    skip = tuple((sum(p[1] for p in z.rings[0][:-1]) / (len(z.rings[0]) - 1),
+                  sum(p[0] for p in z.rings[0][:-1]) / (len(z.rings[0]) - 1), PIER_RADIUS_M + SKIP_MARGIN_M)
+                 for z in spots)  # the part of the route by an avoided spot isn't run (H04: the ferry part)
+    via = Via(start.lat, start.lon, render("route.past"), line, tuple(tuple(c) for c in coords), closed=closed,
+              phrase=render("route.past.along"), skip=skip)
+    return start, None if closed else (coords[-1][1], coords[-1][0]), via
+
+
+def place_zone(avoid, i: int) -> NoGoZone:
+    """An avoid with coordinates (a ferry landing, step 11) as a no-go zone for this request: a circle around it."""
+    p = avoid.place
+    kx = 111_320 * math.cos(math.radians(p.lat))
+    ring = [[p.lon + PIER_RADIUS_M * math.cos(a) / kx, p.lat + PIER_RADIUS_M * math.sin(a) / 110_574]
+            for a in (2 * math.pi * k / 16 for k in range(16))]
+    return NoGoZone(id=f"avoid_{i}", name=avoid.name, aliases=(), default=False, reason="the runner's avoid",
+                    source=p.source or "request", rings=[ring + [ring[0]]])
 
 
 def db_alongs_near(names: list[str], near: tuple[float, float]):
@@ -261,6 +302,7 @@ class Engine:
     vias_fn: Callable = db_vias  # via PlaceRefs -> [Via] with their shapes
     alongs_fn: Callable = None  # (names, (lat, lon)) -> ([along.Along], names not found); default db_alongs_near
     context_for_fn: Callable = ml.context_for  # (lights, grid, use_prior=, start=) -> a route scorer (Postgres)
+    past_route_fn: Callable = None  # route id -> past_routes.PastRoute | None; default saved_routes (step 11)
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
@@ -275,11 +317,25 @@ class Engine:
             raise EngineUnavailable("GraphHopper isn't answering")
         t0 = time.perf_counter()
         prefs = resolve_preferences(rc).values
-        zones, _ = resolve_zones([a.name for a in rc.avoid_places if a.how == "area"])
+        zones, _ = resolve_zones([a.name for a in rc.avoid_places if a.how == "area" and a.place is None])
+        zones += [place_zone(a, i) for i, a in enumerate(rc.avoid_places, 1)
+                  if a.how == "area" and a.place is not None and a.place.lat is not None]  # step 11: a ferry pier
         miles = rc.distance_mi
+        past_via = None
+        if rc.reuse_route_id:  # step 11: the route they ran, rebuilt for now (decision 038)
+            past = (self.past_route_fn or db_past_route)(rc.reuse_route_id)
+            if past is None:
+                return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
+                        "provisional": False, "routes": [], "route": None, "pool_size": None,
+                        "pool": {"candidates": 0, "best_of": None}, "timing": {},
+                        "notes": [{"id": "n_p1", "key": "past_route_not_found", "trust": "listed",
+                                   "text": render("note.past_route_not_found")}]}
+            start, end, past_via = past_route_via(past, rc.reverse, [z for z in zones if z.id.startswith("avoid_")])
         try:
             grid = self.grid_fn(start.lat, start.lon)
-            reach_mi = miles if miles is not None else 2 * meters_to_miles(_straight_m((start.lat, start.lon), end))
+            reach_mi = (miles if miles is not None else
+                        meters_to_miles(line_length_m(past_via.lap)) if past_via is not None else
+                        2 * meters_to_miles(_straight_m((start.lat, start.lon), end)))
             closures = self.closures_fn(start.lat, start.lon, reach_mi) if self.closures_fn else []
             if end is not None and self.closures_fn:  # and those near the end, once each
                 closures = list({c.id: c for c in [*closures, *self.closures_fn(*end, reach_mi)]}.values())
@@ -298,6 +354,8 @@ class Engine:
             vias = self.vias_fn(rc.via_places) if rc.via_places else []
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        if past_via is not None:
+            vias = [past_via, *vias]
         through = through_rules(vias)
         here = (start.lat, start.lon)
         shortest = None

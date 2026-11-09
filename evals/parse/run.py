@@ -94,6 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--thinking", help="passed to the parser (api.parse: adaptive or off)")
     args = ap.parse_args(argv)
     kw = {k: v for k, v in (("model", args.model), ("effort", args.effort), ("thinking", args.thinking)) if v}
+    if args.parser != "evals.parse.stub:parse":  # a live parser: the past routes' lines must be on file (step 11)
+        from evals.past_routes import seed
+        try:
+            seed()
+        except Exception as exc:  # noqa: BLE001 - say it and run anyway: only H04 needs a line
+            print(f"past routes not seeded ({exc.__class__.__name__}: {exc}); H04 can't match the ferry part",
+                  file=sys.stderr)
     rows = run(load_parser(args.parser), args.case, **kw)
     print(table(rows))
     if args.verbose:

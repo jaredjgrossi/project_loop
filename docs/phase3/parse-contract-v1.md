@@ -122,9 +122,17 @@ Step 9 adds the same question for via places: "Going through Hudson River Greenw
 
 ## Event: `planned`
 ```json
-{"event": "planned", "parse_id": "p_9a11", "route_id": "r_77c2", "date": "2026-11-07", "chips": ["..."], "summary": {"distance_mi": 10.0, "start_time": "07:00"}}
+{"event": "planned", "v": 1, "parse_id": "p_9a11", "route_id": "r_77c2", "date": "2026-11-07", "chips": ["..."],
+ "summary": {"distance_mi": 10.02, "start_time": "07:00"}, "constraints": {"...": "the planned RunConstraints"},
+ "notes": []}
 ```
 The app saves it to the planned list. Opening it on the day calls `POST /v1/runs` with its `constraints`, and the app keeps the old route if the new one isn't better.
+
+Built in step 11 (decision 038):
+- With a second run, the stream is `parsed` … `final`, then `planned`, then `done`.
+- The second run is built from its own start (home on a later day, R16) for its own day and time, and stored like any build, so `GET /v1/routes/{route_id}` works. Only `planned` is streamed for it, never its candidates.
+- `summary.distance_mi` is the built route's distance.
+- If it can't be built now, `route_id` is null and `notes` says so (`planned_not_built`). The app builds it when the runner opens it.
 
 ## Events: `done` and `error`
 - `done`: `{"event": "done"}`.
@@ -139,7 +147,18 @@ The app saves it to the planned list. Opening it on the day calls `POST /v1/runs
 - **Route entries** in `top3`, `provisional` and `final` carry `id`, the same for the same route in every event of one build (step 6).
 - **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
 - **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
-- **Can't-do lines from the engine:** `gap: "later"` for what a later step builds (past routes build nothing yet, and the stream ends after `parsed`; a planned second run builds the first run anyway), and `gap: "avoid_unknown"` for an area avoid that isn't on the no-go list. End places (step 8), via places (step 9), along-avoids (step 8b) and hills (step 10) build.
+- **Can't-do lines from the engine:** `gap: "avoid_unknown"` for an area avoid that isn't on the no-go list. Nothing in Phase 3 is left for later: end places (step 8), via places (step 9), along-avoids (step 8b), hills (step 10), past routes and planned runs (step 11) all build, so `gap: "later"` no longer appears.
+- **Past routes (step 11, decision 038):**
+  - `reuse_route_id` is a recent route's `id`, the id Loop gave it: `r_xxxxxxxx.N`, or a build id for its #1.
+  - The server reads the route's line from `saved_routes` and rebuilds it for now, from where it started: closures, no-go zones and avoids as of now, crowds for this start time.
+  - Every rebuilt route runs along at least 90% of the old line. With `reverse` it runs the other way.
+  - "Longer": the distance is the recent route's `distance_mi` plus the answer, and the route adds detours.
+  - A route with no line on file builds nothing, and `final.notes` says so (`past_route_not_found`).
+- **"Skip the ferry part" (H04):** code finds the ferry landings within 100 m of the past route(s) the request may mean (`pulse_sources`). Each becomes an area avoid with its coordinates:
+  - the avoid is `{"name": "E 34th St ferry landing", "how": "area", "place": {"lat": ..., "lon": ..., "source": "NYC Ferry GTFS", "trust": "listed"}}`;
+  - the rebuilt route stays 120 m from each landing and leaves that stretch of the old route out.
+
+  Without a landing along the route, the words stay as said, and the engine says it can't avoid them.
 - **Hills (step 10, decision 037):** `hills: "avoid"` ("flat", "avoid hills") ranks routes by how much they climb, from the elevation every 0.1 mi. The #1 route's `summary` then carries `hills`: `{"value": 4.2, "unit": "m/mi", "status": "estimate", "source": "...", "steepest_pct": 2.1}`, the climb per mile and the steepest 0.1 mi. It's an estimate, like `climb`, because the elevation tiles are a smoothed ground model. With "don't mind" there's no `hills` field and no change to the ranking.
 - **Along-avoids (step 8b, decision 036):** `{"name": "42nd St", "how": "along"}`, or a stretch, `"1st Ave, E 25th–E 34th St"`. No route runs along the street (or the stretch) for 75 m or more in one go, within 20 m of its centre line, sidewalks included; crossing it is fine. The router steers off it too. A street Loop can't find near the start isn't avoided, and `final.notes` says so: `{"key": "avoid_not_found", "trust": "listed", "text": "Couldn't find Nowhere St near the start, so these routes don't avoid it"}`.
 - **Answers:** a tapped option settles what it names. Typed text is read by code (a distance, a place name or address, a borough, a recent route's name); text code can't read brings the same question back with a new `parse_id`. No Claude call either way.

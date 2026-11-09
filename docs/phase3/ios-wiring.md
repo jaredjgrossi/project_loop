@@ -98,9 +98,8 @@ for try await line in bytes.lines {
    (`text.unicodeScalars`), end exclusive; null for preset, default and usual values. Light those words up in the
    sentence. `question.chip_id` names the chip a question is about. When the runner edits a chip, drop that chip's
    entry from `constraints.spans` and `constraints.sources` before sending the constraints back.
-   Show every string as sent; they all come from the server's templates. Lines with `gap: "later"` say what the
-   engine can't build yet. When the request needs one of those (an end place, a via place, an along-avoid, a past
-   route), the stream goes straight to `done` with no routes.
+   Show every string as sent; they all come from the server's templates. Since step 11 every Phase 3 request builds,
+   so `gap: "later"` lines no longer come; a can't-do line now only says what Loop can't avoid or run.
    `parsed.reach_m` is how far the run can get from the start, in meters (null with no distance yet, or an A-to-B run).
 2. **`candidates`**, from right after `parsed` until `final`, one event per route the engine tries: `{route_id, elapsed_s, candidates: [{id, kind, points}]}`. `points` is a light `[lon, lat]` outline, at most 40 points, about 1 KB an event, 50–100 a build. For drawing the search only. A candidate's `id` is the one it keeps if it reaches `top3`. Ignore it if you don't draw it.
 3. **`top3`**, the first about 0.3–0.6 s after `parsed`, then again each time the top 3 changes:
@@ -122,7 +121,11 @@ for try await line in bytes.lines {
    - `timing`: for logs only
 
    It's about 200 KB for 8 mi.
-6. **`done`**.
+6. **`planned`**, only when the request had a second run ("5k tonight and a 10 miler sat"): `{route_id, date,
+   chips, summary: {distance_mi, start_time}, constraints, notes}`, built for its own day from its own start. Save
+   it to the planned list; on the day, send its `constraints`. `route_id` is null (with a note) if it couldn't be
+   built now.
+7. **`done`**.
 
 **Building a `RouteFile` from `final`:**
 - `route` ← `final.route`

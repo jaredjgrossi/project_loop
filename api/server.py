@@ -252,6 +252,34 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         client, profile = raw.get("client") or {}, raw.get("profile") or {}
         return client.get("location"), {p["id"]: p for p in profile.get("saved_places") or []}
 
+    def build_planned(rc: RunConstraints, planned: dict, kept: dict, location, saved) -> dict:
+        """The `planned` event (contract; D6): the second run built for its day, from its own start (home on a
+        later day, R16), stored like any build so its route_id works later. Built quietly: only `planned` is
+        streamed. If it can't be built now, the event still carries its day and constraints, with a note, and the
+        app builds it when the runner opens it."""
+        p = rc.planned
+        pid = new_route_id()
+        chips = parsed_for_constraints(planned, Context.from_request(kept), None)["chips"]
+        event = {"event": "planned", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "route_id": None,
+                 "date": p.start_date.isoformat(), "chips": chips, "constraints": planned,
+                 "summary": {"distance_mi": p.distance_mi,
+                             "start_time": p.start_time},
+                 "notes": []}
+        try:
+            final = engine.build(p, start_for(p, location, saved), lambda e: None, pid, end=end_for(p, saved))
+        except (EngineQuestion, EngineUnavailable, BadStart):
+            final = None
+        if final is None or not final["routes"]:
+            day = p.start_date.strftime("%A")
+            event["notes"] = [{"id": "n_pl1", "key": "planned_not_built", "trust": "listed",
+                               "text": render("note.planned_not_built", day=day)}]
+            return event
+        keep_route(final)
+        route_store.save(pid, stored_request(kept, "planned", event["parse_id"]), planned, final)
+        event["route_id"] = pid
+        event["summary"]["distance_mi"] = final["routes"][0]["distance"]["value"]
+        return event
+
     async def stream(req: RunRequest) -> AsyncIterator[ServerSentEvent]:
         kind = "text" if req.text is not None else "answer" if req.answer is not None else "constraints"
         step = {"text": from_text, "answer": from_answer, "constraints": from_constraints}[kind]
@@ -304,6 +332,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                 stored = {k: v for k, v in parsed["constraints"].items() if k != "spans"}  # spans are the runner's words
                 route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), stored, final)
                 send(final)
+                if rc.planned is not None:  # D6, step 11: the second run, built for its own day, after the first
+                    send(build_planned(rc, stored.get("planned") or {}, kept, location, saved))
             except EngineQuestion as q:  # e.g. the end is farther than the distance: ask, and keep the parse open
                 pid = f"p_{secrets.token_hex(4)}"
                 store.put(Pending(parse_id=pid, question_id=q.question["id"], ext=trace.get("extraction") or {},
@@ -320,12 +350,13 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                       "text": render("error.engine_unavailable")})
 
         threading.Thread(target=work, name=f"build-{route_id}", daemon=True).start()
+        last = ("planned",) if rc.planned is not None else ("final",)
         while True:
             ev = await queue.get()
             yield _event(ev)
-            if ev["event"] in ("final", "question", "error"):
+            if ev["event"] in (*last, "question", "error"):
                 break
-        if ev["event"] in ("final", "question"):
+        if ev["event"] in ("final", "planned", "question"):
             yield _event(DONE)
 
     async def raw_body(request: Request) -> bytes:

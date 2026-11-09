@@ -150,3 +150,18 @@ def test_a_route_that_only_touches_the_ring_is_rejected():
                             only_anchored=True, through=through_rules([v]),
                             extra_jobs=via_jobs(KIPS, [v], 4.0, touch, shortest, "any"))
     assert result.candidates == [] and result.rejected["misses_lap"] > 0
+
+
+def test_a_lap_skips_a_spot_it_must_miss():  # step 11: "skip the ferry part" of a past route
+    import dataclasses
+    from api.geometry import line_length_m
+    from api.via import _meters
+    v = lap_via()
+    corner = (NORTH[0] + 300 / M_LAT, NORTH[1] + 300 / KX)  # the ring's north-east corner
+    skipped = dataclasses.replace(v, skip=((corner[0], corner[1], 100.0),))
+    assert all(_meters(p, corner) > 100 for p in skipped.stops(KIPS)[1:-1])
+    full = line_length_m([list(c) for c in v.lap])
+    ring = skipped.ring()
+    parts = ring["coordinates"] if ring["type"] == "MultiLineString" else [ring["coordinates"]]
+    left = sum(line_length_m(p) for p in parts)
+    assert left == pytest.approx(full - 200, abs=5)  # 100 m each way from the corner

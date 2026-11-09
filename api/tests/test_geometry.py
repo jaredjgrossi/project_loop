@@ -135,3 +135,11 @@ def test_line_length_and_orientation():
     assert line_length_m(sq) == pytest.approx(4 * 0.002 * 110_574 * 0.5 + 4 * 0.002 * 111_320 * 0.758 * 0.5, rel=0.03)
     assert oriented(sq, "counterclockwise") == sq  # east, north, west, south: counterclockwise
     assert oriented(sq, "clockwise") == sq[::-1]
+
+
+def test_covered_share_counts_an_out_and_back_both_ways():
+    from api.geometry import covered_share
+    out = [[-73.97, 40.78], [-73.97, 40.79]]
+    there_and_back = {"type": "LineString", "coordinates": out + [out[0]]}
+    assert covered_share(out + [out[0]], there_and_back, 10) == pytest.approx(1.0)
+    assert covered_share([[-73.97, 40.78], [-73.97, 40.785]], there_and_back, 10) == pytest.approx(0.5, abs=0.01)

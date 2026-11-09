@@ -120,11 +120,34 @@ def test_answers_accumulate_across_questions():
     assert third["parsed"]["question"] is None and c["distance_mi"] == 5 and c["start_place"]["borough"] == "Manhattan"
 
 
-def test_longer_is_kept_for_step_10():
+def test_longer_is_the_past_distance_plus_the_answer():  # step 11
     out, ctx = asked("H02")  # "my usual, but longer": how much longer?
     after = answer(out, ctx, option_id="a", case_id="H02")
     assert after["parsed"]["question"] is None
-    assert after["trace"]["later"] == {"plus_mi": 1.0}
+    c = after["parsed"]["constraints"]
+    assert c["reuse_route_id"] == "rt_a" and c["distance_mi"] == 4.0  # rt_a is 3.0 mi, plus 1
+
+
+def _option_for(out, route_id):
+    opts = out["trace"]["answer_map"]["options"]
+    return next(k for k, v in opts.items() if v.get("reuse") == route_id)
+
+
+def test_the_ferry_part_is_matched_along_the_routes_it_could_mean():  # H04, step 11 (decision 038)
+    out, ctx = asked("H04")  # last week: rt_a (East River esplanade, past the E 34th St landing) or rt_c (Gramercy)
+    (avoid,) = out["parsed"]["constraints"]["avoid_places"]
+    assert avoid["name"] == "E 34th St ferry landing" and avoid["place"]["lat"] == 40.7439
+    chip = next(c for c in out["parsed"]["chips"] if c["id"] == "c_avoid_1") if out["parsed"]["chips"] else None
+    assert chip is None or chip["span"]["text"] == "the ferry part"
+    after = answer(out, ctx, option_id=_option_for(out, "rt_a"), case_id="H04")
+    assert after["parsed"]["question"] is None
+    assert [a["name"] for a in after["parsed"]["constraints"]["avoid_places"]] == ["E 34th St ferry landing"]
+
+
+def test_a_route_with_no_ferry_keeps_the_words_and_the_engine_says_it_cant():
+    out, ctx = asked("H04")
+    after = answer(out, ctx, option_id=_option_for(out, "rt_c"), case_id="H04")  # the Gramercy rectangle
+    assert after["parsed"]["constraints"]["avoid_places"] == [{"name": "ferry"}]  # "area" is the default
 
 
 @pytest.mark.parametrize("case_id", ["P36", "P38", "R04", "P10", "P34", "P24", "P35", "R01"])

@@ -160,8 +160,6 @@ TEMPLATES: dict[str, str] = {
     "cant.G9": "Can't plan around street lighting or safety yet",
     "cant.bike_lanes": "Can't avoid bike lanes yet",
     # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
-    "cant.later.reuse_route_id": "Can't rebuild a past route yet, so no routes were built",
-    "cant.later.planned": "Can't plan the second run yet; only the first was built",
     "cant.avoid_unknown": "Can't avoid {name} yet: it isn't on the list of places Loop can avoid",
     "cant.lap_unrouted": "Can't run laps of {name} yet: it isn't in Loop's path data. These routes go to it",
     "cant.around_shape": "Can't run a lap of {name}: it isn't a loop. These routes go through it",
@@ -173,6 +171,11 @@ TEMPLATES: dict[str, str] = {
     "note.distance_off.long": "No route came within {tolerance}% of {miles} mi. The closest is {actual} mi, {pct}% long.",
     "note.no_route": "Couldn't build a route from this start. Try another start or distance.",
     "note.avoid_not_found": "Couldn't find {name} near the start, so these routes don't avoid it",
+    "note.past_route_not_found": "Couldn't find that route's line, so it wasn't rebuilt. Pick another, or describe the run",
+    "note.planned_not_built": "Couldn't build the {day} run yet; it's saved, and Loop builds it when you open it",
+    "request.start.past_route": "Where that route starts",
+    "route.past": "the route you ran",
+    "route.past.along": "along the route you ran",
 
     # Errors
     "error.parse_failed": "Couldn't read that request. Try saying it another way.",

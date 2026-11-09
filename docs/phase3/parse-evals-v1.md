@@ -233,20 +233,21 @@ Must not: use the usual 3.1 mi (R6).
 PARSE + CANT · `mode=exploring (said)` · `distance_mi=7 (said)` · `cant: preferring bridges in general (G1)`
 
 ### H. Past routes
-**H01** · C1 · `same as Tuesday`
+**H01** · C1 · `same as Tuesday` · [engine]
 PARSE · `reuse_route_id=rt_a (said)`, rebuilt for now
 Must not: take today (also a Tuesday) as the one meant.
 
-**H02** · C1 · `my usual but longer`
+**H02** · C1 · `my usual but longer` · [engine]
 ASK (distance, parser) · "How much longer?" · options `+1 mi · +2 mi` · keep `reuse_route_id=rt_a (usual)`
 
-**H03** · C1 · `the river one, other direction`
+**H03** · C1 · `the river one, other direction` · [engine]
 PARSE · `reuse_route_id=rt_a (said)` · `reverse=true (said)`
 
-**H04** · C1 · `last week's route but skip the ferry part`
+**H04** · C1 · `last week's route but skip the ferry part` · [engine]
 ASK (reuse, parser) · "Which one?" · options `Tue · East River esplanade out-and-back · Thu · Gramercy street rectangle` · keep `avoid_places=["E 34th St ferry landing"]`
+The landing is matched in code (decision 038): Claude records "ferry", and code finds the ferry landings along the routes the request may mean, from the past routes' lines in `saved_routes` (the evals seed them from `evals/past_routes.py`). End to end, after picking Tuesday's route, it's rebuilt staying 120 m from the landing.
 
-**H05** · C1 · `my usual` *(Jared)*
+**H05** · C1 · `my usual` *(Jared)* · [engine]
 PARSE · `reuse_route_id=rt_a (usual)`, rebuilt for now
 
 ### I. Multi-part and contradictory
@@ -256,7 +257,7 @@ PARSE · `shape=out_and_back (said)` · `distance_mi=5 (said)`
 **P44** · C1 · `no lights but i wanna take 2nd ave the whole way`
 PARSE + CANT · `lights=waits (said)` · `cant: staying on one street the whole way (G1)`
 
-**P45** · C1 · `5k tonight and a 10 miler sat`
+**P45** · C1 · `5k tonight and a 10 miler sat` · [engine]
 PARSE · `distance_mi=3.11 (said)` · `start_time=20:00 (default)` · `use_my_location (default)` · `planned={distance_mi=10, start_date=2026-11-07, start_time=07:00 (usual), start_place=saved:home (default)}`
 
 ### J. Impossible and feasibility

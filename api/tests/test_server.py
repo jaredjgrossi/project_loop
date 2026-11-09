@@ -20,8 +20,8 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
 class FakeEngine:
-    def __init__(self, fail=None, ask_once=None):
-        self.calls, self.fail, self.ask_once = [], fail, ask_once
+    def __init__(self, fail=None, ask_once=None, routes=None):
+        self.calls, self.fail, self.ask_once, self.routes = [], fail, ask_once, routes or []
 
     def build(self, rc, start, send, route_id, end=None):
         self.calls.append((rc, start))
@@ -36,7 +36,7 @@ class FakeEngine:
             t.start()
             t.join()
         return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": 1.0, "provisional": False,
-                "routes": [], "route": None, "pool_size": 12, "notes": []}
+                "routes": self.routes, "route": None, "pool_size": 12, "notes": []}
 
 
 def fake_parse(by_text: dict):
@@ -235,13 +235,36 @@ def test_bad_constraints_are_a_bad_request():
     assert [e.get("code") for e in post(c, body(constraints={"distance_mi": -3}))] == ["bad_request"]
 
 
-def test_what_the_engine_cant_build_yet_is_a_cant_line_and_no_routes():
+def test_a_past_route_builds():  # step 11 (decision 038)
     eng = FakeEngine()
-    c, _ = client_for({"same as Tuesday": IDEAL["H01"]}, engine=eng)  # past routes: step 10
+    c, _ = client_for({"same as Tuesday": IDEAL["H01"]}, engine=eng)
     evs = post(c, body("H01", text="same as Tuesday"))
-    assert [e["event"] for e in evs] == ["parsed", "done"]
-    assert [x["gap"] for x in evs[0]["cant"]] == ["later"] and "past route" in evs[0]["cant"][0]["text"]
-    assert eng.calls == []
+    assert [e["event"] for e in evs][:2] == ["parsed", "top3"] and evs[-1]["event"] == "done"
+    assert evs[0]["cant"] == [] and eng.calls[0][0].reuse_route_id == "rt_a"
+
+
+def test_a_planned_run_is_built_for_its_day_and_sent_after_final():  # step 11, D6
+    routes = FakeRouteStore()
+    eng = FakeEngine(routes=[{"id": "x.1", "rank": 1, "distance": {"value": 10.02, "unit": "mi"}}])
+    c, _ = client_for({"5k tonight and a 10 miler sat": IDEAL["P45"]}, engine=eng, route_store=routes)
+    evs = post(c, body("P45", text="5k tonight and a 10 miler sat"))
+    names = [e["event"] for e in evs]
+    assert names[-3:] == ["final", "planned", "done"]
+    planned = evs[-2]
+    assert planned["date"] == "2026-11-07" and planned["summary"] == {"distance_mi": 10.02, "start_time": "07:00"}
+    assert planned["route_id"] in routes.rows and planned["constraints"]["distance_mi"] == 10
+    assert any(ch["field"] == "distance" for ch in planned["chips"])
+    first, second = eng.calls
+    assert first[0].planned is not None and second[0].start_date.isoformat() == "2026-11-07"
+    assert second[1].label != first[1].label  # from home on Saturday, not from here tonight
+
+
+def test_a_planned_run_that_cant_be_built_says_so_and_ends_the_stream():
+    eng = FakeEngine()  # no routes
+    c, _ = client_for({"5k tonight and a 10 miler sat": IDEAL["P45"]}, engine=eng)
+    evs = post(c, body("P45", text="5k tonight and a 10 miler sat"))
+    assert [e["event"] for e in evs][-2:] == ["planned", "done"]
+    assert evs[-2]["route_id"] is None and evs[-2]["notes"][0]["key"] == "planned_not_built"
 
 
 def test_an_along_avoid_builds():  # step 8b (decision 036)
@@ -314,9 +337,8 @@ def test_answers_and_chip_edits_are_stored_with_their_kind():
 
 def test_a_question_or_a_blocked_build_stores_nothing():
     routes = FakeRouteStore()
-    c, _ = client_for({"exploring run": IDEAL["R06"], "same as Tuesday": IDEAL["H01"]}, route_store=routes)
+    c, _ = client_for({"exploring run": IDEAL["R06"]}, route_store=routes)
     post(c, body("R06", text="exploring run"))
-    post(c, body("H01", text="same as Tuesday"))
     assert routes.rows == {}
 
 
