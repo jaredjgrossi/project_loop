@@ -48,6 +48,7 @@ ASPECTS = (1.0, 1.5, 2.5)  # long side : short side
 FALLBACK_SEEDS = range(8)
 OUT_AND_BACK_HEADINGS = (0, 90, 180, 270, 45, 135, 225, 315)  # degrees from the grid angle; along the grid first
 OUT_AND_BACK_MIN_RETRACED_PCT = 70.0  # less than this and the way back isn't the way out
+A_TO_B_MAX_RETRACED_PCT = 25.0  # step 8, provisional: more than this and an A-to-B route doubles back
 
 RouteFn = Callable[[list[tuple[float, float]]], Route]  # (lat, lon) points -> route
 RoundTripFn = Callable[..., Route]  # (lat, lon, distance_m, seed) -> route
@@ -268,6 +269,9 @@ def _evaluate(
     elif kind == "out_and_back":
         if shape.retraced_pct < OUT_AND_BACK_MIN_RETRACED_PCT:
             return Rejection(method, label, "not_out_and_back")
+    elif kind == "a_to_b":  # step 8: a detour that doubles back on itself isn't a way there
+        if shape.retraced_pct > A_TO_B_MAX_RETRACED_PCT:
+            return Rejection(method, label, "retraced")
     elif kind == "loop":
         if shape.compactness is None:
             return Rejection(method, label, "not_a_loop")
@@ -661,6 +665,13 @@ def generate_loops(
             notes.append(
                 f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable."
             )
+    return run_and_finish(jobs, workers, top_n, shape, miles, grid, notes, on_candidate, on_top3)
+
+
+def run_and_finish(jobs: list[tuple[int, Callable]], workers: int, top_n: int, shape: str, miles: float,
+                   grid: GridEstimate, notes: list[str], on_candidate=None, on_top3=None) -> GenerationResult:
+    """Run the jobs, stream the top N as they arrive, then pick the top N and build the result: shared by loops and
+    A-to-B routes (step 8). `shape` picks which kinds are offered ("any" offers the best of each kind)."""
     stream = _TopStream(top_n, shape, on_top3)
 
     def arrived_candidate(c: Candidate, elapsed: float, key: tuple) -> None:

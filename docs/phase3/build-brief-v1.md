@@ -75,7 +75,7 @@ Add a small command-line client that prints the events, for testing without the 
 
 **6. Minimal storage.** A `saved_routes` table in Postgres: `route_id`, request, constraints and the final payload. The server stores every build. The phone's planned, saved and past lists stay on the phone and go out as `recent_routes` (that list is the iPhone session's job). Done: `GET /v1/routes/{id}` returns a stored route after a server restart. Built (decision 030): the stored request keeps its kind, parse id and clock, never the raw text (R8) or the phone's location.
 
-**7. A to B.** A generator for start → end that still reaches water, parks and corridors. Check the requested distance against the shortest way. If it's shorter, the engine asks with `from: "engine"` ("The shortest way is 4.2 mi. Make it 4.2?"). Distance is optional when an end is given. Done: R01 end to end, plus new route evals (Kips Bay → McCarren Park at 8 mi; an end that's too far for the distance asks).
+**7. A to B.** A generator for start → end that still reaches water, parks and corridors. Check the requested distance against the shortest way. If it's shorter, the engine asks with `from: "engine"` ("The shortest way is 4.2 mi. Make it 4.2?"). Distance is optional when an end is given. Done: R01 end to end, plus new route evals (Kips Bay → McCarren Park at 8 mi; an end that's too far for the distance asks). Built (decision 032): `api/a_to_b.py`; route evals in `evals/routes/test_a_to_b.py`.
 
 **8. Via.** Route through or along `via_places`, reusing the corridor-anchored generators. "The whole way" stays a can't-do line. If a via point is too far for the distance, the engine asks. Done: R02 (after its answer), R03 (the engine asks), R09 (after its answer), P49.
 

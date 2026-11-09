@@ -20,13 +20,16 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 
 class FakeEngine:
-    def __init__(self, fail=None):
-        self.calls, self.fail = [], fail
+    def __init__(self, fail=None, ask_once=None):
+        self.calls, self.fail, self.ask_once = [], fail, ask_once
 
-    def build(self, rc, start, send, route_id):
+    def build(self, rc, start, send, route_id, end=None):
         self.calls.append((rc, start))
+        self.ends = getattr(self, "ends", []) + [end]
         if self.fail:
             raise self.fail
+        if self.ask_once and len(self.calls) == 1:
+            raise self.ask_once
         for ev in ("top3", "top3", "provisional"):
             t = threading.Thread(target=send, args=({"event": ev, "v": 1, "route_id": route_id, "elapsed_s": 0.5,
                                                      "provisional": ev == "provisional", "routes": []},))
@@ -234,10 +237,10 @@ def test_bad_constraints_are_a_bad_request():
 
 def test_what_the_engine_cant_build_yet_is_a_cant_line_and_no_routes():
     eng = FakeEngine()
-    c, _ = client_for({"8 mi to McCarren Park": IDEAL["R01"]}, engine=eng)
-    evs = post(c, body("R01", text="8 mi to McCarren Park"))
+    c, _ = client_for({"3 mi on the west side highway": IDEAL["R03"]}, engine=eng)
+    evs = post(c, body("R03", text="3 mi on the west side highway"))
     assert [e["event"] for e in evs] == ["parsed", "done"]
-    assert [x["gap"] for x in evs[0]["cant"]] == ["later"] and "end somewhere else" in evs[0]["cant"][0]["text"]
+    assert [x["gap"] for x in evs[0]["cant"]] == ["later"] and "named places" in evs[0]["cant"][0]["text"]
     assert eng.calls == []
 
 
@@ -301,7 +304,48 @@ def test_answers_and_chip_edits_are_stored_with_their_kind():
 
 def test_a_question_or_a_blocked_build_stores_nothing():
     routes = FakeRouteStore()
-    c, _ = client_for({"exploring run": IDEAL["R06"], "to McCarren": IDEAL["R01"]}, route_store=routes)
+    c, _ = client_for({"exploring run": IDEAL["R06"], "via the WSH": IDEAL["R03"]}, route_store=routes)
     post(c, body("R06", text="exploring run"))
-    post(c, body("R01", text="to McCarren"))
+    post(c, body("R03", text="via the WSH"))
     assert routes.rows == {}
+
+
+def test_an_a_to_b_run_gets_its_end_and_builds():
+    eng = FakeEngine()
+    c, _ = client_for({"8 mi to McCarren Park": IDEAL["R01"]}, engine=eng)
+    evs = post(c, body("R01", text="8 mi to McCarren Park"))
+    assert [e["event"] for e in evs][:2] == ["parsed", "top3"] and evs[-1]["event"] == "done"
+    assert evs[0]["cant"] == [] and evs[0]["reach_m"] is None
+    assert eng.ends == [(40.7204, -73.9512)]  # McCarren Park's coordinates, from the places table
+
+
+def test_the_engine_asks_and_the_answer_builds_at_the_new_distance():
+    from api.engine import shortest_way_question
+    from api.units import miles_to_meters
+    eng = FakeEngine(ask_once=shortest_way_question(miles_to_meters(4.23)))
+    c, parse_fn = client_for({"3 mi to McCarren Park": ext(distance=mi(3), end=IDEAL["R01"]["end"])}, engine=eng)
+    first = post(c, body("R01", text="3 mi to McCarren Park"))
+    assert [e["event"] for e in first] == ["parsed", "question", "done"]
+    q = first[1]
+    assert q["from"] == "engine" and q["about"] == "distance" and q["parse_id"] != first[0]["parse_id"]
+    assert q["text"] == "The shortest way there is 4.3 mi. Make it 4.3 mi?"
+    assert [o["text"] for o in q["options"]] == ["4.3 mi"] and "_answer" not in q
+    second = post(c, body("R01", answer={"parse_id": q["parse_id"], "question_id": q["id"], "option_id": "a"}))
+    assert [e["event"] for e in second][0] == "parsed" and second[-1]["event"] == "done"
+    assert second[0]["constraints"]["distance_mi"] == 4.3
+    assert next(x for x in second[0]["chips"] if x["field"] == "distance")["source"] == "said"
+    assert len(eng.calls) == 2 and parse_fn.calls == ["3 mi to McCarren Park"]  # no second Claude call
+
+
+def test_an_engine_question_on_a_chip_edit_edits_the_constraints():
+    from api.engine import shortest_way_question
+    from api.units import miles_to_meters
+    eng = FakeEngine()
+    c, _ = client_for({"8 mi to McCarren Park": IDEAL["R01"]}, engine=eng)
+    parsed = post(c, body("R01", text="8 mi to McCarren Park"))[0]
+    eng.ask_once, eng.calls = shortest_way_question(miles_to_meters(4.23)), []
+    first = post(c, body("R01", constraints=parsed["constraints"] | {"distance_mi": 2}))
+    q = first[1]
+    assert q["event"] == "question"
+    second = post(c, body("R01", answer={"parse_id": q["parse_id"], "question_id": "q_1", "text": "5 miles"}))
+    assert second[0]["constraints"]["distance_mi"] == 5 and second[-1]["event"] == "done"

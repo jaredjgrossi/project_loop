@@ -35,9 +35,12 @@ def test_the_start_comes_from_the_phone_a_place_or_the_profile():
 
 
 def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
-    lines, blocked = before_build(rc(end_place={"kind": "place", "name": "McCarren Park", "borough": "Brooklyn",
-                                                "lat": 40.7204, "lon": -73.9512}), zones=[])
-    assert [x["key"] for x in lines] == ["end_place"] and blocked
+    lines, blocked = before_build(rc(via_places=[{"kind": "place", "name": "McCarren Park", "borough": "Brooklyn",
+                                                  "lat": 40.7204, "lon": -73.9512}]), zones=[])
+    assert [x["key"] for x in lines] == ["via_places"] and blocked
+    a_to_b = rc(end_place={"kind": "place", "name": "McCarren Park", "borough": "Brooklyn", "lat": 40.7204,
+                           "lon": -73.9512})
+    assert before_build(a_to_b, zones=[]) == ([], False)  # step 8 builds it
     lines, blocked = before_build(rc(hills="avoid"), zones=[])
     assert [x["key"] for x in lines] == ["hills"] and not blocked
     lines, blocked = before_build(rc(avoid_places=[{"name": "1st Ave", "how": "along"}]), zones=[])
@@ -146,3 +149,40 @@ def test_each_candidate_streams_as_a_light_outline_with_its_route_id():
     assert c["points"][0] == [round(x, 5) for x in cands[0].route.coordinates[0][:2]]
     top3 = next(e for e in sent if e["event"] == "top3")
     assert top3["routes"][0]["id"] == "r_5.1"  # the same id when it reaches the top 3
+
+
+
+# ---- A to B (step 8) -----------------------------------------------------------------------------------------------
+
+from api.engine import EngineQuestion  # noqa: E402
+from api.tests.test_a_to_b import EAST, area_route, straight_route  # noqa: E402
+from api.tests.test_a_to_b import KIPS as KIPS_POINT  # noqa: E402
+
+
+def a_to_b_engine(**kw) -> Engine:
+    return engine(fake_generate([]), routers_fn=lambda zones, lights, closures: (straight_route, None, area_route), **kw)
+
+
+def test_a_distance_shorter_than_the_shortest_way_asks_before_anything_streams():
+    sent = []
+    with pytest.raises(EngineQuestion) as asked:
+        a_to_b_engine().build(rc(distance_mi=1.0), Start(*KIPS_POINT, "x"), sent.append, "r_1", end=EAST)
+    q = asked.value.question
+    assert sent == [] and q["from"] == "engine" and q["options"][0]["text"] == "2.1 mi"
+    assert asked.value.answer_map["options"]["a"] == {"distance": 2.1}
+
+
+def test_an_a_to_b_run_with_no_distance_is_the_shortest_way():
+    sent = []
+    final = a_to_b_engine().build(rc(distance_mi=None, end_place={"kind": "place", "name": "East", "borough": "Manhattan",
+                                                                  "lat": EAST[0], "lon": EAST[1]}),
+                                  Start(*KIPS_POINT, "x"), sent.append, "r_2", end=EAST)
+    assert final["routes"][0]["kind"] == "a_to_b" and final["notes"] == []
+    assert final["route"]["features"][0]["properties"]["label"] == "the shortest way"
+    assert any(e["event"] == "top3" for e in sent)
+
+
+def test_an_a_to_b_run_at_a_longer_distance_detours_to_fit():
+    final = a_to_b_engine().build(rc(distance_mi=4.0), Start(*KIPS_POINT, "x"), lambda e: None, "r_3", end=EAST)
+    assert final["routes"] and all(abs(r["distance"]["value"] - 4.0) <= 0.2 for r in final["routes"])
+    assert final["notes"] == []

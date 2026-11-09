@@ -69,6 +69,7 @@ for try await line in bytes.lines {
     switch try decoder.decode(EventKind.self, from: data).event {   // {"event": "parsed" | "top3" | ...}
     case "parsed": ...
     case "candidates": ...                               // light outlines while the engine searches
+    case "question": ...                                 // the engine asks (step 8); answer it as in section 6
     case "top3", "provisional": ...
     case "final": ...
     case "done": return
@@ -134,6 +135,10 @@ use "1", "2" and "3" as ids. That's your call.
 When `parsed.question` is set (`{id, about, from, text, options: [{id, text}], allow_text}`), show it. The stream
 then ends with `done`, and no routes stream while the question is open.
 
+The engine can ask too, after `parsed` (step 8): a `question` event with the same fields at its top level, plus its
+own `parse_id`, then `done`. For example, "The shortest way there is 4.5 mi. Make it 4.5 mi?" when a run to a place
+is shorter than the shortest way there. Answer it the same way, with that event's `parse_id`.
+
 The answer is a new `POST /v1/runs` with the same `client`, `profile` and `recent_routes`, and:
 ```json
 "answer": {"parse_id": "<the parsed event's parse_id>", "question_id": "q_1", "option_id": "b", "text": null}
@@ -165,6 +170,10 @@ This is temporary, until the UI chat designs the request screen. Put it behind a
 - **A question:** its text, one button per option, and a text field when `allow_text` is true.
 - **Routes:** feed `top3`, `provisional` and `final` into the main screen's map, so the milestone is visible: a
   typed request draws a streamed route.
+
+## 8b. Route kinds
+`kind` is `"loop"`, `"out_and_back"`, `"lollipop"`, or (step 8) `"a_to_b"` for a run that ends somewhere else. An
+A-to-B route starts at the start and ends at the end chip's place; it has no turnaround.
 
 ## 9. Privacy
 - Never log request bodies or the location. Never log the token.

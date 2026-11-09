@@ -31,7 +31,8 @@ from starlette.concurrency import run_in_threadpool
 
 from api.constraints import RunConstraints
 from api.copy import render
-from api.engine import BadStart, Engine, EngineUnavailable, before_build, graphhopper_ready, new_route_id, start_for
+from api.engine import (BadStart, Engine, EngineQuestion, EngineUnavailable, before_build, end_for, graphhopper_ready,
+                        new_route_id, start_for)
 from api.parse import Context, DbPlaces, answer_overrides, parse, parsed_for_constraints, resume
 from api.pending import Pending, PendingStore
 from api.saved_routes import PgRouteStore, stored_request
@@ -220,6 +221,15 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         settled = answer_overrides(pending.answer_map, a.option_id, a.text, ctx)
         if settled is None:
             raise _Fail("bad_request")
+        if not pending.ext and pending.constraints is not None:  # the engine asked about a chip edit's constraints
+            c = dict(pending.constraints)
+            if "distance" in settled:
+                c["distance_mi"] = settled["distance"]
+                c["sources"] = {k: v for k, v in (c.get("sources") or {}).items() if k != "distance_mi"}  # said
+            try:
+                return parsed_for_constraints(c, ctx, None), {}, pending.request
+            except ValidationError as exc:
+                raise _Fail("bad_request") from exc
         try:
             with places() as p:
                 out = resume(pending.ext, ctx, p, {**pending.answers, **settled})
@@ -273,6 +283,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         location, saved = location_and_saved(kept)
         try:
             start = start_for(rc, location, saved)
+            end = end_for(rc, saved)
         except BadStart:
             yield _error("bad_request")
             return
@@ -286,13 +297,19 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
 
         def work() -> None:
             try:
-                final = engine.build(rc, start, send, route_id)
+                final = engine.build(rc, start, send, route_id, end=end)
                 keep_route(final)  # kept even if the phone has gone, for GET /v1/routes/{id}
                 # Stored before the phone gets final, so the id it holds always works, after a restart too.
                 # No text and no location (decision 030); a few ms for the insert.
                 route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), parsed["constraints"],
                                  final)
                 send(final)
+            except EngineQuestion as q:  # e.g. the end is farther than the distance: ask, and keep the parse open
+                pid = f"p_{secrets.token_hex(4)}"
+                store.put(Pending(parse_id=pid, question_id=q.question["id"], ext=trace.get("extraction") or {},
+                                  request=kept, answers=trace.get("answers") or {}, answer_map=q.answer_map,
+                                  constraints=parsed["constraints"]))
+                send({"event": "question", "v": 1, "parse_id": pid, **q.question})
             except EngineUnavailable:
                 send({"event": "error", "v": 1, "code": "engine_unavailable",
                       "text": render("error.engine_unavailable")})
@@ -306,9 +323,9 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         while True:
             ev = await queue.get()
             yield _event(ev)
-            if ev["event"] in ("final", "error"):
+            if ev["event"] in ("final", "question", "error"):
                 break
-        if ev["event"] == "final":
+        if ev["event"] in ("final", "question"):
             yield _event(DONE)
 
     async def raw_body(request: Request) -> bytes:

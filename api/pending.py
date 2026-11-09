@@ -24,6 +24,7 @@ class Pending:
     answers: dict
     answer_map: dict
     created: float = field(default=0.0)
+    constraints: dict | None = None  # an engine question on a chip edit: no extraction, so the answer edits these
 
 
 class PendingStore:

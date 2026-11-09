@@ -107,7 +107,12 @@ These are the engine's three stream events (decision 024 and the streaming notes
 - `final` also carries `pool_size` ("Best of N").
 
 ## Event: `question` (engine)
-Same shape as `parsed.question`, with `from: "engine"` and its own `parse_id`. The stream ends after it.
+Same shape as `parsed.question`, with `from: "engine"` and its own `parse_id`. The stream ends after it (then `done`). Built in step 8: when a run ends somewhere else and the distance is shorter than the shortest way there, beyond the tolerance, the engine asks before anything streams but `parsed`:
+```json
+{"event": "question", "v": 1, "parse_id": "p_9b21", "id": "q_1", "about": "distance", "from": "engine",
+ "text": "The shortest way there is 4.5 mi. Make it 4.5 mi?", "options": [{"id": "a", "text": "4.5 mi"}], "allow_text": true}
+```
+Answer it as any question, with this event's `parse_id`. The offer is the shortest way rounded up to 0.1 mi; a typed distance works too. The answer is a said distance; Claude isn't called again.
 
 ## Event: `planned`
 ```json
@@ -122,10 +127,11 @@ The app saves it to the planned list. Opening it on the day calls `POST /v1/runs
 
 ## Built in step 5 (decision 029)
 - **`done` ends every clean stream**, including one that ends with a question, so the app can tell a finished stream from a dropped connection. `error` ends a stream that failed.
+- **A to B (step 8):** with an end place, route `kind` is `"a_to_b"`. No distance means the shortest way (the distance chip says "Shortest way"); a distance shorter than the shortest way gets the engine's `question`. `reach_m` stays null for these runs.
 - **Route entries** in `top3`, `provisional` and `final` carry `id`, the same for the same route in every event of one build (step 6).
 - **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
 - **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
-- **Can't-do lines from the engine:** `gap: "later"` for what a later step builds (end, via, along-avoids and past routes build nothing yet, and the stream ends after `parsed`; hills and a planned second run build the first run anyway), and `gap: "avoid_unknown"` for an avoid that isn't on the no-go list.
+- **Can't-do lines from the engine:** `gap: "later"` for what a later step builds (via places, along-avoids and past routes build nothing yet; an end place builds from step 8, and the stream ends after `parsed`; hills and a planned second run build the first run anyway), and `gap: "avoid_unknown"` for an avoid that isn't on the no-go list.
 - **Answers:** a tapped option settles what it names. Typed text is read by code (a distance, a place name or address, a borough, a recent route's name); text code can't read brings the same question back with a new `parse_id`. No Claude call either way.
 - **Auth:** `Authorization: Bearer <Loop token>` on everything but `GET /v1/health`. A missing or wrong token is HTTP 401; every other problem is an `error` event.
 

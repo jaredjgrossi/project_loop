@@ -16,7 +16,8 @@ from api.route_context import ContextScores
 from api.shape import ShapeMetrics
 
 Status = Literal["measured", "estimate", "not_scored"]
-Kind = Literal["loop", "out_and_back", "lollipop"]  # lollipop: out, around and back; ranked like an out-and-back
+Kind = Literal["loop", "out_and_back", "lollipop", "a_to_b"]  # lollipop: out, around and back; ranked like an
+# out-and-back. a_to_b (step 8): start to an end elsewhere, ranked like an out-and-back too (no loop shape or retracing).
 
 # Dimensions the plan calls for that have no scorer yet (HANDOFF.md, Phase 2 order).
 NOT_YET_SCORED = {

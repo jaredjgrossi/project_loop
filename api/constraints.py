@@ -240,7 +240,6 @@ def with_default_date(c: RunConstraints, now: datetime) -> RunConstraints:
 
 
 _ENGINE_LATER = (  # (key, test): Phase 3 fields the engine can't build yet, in the order a caller reports them
-    ("end_place", lambda c: c.end_place is not None),  # step 7
     ("via_places", lambda c: bool(c.via_places)),  # step 8
     ("hills", lambda c: resolve_preferences(c).values["hills"] != "dont_mind"),  # step 9
     ("avoid_along", lambda c: any(a.how == "along" for a in c.avoid_places)),  # step 8b (R15)

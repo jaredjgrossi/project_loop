@@ -58,6 +58,12 @@ def describe(ev: dict) -> str:
         extra = f"; best of {ev['pool_size']}" if kind == "final" and ev.get("pool_size") else ""
         notes = "".join(f"\n           note:  {n['text']}" for n in ev.get("notes") or [])
         return f"{ev['route_id']} at {ev['elapsed_s']:.2f} s engine time: {routes}{extra}{notes}"
+    if kind == "question":  # from the engine, after parsed (step 8)
+        out = [f"question ({ev['from']}, about {ev['about']}): {ev['text']}"]
+        out += [f"   {o['id']}) {o['text']}" for o in ev["options"]]
+        if ev["allow_text"]:
+            out.append("   or type an answer")
+        return "\n           ".join(out)
     if kind == "candidates":
         return ", ".join(f"{c['id']} {c['kind']} ({len(c['points'])} points)" for c in ev["candidates"])
     if kind == "error":
@@ -109,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
                         print(json.dumps(ev, indent=1))
                     if name == "parsed" and ev.get("question"):
                         question, parse_id = ev["question"], ev["parse_id"]
+                    if name == "question":
+                        question, parse_id = ev, ev["parse_id"]
                     if name == "error":
                         return 4
             payload = None

@@ -8,6 +8,7 @@ the contract's payloads and adds `final`: the #1 in full, as the iPhone fixture'
 `send` is called from the generator's worker threads; the server bridges it into the event stream.
 """
 
+import math
 import secrets
 import threading
 import time
@@ -22,13 +23,15 @@ from api.copy import render
 from api.generate import TOLERANCE_PCT, Candidate, generate_loops
 from api.geocoding import GeocodeError, geocode
 from api.geometry import outline
+from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
+from api.units import meters_to_miles
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url
 from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
-BLOCKING = ("end_place", "via_places", "avoid_along", "reuse_route_id")
+BLOCKING = ("via_places", "avoid_along", "reuse_route_id")
 # These leave a buildable run: hills aren't scored (step 9) and the second run isn't planned (step 10). The first run
 # is built, with a can't-do line.
 TOP_N = 3
@@ -39,7 +42,26 @@ class EngineUnavailable(Exception):
 
 
 class BadStart(Exception):
-    """The request has no start the engine can use."""
+    """The request has no start (or end) the engine can use."""
+
+
+class EngineQuestion(Exception):
+    """The engine needs an answer before it builds (contract: the `question` event, `from: "engine"`). Carries the
+    question as the phone sees it and its answer map, which stays on the server, as a parser question's does."""
+
+    def __init__(self, question: dict, answer_map: dict):
+        super().__init__(question["text"])
+        self.question, self.answer_map = question, answer_map
+
+
+def shortest_way_question(shortest_m: float) -> EngineQuestion:
+    """'The shortest way there is 4.3 mi. Make it 4.3 mi?' (brief, step 8). Rule 3: never stretch quietly."""
+    miles = ask_miles(shortest_m)
+    shown = f"{miles:g}"
+    q = {"id": "q_1", "about": "distance", "from": "engine",
+         "text": render("question.engine.shortest", miles=shown),
+         "options": [{"id": "a", "text": render("option.miles", miles=shown)}], "allow_text": True}
+    return EngineQuestion(q, {"options": {"a": {"distance": miles}}, "typed": {"kind": "miles"}})
 
 
 @dataclass(frozen=True)
@@ -75,6 +97,19 @@ def start_for(rc: RunConstraints, location: dict | None, saved: dict, geocode_fn
             raise BadStart(str(exc)) from exc
         return Start(g.lat, g.lon, g.label)
     raise BadStart("no start")
+
+
+def end_for(rc: RunConstraints, saved: dict) -> tuple[float, float] | None:
+    """The end's coordinates, for an A-to-B run (step 8): a place ref, or a saved place from the profile."""
+    p = rc.end_place
+    if p is None:
+        return None
+    lat, lon = p.lat, p.lon
+    if lat is None and p.kind == "saved" and p.id in saved:
+        lat, lon = saved[p.id].get("lat"), saved[p.id].get("lon")
+    if lat is None:
+        raise BadStart(f"no coordinates for {p.kind} end")
+    return lat, lon
 
 
 def before_build(rc: RunConstraints, zones=None) -> tuple[list[dict], bool]:
@@ -114,6 +149,13 @@ def distance_notes(rc: RunConstraints, chosen: list[Candidate], within: bool) ->
                             pct=f"{abs(c.miss_pct):.0f}")}]
 
 
+def _straight_m(a: tuple[float, float], b: tuple[float, float] | None) -> float:
+    if b is None:
+        return 0.0
+    kx = 111_320 * math.cos(math.radians(a[0]))
+    return math.hypot((b[1] - a[1]) * kx, (b[0] - a[0]) * 110_574)
+
+
 def graphhopper_ready(timeout_s: float = 1.0) -> bool:
     try:
         return httpx.get(f"{graphhopper_url()}/health", timeout=timeout_s).status_code == 200
@@ -125,6 +167,7 @@ def graphhopper_ready(timeout_s: float = 1.0) -> bool:
 class Engine:
     """The real build. Tests swap the functions for fakes."""
     generate_fn: Callable = generate_loops
+    a_to_b_fn: Callable = generate_a_to_b
     grid_fn: Callable = ml.current_grid
     closures_fn: Callable | None = ml.db_closures
     stretch_fn: Callable | None = ml.db_stretches
@@ -132,13 +175,17 @@ class Engine:
     feature_anchor_fn: object = None
     use_prior: bool = True
     ready_fn: Callable[[], bool] = graphhopper_ready
+    routers_fn: Callable = ml.routers_for  # (zones, lights, closures) -> route, round-trip and area routers
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
             self.feature_anchor_fn = ml.DB_FEATURE_ANCHOR_SOURCES
 
-    def build(self, rc: RunConstraints, start: Start, send: Callable[[dict], None], route_id: str) -> dict:
-        """Stream `top3` and `provisional` through `send`, then return the `final` payload (not sent here)."""
+    def build(self, rc: RunConstraints, start: Start, send: Callable[[dict], None], route_id: str,
+              end: tuple[float, float] | None = None) -> dict:
+        """Stream `candidates`, `top3` and `provisional` through `send`, then return the `final` payload (not sent
+        here). With an end (step 8), the shortest way is checked first: a distance that can't reach the end raises
+        EngineQuestion before anything streams; no distance means the shortest way."""
         if not self.ready_fn():
             raise EngineUnavailable("GraphHopper isn't answering")
         t0 = time.perf_counter()
@@ -147,10 +194,23 @@ class Engine:
         miles = rc.distance_mi
         try:
             grid = self.grid_fn(start.lat, start.lon)
-            closures = self.closures_fn(start.lat, start.lon, miles) if self.closures_fn else []
+            reach_mi = miles if miles is not None else 2 * meters_to_miles(_straight_m((start.lat, start.lon), end))
+            closures = self.closures_fn(start.lat, start.lon, reach_mi) if self.closures_fn else []
+            if end is not None and self.closures_fn:  # and those near the end, once each
+                closures = list({c.id: c for c in [*closures, *self.closures_fn(*end, reach_mi)]}.values())
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
-        route_fn, round_trip_fn, area_fn = ml.routers_for(zones, prefs["lights"], closures)
+        route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures)
+        shortest = None
+        if end is not None:
+            try:
+                shortest = route_fn([(start.lat, start.lon), end])
+            except RoutingError as exc:
+                raise EngineUnavailable(f"GraphHopper: {exc}") from exc
+            if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest.distance_m):
+                raise shortest_way_question(shortest.distance_m)
+            if miles is None:
+                miles = round(meters_to_miles(shortest.distance_m), 2)
 
         keys: dict[int, str] = {}  # candidate object -> its id in this build
         keys_lock = threading.Lock()
@@ -169,14 +229,21 @@ class Engine:
             send({"event": "candidates", "v": 1, "route_id": route_id, "elapsed_s": round(elapsed, 3),
                   "candidates": [{"id": key(c), "kind": c.kind, "points": outline(c.route.coordinates)}]})
 
+        context_fn = ml.context_for(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment())
         try:
-            result = self.generate_fn(
-                start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
-                shape=rc.shape, prefs=prefs, avoid=zones, closures=closures,
-                context_fn=ml.context_for(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment()),
-                anchor_fn=self.anchor_fn, feature_anchor_fn=self.feature_anchor_fn,
-                area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3,
-                on_candidate=on_candidate)
+            if end is not None:
+                result = self.a_to_b_fn(
+                    (start.lat, start.lon), end, miles, grid, route_fn=route_fn, shortest=shortest, top_n=TOP_N,
+                    prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn, anchor_fn=self.anchor_fn,
+                    feature_anchor_fn=self.feature_anchor_fn, area_route_fn=area_fn if self.feature_anchor_fn else None,
+                    on_top3=on_top3, on_candidate=on_candidate)
+            else:
+                result = self.generate_fn(
+                    start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
+                    shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
+                    anchor_fn=self.anchor_fn, feature_anchor_fn=self.feature_anchor_fn,
+                    area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3,
+                    on_candidate=on_candidate)
         except RoutingError as exc:
             raise EngineUnavailable(f"GraphHopper: {exc}") from exc
         except psycopg.Error as exc:
@@ -187,5 +254,6 @@ class Engine:
         return {"event": "final", "v": 1, "route_id": route_id,
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
                 "routes": [entry(r, c, key(c)) for r, c in enumerate(chosen, 1)], "route": route,
-                "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of}, "notes": distance_notes(rc, chosen, result.within_tolerance),
+                "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of},
+                "notes": distance_notes(rc, chosen, result.within_tolerance),
                 "timing": result.timing}

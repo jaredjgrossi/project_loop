@@ -26,3 +26,10 @@ def test_routes_print_with_distance_and_pool():
 def test_candidates_print_their_ids_and_point_counts():
     ev = {"event": "candidates", "candidates": [{"id": "r_1.4", "kind": "loop", "points": [[0, 0]] * 31}]}
     assert describe(ev) == "r_1.4 loop (31 points)"
+
+
+def test_an_engine_question_prints_like_a_parser_one():
+    ev = {"event": "question", "parse_id": "p_2", "id": "q_1", "about": "distance", "from": "engine",
+          "text": "The shortest way there is 4.5 mi. Make it 4.5 mi?", "options": [{"id": "a", "text": "4.5 mi"}],
+          "allow_text": True}
+    assert "engine, about distance" in describe(ev) and "a) 4.5 mi" in describe(ev)
