@@ -66,4 +66,23 @@ final class SheetStateTests: XCTestCase {
         XCTAssertFalse(s.isMoving)
         XCTAssertEqual(heights.last, SheetState.open, "every height change reaches the map's ornaments")
     }
+
+    /// The landing sheet: its own rests (bar only, open, more recents), arriving open.
+    func testLandingRestsCollapseToTheBarAndReachMoreRecents() {
+        let s = SheetState(collapsed: 120, open: 370)
+        s.readHeight = 560
+        s.slide(to: 0, animated: false)
+        s.settle(rest: .open, animated: false)
+        XCTAssertEqual(s.height, 370)
+        s.beginDrag()
+        s.drag(translation: 200)
+        s.endDrag(predictedTranslation: 260, animated: false) { _ in }
+        XCTAssertEqual(s.rest, .collapsed)
+        XCTAssertEqual(s.height, 120)
+        s.beginDrag()
+        s.drag(translation: -400)
+        s.endDrag(predictedTranslation: -440, animated: false) { _ in }
+        XCTAssertEqual(s.rest, .read)
+        XCTAssertEqual(s.height, 560)
+    }
 }

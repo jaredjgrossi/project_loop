@@ -8,8 +8,7 @@ struct RouteSheet: View {
     @State private var sentConfirmed = false
 
     private var sheet: SheetState { model.sheet }
-    private let collapsed = Metrics.sheetCollapsed
-    private let open = Metrics.sheetOpen
+    @State private var readContentHeight: CGFloat = 0
 
     var body: some View {
         let height = sheet.height
@@ -36,24 +35,54 @@ struct RouteSheet: View {
             // so nothing is inserted mid-drag. Hidden (still laid out) when fully closed, so
             // VoiceOver doesn't find it.
             OpenSection(model: model)
-                .frame(height: open - collapsed, alignment: .top)
+                .frame(height: SheetState.open - SheetState.collapsed, alignment: .top)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(Double(progress))
-                .frame(height: max(0, height - collapsed), alignment: .top)
+                .frame(height: max(0, min(height, sheet.openHeight) - sheet.collapsedHeight), alignment: .top)
                 .clipped()
                 .accessibilityHidden(progress < 0.5)
                 .hiddenWhen(progress == 0)
 
             SendButton(confirmed: $sentConfirmed) { model.touch() }
                 .padding(.top, 12)
+
+            // "How Loop read it": revealed past the open state, scrolling if it's long.
+            ScrollViewReader { proxy in
+                ScrollView(showsIndicators: false) {
+                    ReadItSection(model: model)
+                        .id("readit")
+                        .background(GeometryReader { g in
+                            Color.clear
+                                .onAppear { readContentHeight = g.size.height }
+                                .onChange(of: g.size.height) { _, v in readContentHeight = v }
+                        })
+                }
+                // Scrolls only when the list is longer than the space; otherwise drags move the sheet.
+                .scrollDisabled(sheet.rest != .read || readContentHeight <= (sheet.readHeight ?? 0) - sheet.openHeight + 1)
+                .onChange(of: model.scrollToReadIt) { _, _ in withAnimation { proxy.scrollTo("readit", anchor: .top) } }
+            }
+            .frame(height: max(0, height - sheet.openHeight))
+            .opacity(Double(sheet.readProgress))
+            .clipped()
+            .hiddenWhen(sheet.readProgress == 0)
             Spacer(minLength: 0)
         }
+        .onChange(of: readContentHeight) { _, h in updateReadHeight(h) }
+        .onChange(of: model.headerBottom) { _, _ in updateReadHeight(readContentHeight) }
         .padding(.horizontal, Metrics.s24)
+        .overlay(alignment: .topTrailing) { CloseCardButton { model.goHome() }.padding(.top, 12).padding(.trailing, 14) }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
         .contentShape(Rectangle())
         .gesture(drag)
+    }
+
+    /// The read rest fits the list, up to just under the header.
+    private func updateReadHeight(_ content: CGFloat) {
+        guard model.readOut?.hasReadIt == true, content > 0 else { sheet.readHeight = nil; return }
+        let screen = UIScreen.main.bounds.height
+        sheet.readHeight = min(sheet.openHeight + content, screen - model.headerBottom - 12)
     }
 
     private var sheetBackground: some View {
@@ -76,6 +105,26 @@ struct RouteSheet: View {
             .onEnded { v in
                 model.sheetDragEnded(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion)
             }
+    }
+}
+
+/// The card's close button: clears the route and goes back to the home sheet.
+struct CloseCardButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.inkMuted.color)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Palette.surfaceSunken.color))
+                .frame(width: Metrics.minTap, height: Metrics.minTap)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close route")
+        .accessibilityHint("Clears this route and goes back home")
     }
 }
 
@@ -151,7 +200,7 @@ struct CardBlock: View {
                                 .typeStyle(.numeralXL)
                                 .foregroundStyle(Palette.ink.color)
                             Text("mi")
-                                .typeStyle(.unit)
+                                .typeStyle(.numeralL)
                                 .foregroundStyle(Palette.unitInk.color)
                             // Only the file's own label, never a default.
                             if let trust = shown.distanceTrust {
@@ -173,6 +222,20 @@ struct CardBlock: View {
                                 .lineLimit(1)
                                 .padding(.top, 4)
                         }
+                        // An unmet ask, named in one line; tapping it opens "How Loop read it".
+                        if let line = CardText.cantCardLine(model.readOut?.cant.map(\.gap) ?? []) {
+                            Button { model.openReadIt() } label: {
+                                HStack(spacing: 8) {
+                                    Circle().strokeBorder(Palette.inkMuted.color, lineWidth: 1.5).frame(width: 9, height: 9)
+                                    Text(line).typeStyle(.label)
+                                        .foregroundStyle(Palette.inkSoft.color)
+                                }
+                                .frame(height: 26, alignment: .bottom)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows how Loop read your run")
+                        }
                     }
                     .transition(reduceMotion ? .identity : .asymmetric(
                         insertion: .opacity.combined(with: .offset(y: Motion.textRise)),
@@ -183,7 +246,62 @@ struct CardBlock: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 96, alignment: .top)
+        .frame(height: 96 + model.sheet.extra, alignment: .top)
+    }
+}
+
+/// "How Loop read it" (UI chat, 2026-11-08): can't-do lines first, then what Loop filled in (each
+/// line opens the editor), then notes with their trust word. What the runner said isn't repeated:
+/// it's underlined in the sentence.
+struct ReadItSection: View {
+    let model: MainModel
+
+    var body: some View {
+        if let r = model.readOut, r.hasReadIt {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("How Loop read it").typeStyle(.eyebrow).foregroundStyle(Palette.inkMuted.color)
+                    .padding(.bottom, 4)
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(r.cant, id: \.gap) { c in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Circle().strokeBorder(Palette.inkMuted.color, lineWidth: 1.5).frame(width: 9, height: 9)
+                        Text(c.text).typeStyle(.body).foregroundStyle(Palette.ink.color)
+                    }
+                    .frame(minHeight: 48, alignment: .leading)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineHairline.color).frame(height: 1) }
+                }
+                if !r.filled.isEmpty {
+                    Text("Loop filled in").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 14)
+                    ForEach(r.filled) { f in
+                        Button { model.openEditor(.filled(f.field)) } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(f.main).typeStyle(.body).foregroundStyle(Palette.ink.color)
+                                    Text([f.detail, f.source].filter { !$0.isEmpty }.joined(separator: " · "))
+                                        .typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Palette.inkMuted.color)
+                            }
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
+                            .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineHairline.color).frame(height: 1) }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens the editor")
+                    }
+                }
+                if !r.notes.isEmpty {
+                    Text("Notes").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 14)
+                    ForEach(r.notes, id: \.key) { n in
+                        Text("\(n.text) · \(n.trust)").typeStyle(.data).foregroundStyle(Palette.inkMuted.color).padding(.top, 6)
+                    }
+                }
+            }
+            .padding(.top, 22)
+            .padding(.bottom, 30)
+        }
     }
 }
 

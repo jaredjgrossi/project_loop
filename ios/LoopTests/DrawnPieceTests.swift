@@ -112,7 +112,7 @@ final class ZoomDetailTests: XCTestCase {
     func testCasingIsOneLineForTheWholeRoute() async throws {
         let data = try LoopData(file: RouteFile.loadBundled())
         let frame = await MainActor.run { () -> RouteFrame in
-            let model = MainModel(data: data)
+            let model = MainModel(data: data, runs: RunStore())
             return model.frame(now: 0, reduceMotion: true)
         }
         // One line for the whole route, the same geometry the base line uses.

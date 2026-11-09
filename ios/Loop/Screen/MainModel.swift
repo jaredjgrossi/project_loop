@@ -11,15 +11,15 @@ final class MainModel {
     let data: LoopData
 
     // Route: the build replay decides what is shown.
-    private(set) var build: BuildState
+    var build: BuildState
     @ObservationIgnored private var playback: Task<Void, Never>?
     @ObservationIgnored private var resampled: [Int: [GeoPoint]] = [:]
     /// Bumped whenever what the map draws changes outside of time-based animation.
-    private(set) var frameVersion = 0
+    var frameVersion = 0
     /// Bumped when the route settles, to send one ring out from the turnaround.
     private(set) var pulseID = 0
     /// How much of the shown route is drawn, 0...1 (markers appear as the line passes them).
-    private(set) var drawnFraction: Double = 1
+    var drawnFraction: Double = 1
 
     var shownRank: Int? { build.shownRank }
     var otherRanks: [Int] { build.otherRanks }
@@ -51,6 +51,54 @@ final class MainModel {
     }
     var lookAroundTarget: LookAroundTarget?
 
+    // Launch and the wait (loop-launch-and-wait-v1): logo, landing sheet, reading, reach, candidates, build.
+    enum Stage: Equatable { case logo, landing, typing, reading, building, settled }
+    var stage: Stage = .settled
+    /// The runner's sentence, shown as the whole header once sent.
+    var requestText: String?
+    /// The example the landing field types in its placeholder colour at launch.
+    var fieldExample = ""
+    /// The logo covering the map at launch.
+    var logoShown = false
+    /// The landing sheet is up (it rises at launch and slides away on send).
+    var landingShown = false
+    /// The landing sheet's height, frame by frame (its own observable, like the route sheet).
+    let landing = SheetState(collapsed: 300, open: 300)
+    /// While the landing sheet rises or slides away it moves whole, anchored at this height.
+    var landingAnchor: CGFloat?
+    /// Saved runs and recent routes, on the phone.
+    let runs: RunStore
+    /// The request whose route goes to Recent once it settles (sent requests only).
+    @ObservationIgnored var recordOnSettle: String?
+    /// The sheet is hidden while Loop reads and slides up at the settle.
+    var sheetShown = true
+    /// The location pulses until the leader starts drawing.
+    var locationPulsing = false
+    /// How Loop read the request (understood words, filled in, can't-do, notes).
+    var readOut: ReadOut? { didSet { applyReadOutToSheet() } }
+    /// Edit mode: the sentence is editable and its understood words open the editor.
+    var editMode = false
+    /// The sentence as editable text (after tapping a word that isn't underlined).
+    var editingText = false
+    enum EditTarget: Equatable { case understood(String), filled(String) }
+    var editing: EditTarget?
+    /// Bumped to scroll the sheet to "How Loop read it".
+    var scrollToReadIt = 0
+
+    /// The map has drawn its first full frame (style and tiles): the logo fades only after this.
+    var mapReady = false
+    /// The debug demo plays "you tap and send" without bringing up the keyboard.
+    var demoTyping = false
+    @ObservationIgnored var reachStart: CFTimeInterval?
+    @ObservationIgnored var reachFadeStart: CFTimeInterval?
+    @ObservationIgnored var candidatesStart: CFTimeInterval?
+    @ObservationIgnored var flow: Task<Void, Never>?
+    /// The runner's location. A public stand-in (the fixture's start) until location is wired.
+    var location: GeoPoint { data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0] }
+    /// How far the runner can go from the start: half the distance, out and back. Until the server
+    /// sends parsed.reach_m.
+    var reachMetres: Double { (data.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile }
+
     // Camera and projection (set by the map)
     var cameraRequest = CameraRequest()
     var zoom: Double = 14
@@ -59,9 +107,11 @@ final class MainModel {
     @ObservationIgnored var project: ((GeoPoint) -> CGPoint?)?
     var headerBottom: CGFloat = 230
 
-    init(data: LoopData) {
+    init(data: LoopData, runs: RunStore) {
         self.data = data
+        self.runs = runs
         build = .settled(top3: data.candidates.map(\.rank))
+        landing.slide(to: 0, animated: false)
     }
 
     var shown: Candidate? { shownRank.flatMap { data.candidate(rank: $0) } }
@@ -72,7 +122,7 @@ final class MainModel {
     var overviewCoordinates: [GeoPoint] { (data.candidate(rank: 1) ?? shown)?.line.points ?? [] }
 
     var eyebrowText: String {
-        CardText.eyebrow(kind: shown?.kindText ?? "", bestOf: showsCount ? data.bestOf : nil)
+        CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
     }
 
     // MARK: Interaction
@@ -106,6 +156,9 @@ final class MainModel {
         }
     }
 
+    func receiveEvent(_ event: BuildEvent, at t: CFTimeInterval) { receive(event, at: t) }
+    func playbackCancel() { playback?.cancel() }
+
     private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
         let wasSettled = build.settleAt
         build.apply(event, at: t)
@@ -127,6 +180,47 @@ final class MainModel {
         }
     }
 
+    // MARK: Read-out, edit mode and the editor
+
+    func applyReadOutToSheet() {
+        sheet.extra = (readOut?.cant.isEmpty ?? true) ? 0 : 26
+        if !(readOut?.hasReadIt ?? false) { sheet.readHeight = nil }
+        sheet.refreshRest()
+    }
+
+    /// The card's can't-do line: open the sheet straight to "How Loop read it".
+    func openReadIt() {
+        touch()
+        sheet.settle(rest: sheet.readHeight == nil ? .open : .read, animated: true)
+        scrollToReadIt += 1
+    }
+
+    func enterEditMode() { guard stage == .settled, requestText != nil else { return }; editMode = true; editing = nil }
+    func exitEditMode() { editMode = false; editingText = false; editing = nil }
+    func openEditor(_ target: EditTarget) { touch(); editing = target }
+
+    /// Done in the editor. Until the app is wired to the server this updates the sentence and the
+    /// list locally; with the server it resends the constraints (no Claude) and rebuilds.
+    func applyEdit(field: String, value: String, phrase: String?) {
+        guard var r = readOut else { editing = nil; return }
+        if let i = r.understood.firstIndex(where: { $0.field == field }) {
+            let u = r.understood[i]
+            if let phrase, let text = requestText {
+                let ns = text as NSString
+                let new = ns.replacingCharacters(in: NSRange(location: u.start, length: u.length), with: phrase)
+                let delta = (phrase as NSString).length - u.length
+                requestText = new
+                for j in r.understood.indices where r.understood[j].start > u.start {
+                    let x = r.understood[j]
+                    r.understood[j] = .init(start: x.start + delta, length: x.length, field: x.field, title: x.title, value: x.value)
+                }
+                r.understood[i] = .init(start: u.start, length: (phrase as NSString).length, field: u.field, title: u.title, value: value)
+            }
+        }
+        readOut = r
+        editing = nil
+    }
+
     // MARK: Sheet
 
     func setSheet(open: Bool, animated: Bool) {
@@ -139,6 +233,11 @@ final class MainModel {
     }
 
     func sheetDragEnded(predictedTranslation: CGFloat, animated: Bool) {
+        // Swiped down past collapsed: dismiss the card and go home.
+        if sheet.isDismissSwipe(predictedTranslation: predictedTranslation) {
+            goHome()
+            return
+        }
         let wasOpen = sheet.restingOpen
         sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { [weak self] open in
             if open != wasOpen { self?.requestCamera(.overview, animated: animated) }
@@ -232,8 +331,8 @@ final class MainModel {
         cameraTick &+= 1
     }
 
-    func requestCamera(_ kind: CameraRequest.Kind, animated: Bool) {
-        cameraRequest = CameraRequest(id: cameraRequest.id + 1, kind: kind, animated: animated)
+    func requestCamera(_ kind: CameraRequest.Kind, animated: Bool, duration: TimeInterval = Motion.mapPan) {
+        cameraRequest = CameraRequest(id: cameraRequest.id + 1, kind: kind, animated: animated, duration: duration)
     }
 
     func screenPoint(_ p: GeoPoint) -> CGPoint? {
@@ -248,6 +347,7 @@ final class MainModel {
 
     /// True while the route is still drawing or morphing (the map redraws every frame).
     func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
+        if waitIsMoving(now: now, reduceMotion: reduceMotion) { return true }
         guard !reduceMotion, let shown else { return false }
         if build.outlineOpacity(at: now, peak: 1, fade: Motion.outlineFade) > 0, build.provisional { return true }
         if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
@@ -266,6 +366,8 @@ final class MainModel {
     /// point by point from the line on screen (no redraw from scratch). Reduce Motion: drawn whole.
     func frame(now: CFTimeInterval, reduceMotion: Bool) -> RouteFrame {
         var frame = RouteFrame()
+        frame.reach = reachFrame(now: now, reduceMotion: reduceMotion)
+        (frame.candidates, frame.candidateOpacity) = candidateFrame(now: now, reduceMotion: reduceMotion)
         let outline = reduceMotion
             ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
             : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)

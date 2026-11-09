@@ -13,23 +13,57 @@ final class SheetState {
     static let open = Metrics.sheetOpen
     static let settleDuration: CFTimeInterval = 0.32
 
+    /// Collapsed, open (398 pt), and "read": dragged further, or reached from the card's can't-do
+    /// line, it shows "How Loop read it" below the button (UI chat, 2026-11-08).
+    enum Rest { case collapsed, open, read }
+
+    /// The rests' base heights: the route card's by default; the landing sheet sets its own.
+    var baseCollapsed: CGFloat
+    var baseOpen: CGFloat
+
+    init(collapsed: CGFloat = SheetState.collapsed, open: CGFloat = SheetState.open) {
+        baseCollapsed = collapsed
+        baseOpen = open
+        height = collapsed
+        dragStart = collapsed
+    }
+
     /// The live height, every frame.
-    private(set) var height: CGFloat = SheetState.collapsed
+    private(set) var height: CGFloat
     /// Where it rests once still.
-    private(set) var restingOpen = false
+    private(set) var rest: Rest = .collapsed
+    var restingOpen: Bool { rest != .collapsed }
+    /// The card grows by one line when the request has a can't-do line; both rests grow with it.
+    var extra: CGFloat = 0
+    var collapsedHeight: CGFloat { baseCollapsed + extra }
+    var openHeight: CGFloat { baseOpen + extra }
+    /// The read rest's height (set from the screen and the list's length); nil when there's nothing to read.
+    var readHeight: CGFloat?
+    var maxHeight: CGFloat { readHeight ?? openHeight }
     /// Dragging or settling.
     private(set) var isMoving = false
 
     /// Called on every height change, outside SwiftUI (the map's ornaments use it).
     @ObservationIgnored var onHeightChange: ((CGFloat) -> Void)?
 
-    @ObservationIgnored private var dragStart: CGFloat = SheetState.collapsed
+    @ObservationIgnored private var dragStart: CGFloat
     @ObservationIgnored private var settle: (from: CGFloat, to: CGFloat, start: CFTimeInterval, done: () -> Void)?
     @ObservationIgnored private var link: CADisplayLink?
     @ObservationIgnored private lazy var proxy = DisplayLinkProxy { [weak self] in self?.step() }
 
-    var restingHeight: CGFloat { restingOpen ? Self.open : Self.collapsed }
-    var progress: CGFloat { max(0, min(1, (height - Self.collapsed) / (Self.open - Self.collapsed))) }
+    func height(for r: Rest) -> CGFloat {
+        switch r { case .collapsed: return collapsedHeight; case .open: return openHeight; case .read: return readHeight ?? openHeight }
+    }
+    var restingHeight: CGFloat { height(for: rest) }
+    var progress: CGFloat {
+        guard openHeight > collapsedHeight else { return 0 }
+        return max(0, min(1, (height - collapsedHeight) / (openHeight - collapsedHeight)))
+    }
+    /// How far past the open state the sheet is, 0...1 (reveals "How Loop read it").
+    var readProgress: CGFloat {
+        guard let r = readHeight, r > openHeight else { return 0 }
+        return max(0, min(1, (height - openHeight) / (r - openHeight)))
+    }
 
     // MARK: Drag
 
@@ -43,26 +77,45 @@ final class SheetState {
     func drag(translation: CGFloat) {
         if !isMoving { beginDrag() }
         let raw = dragStart - translation
-        // 1:1 between the two states; past either end it resists (a third of the travel).
+        // 1:1 between the lowest and highest rest; past either end it resists (a third of the travel).
+        let top = maxHeight, bottom = collapsedHeight
         let h: CGFloat
-        if raw > Self.open { h = Self.open + (raw - Self.open) / 3 }
-        else if raw < Self.collapsed { h = Self.collapsed - (Self.collapsed - raw) / 3 }
+        if raw > top { h = top + (raw - top) / 3 }
+        else if raw < bottom { h = bottom - (bottom - raw) / 3 }
         else { h = raw }
         setHeight(h)
+    }
+
+    /// A drag that ends below the collapsed rest and would carry the sheet well past it (the
+    /// route card: dismiss it). The drag resists below collapsed, so a little overshoot counts.
+    func isDismissSwipe(predictedTranslation: CGFloat) -> Bool {
+        height < collapsedHeight - 12 && dragStart - predictedTranslation < collapsedHeight - 90
     }
 
     /// Picks a state from where the finger would have carried the sheet, then settles there.
     func endDrag(predictedTranslation: CGFloat, animated: Bool, completion: @escaping (Bool) -> Void) {
         let predicted = dragStart - predictedTranslation
-        let open = predicted > (Self.collapsed + Self.open) / 2
-        settle(open: open, animated: animated) { completion(open) }
+        var rests: [Rest] = [.collapsed]
+        if openHeight > collapsedHeight { rests.append(.open) }
+        if readHeight != nil { rests.append(.read) }
+        let target = rests.min { abs(height(for: $0) - predicted) < abs(height(for: $1) - predicted) } ?? .collapsed
+        settle(rest: target, animated: animated) { completion(target != .collapsed) }
     }
 
     // MARK: Settle
 
     func settle(open: Bool, animated: Bool, completion: @escaping () -> Void = {}) {
-        restingOpen = open
-        let target = open ? Self.open : Self.collapsed
+        settle(rest: open ? .open : .collapsed, animated: animated, completion: completion)
+    }
+
+    func settle(rest r: Rest, animated: Bool, completion: @escaping () -> Void = {}) {
+        rest = r
+        slide(to: height(for: r), animated: animated, completion: completion)
+    }
+
+    /// Moves to any height with the settle curve, frame by frame (the landing sheet rises from 0
+    /// at launch and slides back to 0 on send, with the Mapbox logo following it).
+    func slide(to target: CGFloat, animated: Bool, completion: @escaping () -> Void = {}) {
         stopSettle()
         guard animated, abs(height - target) > 0.5 else {
             setHeight(target)
@@ -94,6 +147,11 @@ final class SheetState {
         link?.invalidate()
         link = nil
         settle = nil
+    }
+
+    /// Re-rest after the collapsed or read height changed (a can't-do line came or went).
+    func refreshRest() {
+        if !isMoving { setHeight(restingHeight) }
     }
 
     private func setHeight(_ h: CGFloat) {

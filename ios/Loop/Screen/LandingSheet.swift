@@ -1,0 +1,460 @@
+import SwiftUI
+import UIKit
+
+/// The landing sheet (UI chat, 2026-11-09; modeled on Apple Maps' home sheet, minimal): the request
+/// field, "Your runs" tiles, and "Recent". Three rests on the route card's `SheetState`: collapsed
+/// (just the field, the map takes the rest), open (field, runs, first recent row: how it arrives),
+/// and, with more recents, a taller rest showing them. It rises at launch and slides away on send.
+/// Design-system tokens only; no data (mono) styling on this screen.
+struct LandingSheet: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var sheet: SheetState { model.landing }
+    private var runs: RunStore { model.runs }
+
+    var body: some View {
+        let height = sheet.height
+        // Rising or sliding away, the sheet moves whole (anchored at its rest); otherwise it is
+        // clipped to its height, and below the collapsed rest it moves down whole.
+        let anchor = model.landingAnchor
+        let frameHeight = anchor ?? max(height, sheet.collapsedHeight)
+        let offset = max(0, (anchor ?? sheet.collapsedHeight) - height)
+        let expanded = Double(sheet.progress)
+
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule()
+                .fill(Palette.grabber.color)
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+                .frame(maxWidth: .infinity)
+                .frame(height: 24, alignment: .top)
+                .contentShape(Rectangle())
+                .onTapGesture { toggle() }
+                .accessibilityElement()
+                .accessibilityLabel(sheet.restingOpen ? "Hide your runs" : "Show your runs")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { toggle() }
+
+            RequestField(model: model)
+                .background(bottomReader { setCollapsed($0) })
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Your runs")
+                    .typeStyle(.eyebrow)
+                    .foregroundStyle(Palette.inkMuted.color)
+                    .padding(.top, 22)
+                    .accessibilityAddTraits(.isHeader)
+
+                TileRow(model: model)
+                    .padding(.top, 12)
+                    .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+
+                if let first = runs.recents.first {
+                    Text("Recent")
+                        .typeStyle(.eyebrow)
+                        .foregroundStyle(Palette.inkMuted.color)
+                        .padding(.top, 20)
+                        .accessibilityAddTraits(.isHeader)
+                    RecentRow(recent: first) { model.openRun(request: first.request) }
+                        .padding(.top, 4)
+                        .background(bottomReader { setOpen($0) })
+                }
+            }
+            .opacity(expanded)
+            .accessibilityHidden(expanded < 0.5)
+
+            // More rows, revealed by dragging up past the open rest.
+            ForEach(runs.recents.dropFirst()) { recent in
+                RecentRow(recent: recent) { model.openRun(request: recent.request) }
+                    .opacity(Double(sheet.readProgress))
+                    .accessibilityHidden(sheet.readProgress < 0.5)
+            }
+        }
+        // Measured in the content's own space, inside the slide offset (else each measurement
+        // would move the sheet and feed the next).
+        .coordinateSpace(name: "landing")
+        .padding(.horizontal, Metrics.s24)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { setFull(g.size.height) }
+                .onChange(of: g.size.height) { _, h in setFull(h) }
+        })
+        .frame(height: frameHeight, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background(sheetBackground)
+        .clipped()
+        .offset(y: offset)
+        .contentShape(Rectangle())
+        .gesture(drag)
+    }
+
+    /// Tapping the handle: collapsed opens; open (or taller) collapses.
+    private func toggle() {
+        sheet.settle(rest: sheet.restingOpen ? .collapsed : .open, animated: !reduceMotion)
+    }
+
+    private func bottomReader(_ report: @escaping (CGFloat) -> Void) -> some View {
+        GeometryReader { g in
+            Color.clear
+                .onAppear { report(g.frame(in: .named("landing")).maxY) }
+                .onChange(of: g.frame(in: .named("landing")).maxY) { _, y in report(y) }
+        }
+    }
+
+    /// Collapsed: just the field.
+    private func setCollapsed(_ fieldBottom: CGFloat) {
+        update(&sheet.baseCollapsed, (fieldBottom + 12 + Self.bottomInset).rounded())
+    }
+
+    /// Open: down to the first recent row (or the tiles, with no recents).
+    private func setOpen(_ contentBottom: CGFloat) {
+        update(&sheet.baseOpen, (contentBottom + 14 + Self.bottomInset).rounded())
+    }
+
+    /// Taller: every recent row, up to three quarters of the screen; none with one recent.
+    private func setFull(_ contentHeight: CGFloat) {
+        let full = min((contentHeight + 14 + Self.bottomInset).rounded(), UIScreen.main.bounds.height * 0.75)
+        let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
+        guard read != sheet.readHeight else { return }
+        sheet.readHeight = read
+        refresh()
+    }
+
+    private func update(_ value: inout CGFloat, _ new: CGFloat) {
+        guard abs(value - new) > 0.5 else { return }
+        value = new
+        refresh()
+    }
+
+    private func refresh() {
+        if model.landingShown, model.landingAnchor == nil { sheet.refreshRest() }
+    }
+
+    static var bottomInset: CGFloat {
+        let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
+        return scene?.keyWindow?.safeAreaInsets.bottom ?? 34
+    }
+
+    private var sheetBackground: some View {
+        UnevenRoundedRectangle(topLeadingRadius: Metrics.radiusSheet, topTrailingRadius: Metrics.radiusSheet)
+            .fill(Palette.surfaceSheet.color)
+            .overlay(
+                UnevenRoundedRectangle(topLeadingRadius: Metrics.radiusSheet, topTrailingRadius: Metrics.radiusSheet)
+                    .stroke(Palette.lineHairline.color, lineWidth: 1)
+            )
+            .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.08), radius: 15, y: -8)
+    }
+
+    /// Same as the route card: 1:1 under the finger, then the 320 ms settle to the nearest rest.
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .global)
+            .onChanged { v in
+                guard model.landingAnchor == nil else { return }
+                sheet.drag(translation: v.translation.height)
+            }
+            .onEnded { v in
+                guard model.landingAnchor == nil else { return }
+                sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in }
+            }
+    }
+}
+
+/// The request field at the top of the landing sheet: sunken, Fraunces placeholder. At launch it
+/// types an example in the placeholder colour; tapped, it takes the runner's words, and go sends.
+struct RequestField: View {
+    let model: MainModel
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let style = TypeStyle.field
+
+    var body: some View {
+        let typing = model.stage == .typing
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Palette.inkMuted.color)
+            ZStack(alignment: .leading) {
+                if !typing || (draft.isEmpty && !model.demoTyping) {
+                    Text(model.fieldExample.isEmpty ? "Describe your run" : model.fieldExample)
+                        .typeStyle(Self.style)
+                        .foregroundStyle(Palette.inkMuted.color)
+                        .lineLimit(1)
+                        .accessibilityHidden(true)
+                }
+                TextField("", text: $draft)
+                    .typeStyle(Self.style)
+                    .foregroundStyle(Palette.ink.color)
+                    .tint(Palette.focusRing.color)
+                    .focused($focused)
+                    .submitLabel(.go)
+                    .onSubmit { model.send(draft, reduceMotion: reduceMotion); draft = ""; focused = false }
+                    .opacity(typing ? 1 : 0.011)
+                    .accessibilityLabel("Describe your run")
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 50)
+        .background(Capsule().fill(Palette.surfaceSunken.color))
+        .overlay(Capsule().strokeBorder(Palette.focusRing.color, lineWidth: 1.5).opacity(typing ? 1 : 0))
+        .contentShape(Capsule())
+        .onTapGesture { model.beginTyping(); focused = true }
+        .onChange(of: model.stage) { _, stage in
+            guard stage == .typing else { return }
+            // The debug demo "taps and sends" the example itself, without the keyboard.
+            if model.demoTyping { draft = model.fieldExample } else { focused = true }
+        }
+    }
+}
+
+/// "Your runs": the runner's runs, then suggestions, then a dashed Save tile.
+private struct TileRow: View {
+    let model: MainModel
+
+    var body: some View {
+        GeometryReader { g in
+            let side = ((g.size.width - 3 * 12) / 4).rounded(.down)
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(model.runs.saved.prefix(3)) { run in
+                    RunTile(side: side, name: run.name, detail: CardText.miles(run.distanceMi), shape: run.shape) {
+                        model.openRun(request: run.request)
+                    }
+                }
+                ForEach(model.runs.suggestedTiles) { s in
+                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph) {
+                        model.send(s.request, reduceMotion: false)
+                    }
+                }
+                SaveTile(side: side)
+            }
+        }
+        .frame(height: Self.height(width: UIScreen.main.bounds.width - 2 * Metrics.s24))
+    }
+
+    /// The tile, then two label lines (a name and distance, or a two-line suggestion).
+    static func height(width: CGFloat) -> CGFloat { ((width - 36) / 4).rounded(.down) + 6 + 36 }
+}
+
+private struct RunTile: View {
+    let side: CGFloat
+    let name: String
+    let detail: String?
+    let shape: [[Double]]?
+    var glyph: SuggestedRun.Glyph? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Palette.surfaceSunken.color)
+                    .overlay(RouteThumbnail(shape: shape, glyph: glyph, lineWidth: 2.4, dot: 7)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+                    .frame(width: side, height: side)
+                VStack(spacing: 0) {
+                    Text(name)
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.ink.color)
+                    if let detail {
+                        Text(detail)
+                            .typeStyle(.label)
+                            .foregroundStyle(Palette.inkMuted.color)
+                    }
+                }
+                .lineLimit(detail == nil ? 2 : 1)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: side + 10)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: side)
+        .accessibilityLabel(detail.map { "\(name), \($0)" } ?? name)
+        .accessibilityHint(shape == nil ? "Sends this request" : "Shows this route")
+    }
+}
+
+/// The dashed last tile. What it does from here is still open, so it isn't a button yet.
+private struct SaveTile: View {
+    let side: CGFloat
+
+    var body: some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Palette.lineControl.color.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                .overlay(Image(systemName: "plus").font(.system(size: 18, weight: .regular)).foregroundStyle(Palette.inkMuted.color))
+                .frame(width: side, height: side)
+            Text("Save")
+                .typeStyle(.label)
+                .foregroundStyle(Palette.inkMuted.color)
+        }
+        .frame(width: side)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct RecentRow: View {
+    let recent: RecentRoute
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                RouteThumbnail(shape: recent.shape, lineWidth: 1.8, dot: 0, inset: 0.06)
+                    .frame(width: 26, height: 26)
+                Text(Self.sentence(recent.request))
+                    .typeStyle(.body)
+                    .foregroundStyle(Palette.ink.color)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(RunStore.dayText(recent.date))
+                    .typeStyle(.label)
+                    .foregroundStyle(Palette.inkMuted.color)
+            }
+            .frame(height: 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The request as the runner typed it, without the full stop the header adds.
+    static func sentence(_ s: String) -> String { s.hasSuffix(".") ? String(s.dropLast()) : s }
+}
+
+/// A route's own shape as a small line drawing: route-water line, vermilion start dot. A suggestion
+/// (no route yet) draws its glyph in the same style instead. Never an empty placeholder.
+struct RouteThumbnail: View {
+    let shape: [[Double]]?
+    var glyph: SuggestedRun.Glyph? = nil
+    var lineWidth: CGFloat = 2.4
+    var dot: CGFloat = 7
+    /// Margin as a share of the side.
+    var inset: CGFloat = 0.22
+
+    var body: some View {
+        Canvas { ctx, size in
+            let side = min(size.width, size.height)
+            let box = CGRect(x: (size.width - side) / 2 + side * inset, y: (size.height - side) / 2 + side * inset,
+                             width: side * (1 - 2 * inset), height: side * (1 - 2 * inset))
+            let line: Path, start: CGPoint
+            if let pts = shape.map(Self.project), pts.count >= 2 {
+                let fitted = Self.fit(pts, in: box)
+                var path = Path()
+                path.addLines(fitted)
+                line = path; start = fitted[0]
+            } else if let glyph {
+                (line, start) = Self.glyph(glyph, in: box, ctx: ctx)
+            } else {
+                return
+            }
+            ctx.stroke(line, with: .color(Palette.routeWater.color),
+                       style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            if dot > 0 {
+                ctx.fill(Path(ellipseIn: CGRect(x: start.x - dot / 2, y: start.y - dot / 2, width: dot, height: dot)),
+                         with: .color(Palette.accentStart.color))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// The suggestion glyphs, drawn in the unit box. Returns the route-style line and its start.
+    static func glyph(_ glyph: SuggestedRun.Glyph, in box: CGRect, ctx: GraphicsContext) -> (Path, CGPoint) {
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: box.minX + x * box.width, y: box.minY + y * box.height) }
+        switch glyph {
+        case .loop:
+            // Out from the dot, round a small loop, and back to the dot.
+            var path = Path()
+            path.move(to: p(0.30, 0.86))
+            path.addCurve(to: p(0.88, 0.58), control1: p(0.56, 0.98), control2: p(0.90, 0.80))
+            path.addCurve(to: p(0.50, 0.08), control1: p(0.86, 0.32), control2: p(0.72, 0.08))
+            path.addCurve(to: p(0.10, 0.44), control1: p(0.26, 0.08), control2: p(0.08, 0.24))
+            path.addCurve(to: p(0.30, 0.86), control1: p(0.12, 0.64), control2: p(0.18, 0.80))
+            return (path, p(0.30, 0.86))
+        case .water:
+            // Water to the right of a wavy shoreline (the map's shore colour) out to the tile's
+            // edges (the tile clips it), the line running alongside on the land side, from the dot up.
+            func shore(_ y: CGFloat) -> CGFloat { 0.72 + 0.07 * sin(y * .pi * 2.4) }
+            let steps = 40
+            var water = Path()
+            water.move(to: p(shore(-0.6), -0.6))
+            for i in 0...steps {
+                let y = -0.6 + 2.2 * CGFloat(i) / CGFloat(steps)
+                water.addLine(to: p(shore(y), y))
+            }
+            water.addLine(to: p(2, 1.6))
+            water.addLine(to: p(2, -0.6))
+            water.closeSubpath()
+            ctx.fill(water, with: .color(Palette.mapShore.color))
+            var path = Path()
+            for i in 0...steps {
+                let y = 0.92 - 0.84 * CGFloat(i) / CGFloat(steps)
+                let pt = p(shore(y) - 0.24, y)
+                if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+            }
+            return (path, p(shore(0.92) - 0.24, 0.92))
+        }
+    }
+
+    /// Lon/lat to local metres (equirectangular), y up.
+    static func project(_ shape: [[Double]]) -> [CGPoint] {
+        guard let first = shape.first, first.count == 2 else { return [] }
+        let mx = 111_320 * cos(first[1] * .pi / 180), my = 110_574.0
+        return shape.compactMap { p in p.count == 2 ? CGPoint(x: (p[0] - first[0]) * mx, y: (p[1] - first[1]) * my) : nil }
+    }
+
+    /// Scales and centres the points in the box, keeping the aspect ratio (y flips to screen).
+    static func fit(_ pts: [CGPoint], in box: CGRect) -> [CGPoint] {
+        let xs = pts.map(\.x), ys = pts.map(\.y)
+        let minX = xs.min()!, maxX = xs.max()!, minY = ys.min()!, maxY = ys.max()!
+        let w = max(maxX - minX, 1), h = max(maxY - minY, 1)
+        let k = min(box.width / w, box.height / h)
+        let ox = box.midX - (minX + w / 2) * k, oy = box.midY + (minY + h / 2) * k
+        return pts.map { CGPoint(x: ox + $0.x * k, y: oy - $0.y * k) }
+    }
+}
+
+/// Under the wordmark on the landing: a weather glyph, the temperature (Fraunces), "· Mon 7:02"
+/// (Instrument Sans, ink-muted). WeatherKit needs the paid developer program, so Debug builds
+/// show fixed sample weather and Release builds show nothing until it's wired.
+struct WeatherLine: View {
+    struct Reading { let symbol: String; let temperature: String }
+
+    static var reading: Reading? {
+        #if DEBUG
+        Reading(symbol: "cloud.sun", temperature: "48°")
+        #else
+        nil
+        #endif
+    }
+
+    var body: some View {
+        if let r = Self.reading {
+            TimelineView(.everyMinute) { context in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: r.symbol)
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(Palette.inkMuted.color)
+                    Text(r.temperature)
+                        .typeStyle(.numeralS)
+                        .foregroundStyle(Palette.inkSoft.color)
+                    Text("· " + Self.dayTime(context.date))
+                        .typeStyle(.body)
+                        .foregroundStyle(Palette.inkMuted.color)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(r.temperature), sample weather, \(Self.dayTime(context.date))")
+            }
+        }
+    }
+
+    static func dayTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "EEE h:mm"
+        return f.string(from: date)
+    }
+}
