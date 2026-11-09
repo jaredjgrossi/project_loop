@@ -48,10 +48,7 @@ struct MainScreen: View {
                     .ignoresSafeArea()
             }
 
-            HeaderView(sentence: model.requestText, trailing: debugTrailing)
-                .contentShape(Rectangle())
-                // Edit mode (underlined words) comes with the API wiring; for now a tap reopens the bar.
-                .onTapGesture { if model.stage == .settled { model.beginTyping() } }
+            HeaderView(model: model, trailing: debugTrailing)
                 .background(GeometryReader { g in
                     Color.clear
                         .onAppear { model.headerBottom = g.frame(in: .global).maxY }
@@ -87,6 +84,22 @@ struct MainScreen: View {
                     .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
 
+            // Edit mode: tapping the map leaves it.
+            if model.editMode && model.editing == nil && !model.editingText {
+                Color.clear.contentShape(Rectangle())
+                    .padding(.top, model.headerBottom + 8)
+                    .ignoresSafeArea()
+                    .onTapGesture { model.exitEditMode() }
+            }
+
+            if let target = model.editing {
+                EditorPanel(model: model, target: target)
+                    .padding(.top, target.isUnderstood ? model.headerBottom + 10 : 0)
+                    .frame(maxHeight: .infinity, alignment: target.isUnderstood ? .top : .center)
+                    .ignoresSafeArea(edges: .top)
+                    .transition(.opacity)
+            }
+
             if model.logoShown {
                 LaunchLogo()
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -114,9 +127,16 @@ struct MainScreen: View {
     private func start() async {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
-        let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget"]
+        let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
             model.requestText = model.data.request.text
+            var read = ReadOut.simulated(model.data.request.text, data: model.data, file: nil)
+            // -LoopCant G9[,G8]: show can't-do lines for screenshots.
+            if let i = args.firstIndex(of: "-LoopCant"), i + 1 < args.count {
+                let texts = ["G9": "Can't plan around street lighting yet", "G8": "Can't build repeats into a route yet"]
+                read.cant = args[i + 1].split(separator: ",").map { ReadOut.Cant(gap: String($0), text: texts[String($0)] ?? String($0)) }
+            }
+            model.readOut = read
             await applyLaunchArguments()
             return
         }
@@ -141,6 +161,15 @@ struct MainScreen: View {
             try? await Task.sleep(for: .seconds(1.5))
             let along = (d.drawn.first { $0.kind == .path }.map { ($0.fromM + $0.toM) / 2 }) ?? d.line.length / 3
             model.requestCamera(.at(d.line.point(at: along), zoom: 16.6), animated: false)
+        }
+        if args.contains("-LoopEdit") {
+            try? await Task.sleep(for: .seconds(1.5))
+            model.enterEditMode()
+            if args.contains("-LoopEditor") { try? await Task.sleep(for: .seconds(0.4)); model.openEditor(.understood("distance")) }
+        }
+        if args.contains("-LoopReadIt") {
+            try? await Task.sleep(for: .seconds(2.0))
+            model.openReadIt()
         }
         if args.contains("-LoopPlay") {
             try? await Task.sleep(for: .seconds(1.5))

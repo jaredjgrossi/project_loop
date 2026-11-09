@@ -66,6 +66,17 @@ final class MainModel {
     var sheetShown = true
     /// The location pulses until the leader starts drawing.
     var locationPulsing = false
+    /// How Loop read the request (understood words, filled in, can't-do, notes).
+    var readOut: ReadOut? { didSet { applyReadOutToSheet() } }
+    /// Edit mode: the sentence is editable and its understood words open the editor.
+    var editMode = false
+    /// The sentence as editable text (after tapping a word that isn't underlined).
+    var editingText = false
+    enum EditTarget: Equatable { case understood(String), filled(String) }
+    var editing: EditTarget?
+    /// Bumped to scroll the sheet to "How Loop read it".
+    var scrollToReadIt = 0
+
     /// The map has drawn its first full frame (style and tiles): the logo fades only after this.
     var mapReady = false
     /// The debug demo plays "you tap and send" without bringing up the keyboard.
@@ -157,6 +168,47 @@ final class MainModel {
         } else {
             selection = nil
         }
+    }
+
+    // MARK: Read-out, edit mode and the editor
+
+    func applyReadOutToSheet() {
+        sheet.extra = (readOut?.cant.isEmpty ?? true) ? 0 : 26
+        if !(readOut?.hasReadIt ?? false) { sheet.readHeight = nil }
+        sheet.refreshRest()
+    }
+
+    /// The card's can't-do line: open the sheet straight to "How Loop read it".
+    func openReadIt() {
+        touch()
+        sheet.settle(rest: sheet.readHeight == nil ? .open : .read, animated: true)
+        scrollToReadIt += 1
+    }
+
+    func enterEditMode() { guard stage == .settled, requestText != nil else { return }; editMode = true; editing = nil }
+    func exitEditMode() { editMode = false; editingText = false; editing = nil }
+    func openEditor(_ target: EditTarget) { touch(); editing = target }
+
+    /// Done in the editor. Until the app is wired to the server this updates the sentence and the
+    /// list locally; with the server it resends the constraints (no Claude) and rebuilds.
+    func applyEdit(field: String, value: String, phrase: String?) {
+        guard var r = readOut else { editing = nil; return }
+        if let i = r.understood.firstIndex(where: { $0.field == field }) {
+            let u = r.understood[i]
+            if let phrase, let text = requestText {
+                let ns = text as NSString
+                let new = ns.replacingCharacters(in: NSRange(location: u.start, length: u.length), with: phrase)
+                let delta = (phrase as NSString).length - u.length
+                requestText = new
+                for j in r.understood.indices where r.understood[j].start > u.start {
+                    let x = r.understood[j]
+                    r.understood[j] = .init(start: x.start + delta, length: x.length, field: x.field, title: x.title, value: x.value)
+                }
+                r.understood[i] = .init(start: u.start, length: (phrase as NSString).length, field: u.field, title: u.title, value: value)
+            }
+        }
+        readOut = r
+        editing = nil
     }
 
     // MARK: Sheet

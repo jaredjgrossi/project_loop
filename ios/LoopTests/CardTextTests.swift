@@ -81,3 +81,33 @@ final class CardTextTests: XCTestCase {
                        "FDR Drive · 0.5 mi")
     }
 }
+
+final class ReadOutTests: XCTestCase {
+    func testCardLineNamesJoinsOrCounts() {
+        XCTAssertNil(CardText.cantCardLine([]))
+        XCTAssertEqual(CardText.cantCardLine(["G9"]), "Street lighting isn't planned yet")
+        XCTAssertEqual(CardText.cantCardLine(["G9", "G8"]), "Lighting and repeats aren't planned yet")
+        XCTAssertEqual(CardText.cantCardLine(["G9", "G8", "G3"]), "3 things aren't planned yet")
+    }
+
+    func testSimulatedParseFindsWordsAndFillsTheRest() throws {
+        let data = try LoopData(file: RouteFile.loadBundled())
+        let r = ReadOut.simulated("3 miles by the water at 7, well lit.", data: data, file: nil)
+        XCTAssertEqual(r.understood.map(\.field), ["distance", "scenery", "time"])
+        let s = "3 miles by the water at 7, well lit." as NSString
+        XCTAssertEqual(s.substring(with: NSRange(location: r.understood[0].start, length: r.understood[0].length)), "3 miles")
+        XCTAssertEqual(r.understood[0].value, "3 mi")
+        XCTAssertEqual(r.cant.map(\.gap), ["G9"])
+        XCTAssertEqual(r.filled.first?.main, "Starting where you are")
+        XCTAssertTrue(r.filled.contains { $0.main == "Within 5% of 3 mi" && $0.source == "default" })
+    }
+
+    func testStartPlaceStopsAtTheName() throws {
+        let data = try LoopData(file: RouteFile.loadBundled())
+        let text = "3 miles from the Kips Bay Library at 7 am."
+        let r = ReadOut.simulated(text, data: data, file: nil)
+        let start = try XCTUnwrap(r.understood.first { $0.field == "start" })
+        XCTAssertEqual((text as NSString).substring(with: NSRange(location: start.start, length: start.length)), "from the Kips Bay Library")
+        XCTAssertFalse(r.filled.contains { $0.field == "start" }, "a start the runner said isn't listed as filled in")
+    }
+}

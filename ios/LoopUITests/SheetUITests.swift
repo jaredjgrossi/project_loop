@@ -27,9 +27,14 @@ final class SheetUITests: XCTestCase {
         XCTAssertTrue(close.waitForExistence(timeout: 10))
         close.tap()
 
-        // Drag down from the grabber area to close.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.58))
-            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
+        // Drag down to close: from the read rest it may take two drags (read → open → collapsed).
+        // Grab the sheet by its grabber (the card's other areas include the scrubbable strip).
+        let grabber = app.descendants(matching: .any)["Close route details"]
+        for _ in 0..<2 where lights.exists {
+            grabber.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)))
+            sleep(1)
+        }
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: lights)
         waitForExpectations(timeout: 3)

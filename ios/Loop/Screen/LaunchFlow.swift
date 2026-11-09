@@ -100,7 +100,10 @@ extension MainModel {
             barShown = false
             sheetShown = false
         }
-        withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = sentence.hasSuffix(".") ? sentence : sentence + "." }
+        let shown = sentence.hasSuffix(".") ? sentence : sentence + "."
+        withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = shown }
+        exitEditMode()
+        readOut = nil
         stage = .reading
         locationPulsing = !reduceMotion
         sheet.settle(open: false, animated: false)
@@ -115,6 +118,7 @@ extension MainModel {
             self.requestCamera(.at(self.location, zoom: z0 + 1.6), animated: true, duration: 1.8)
             guard await wait(Timing.parse - 1.2) else { return }
             // Parsed: pull back to the reach, open the ring, then candidates.
+            self.readOut = ReadOut.simulated(shown, data: self.data, file: nil)
             let t = CACurrentMediaTime()
             self.reachStart = reduceMotion ? t - 10 : t
             self.candidatesStart = reduceMotion ? t - 10 : t + Timing.candidatesAfterParse
