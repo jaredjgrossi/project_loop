@@ -49,8 +49,9 @@ struct RouteMapView: UIViewRepresentable {
         let c = context.coordinator
         c.reduceMotion = reduceMotion
         c.setDark(colorScheme == .dark)
-        // Logo and attribution sit above whatever is at the bottom: the sheet, the bar, or nothing.
-        c.setBottomInset(model.sheetShown ? model.sheet.height : model.barShown ? 64 + 12 + 34 : 34)
+        // Logo and attribution sit above the sheet, or above the bar's place whenever there is no
+        // sheet (from launch, before the bar slides in), so they never jump when the bar comes.
+        c.setBottomInset(model.sheetShown ? model.sheet.height : Metrics.requestBarHeight + 12 + 34)
         c.handle(model.cameraRequest)
     }
 
@@ -133,9 +134,14 @@ struct RouteMapView: UIViewRepresentable {
             else { move(CameraRequest(kind: .overview)) }
         }
 
+        /// The candidate outlines are faint on purpose, but on the Night map 30% periwinkle barely
+        /// reads (device, 2026-11-09), so Night draws them at twice the opacity.
+        static func candidateBoost(dark: Bool) -> Double { dark ? 2 : 1 }
+
         func setDark(_ value: Bool) {
             guard value != dark else { return }
             dark = value
+            lastFrame = nil
             mapView?.backgroundColor = Palette.mapLand.uiColor
             guard styleReady, let map = mapView?.mapboxMap else { return }
             if MapStyle.hasToken {
@@ -376,7 +382,8 @@ struct RouteMapView: UIViewRepresentable {
                 map.updateGeoJSONSource(withId: Ids.candidatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
             if frame.candidateOpacity != lastFrame?.candidateOpacity {
-                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity", value: frame.candidateOpacity)
+                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity",
+                                          value: frame.candidateOpacity * Self.candidateBoost(dark: dark))
             }
             if frame.othersOpacity != lastFrame?.othersOpacity {
                 try? map.setLayerProperty(for: Ids.others, property: "line-opacity", value: frame.othersOpacity)

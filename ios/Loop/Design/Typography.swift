@@ -101,6 +101,8 @@ extension View {
 enum Metrics {
     static let s4: CGFloat = 4, s8: CGFloat = 8, s12: CGFloat = 12, s16: CGFloat = 16
     static let s24: CGFloat = 24, s32: CGFloat = 32, s52: CGFloat = 52
+    /// The request bar on the landing map.
+    static let requestBarHeight: CGFloat = 64
     static let radiusBar: CGFloat = 3, radiusThumb: CGFloat = 8, radiusButton: CGFloat = 14, radiusSheet: CGFloat = 24
     static let sheetCollapsed: CGFloat = 216
     static let sheetOpen: CGFloat = 398

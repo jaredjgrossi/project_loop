@@ -28,10 +28,9 @@ struct MainScreen: View {
 
             // Our markers sit above the fade (START sits just under the provenance line).
             // Markers never draw over the header: masked from the provenance line down.
-            Group {
-                MarkerOverlay(model: model)
-                SelectionOverlay(model: model)
-            }
+            // They fade out as the sheet rises to "How Loop read it", so none peek out in the gap
+            // between the header and the sheet.
+            MarkerLayer(model: model)
             .ignoresSafeArea()
             .mask(alignment: .top) {
                 VStack(spacing: 0) {
@@ -269,5 +268,18 @@ private struct BetterRouteLayer: View {
         .padding(.bottom, model.sheet.height + 10)
         .ignoresSafeArea(edges: .bottom)
         .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
+    }
+}
+
+/// Markers and the selection. Its own view so only it re-renders while the sheet moves
+/// (it reads the sheet's read progress); the rest of the screen doesn't.
+private struct MarkerLayer: View {
+    let model: MainModel
+    var body: some View {
+        ZStack(alignment: .top) {
+            MarkerOverlay(model: model)
+            SelectionOverlay(model: model)
+        }
+        .opacity(1 - model.sheet.readProgress)
     }
 }

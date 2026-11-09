@@ -90,7 +90,7 @@ struct RequestBar: View {
             }
         }
         .padding(.horizontal, 22)
-        .frame(height: 64)
+        .frame(height: Metrics.requestBarHeight)
         .background(Capsule().fill(Palette.surfaceSheet.color))
         .overlay(Capsule().strokeBorder(typing ? Palette.focusRing.color : Palette.lineHairline.color, lineWidth: 1))
         .contentShape(Capsule())
