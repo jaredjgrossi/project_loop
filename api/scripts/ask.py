@@ -58,6 +58,8 @@ def describe(ev: dict) -> str:
         extra = f"; best of {ev['pool_size']}" if kind == "final" and ev.get("pool_size") else ""
         notes = "".join(f"\n           note:  {n['text']}" for n in ev.get("notes") or [])
         return f"{ev['route_id']} at {ev['elapsed_s']:.2f} s engine time: {routes}{extra}{notes}"
+    if kind == "candidates":
+        return ", ".join(f"{c['id']} {c['kind']} ({len(c['points'])} points)" for c in ev["candidates"])
     if kind == "error":
         return f"{ev['code']}: {ev['text']}"
     return ""

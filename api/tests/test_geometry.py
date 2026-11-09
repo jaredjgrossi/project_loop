@@ -35,3 +35,44 @@ def test_hole_is_not_part_of_the_polygon():
 
 def test_line_running_along_outside_near_an_edge_does_not_touch():
     assert not line_touches_polygon([[-0.5, -10], [-0.5, 110]], [SQUARE])
+
+
+# ---- outlines for the candidates event (step 7b, decision 031) ----------------------------------------------------
+
+import math
+
+from api.geometry import OUTLINE_MAX_POINTS, outline
+
+
+def _circle(n: int, lat=40.7438, lon=-73.9799, r=0.008):
+    pts = [[round(lon + r * math.cos(2 * math.pi * i / n), 6), round(lat + r * math.sin(2 * math.pi * i / n), 6)]
+           for i in range(n)]
+    return pts + [pts[0]]
+
+
+def test_a_long_route_is_cut_to_at_most_40_points_and_keeps_its_ends():
+    coords = _circle(600)
+    out = outline(coords)
+    assert 20 <= len(out) <= OUTLINE_MAX_POINTS
+    assert out[0] == [round(c, 5) for c in coords[0]] and out[-1] == out[0]  # a loop still closes
+
+
+def test_the_outline_stays_near_the_route():
+    coords = _circle(600)
+    out = outline(coords)
+    for lon, lat in out:  # every kept point is on the circle, within about 1 m of rounding
+        assert abs(math.hypot(lon - -73.9799, lat - 40.7438) - 0.008) < 2e-5
+
+
+def test_corners_survive():
+    square = [[-73.98, 40.74], [-73.97, 40.74], [-73.97, 40.75], [-73.98, 40.75], [-73.98, 40.74]]
+    dense = [[a[0] + (b[0] - a[0]) * t / 50, a[1] + (b[1] - a[1]) * t / 50]
+             for a, b in zip(square, square[1:]) for t in range(50)] + [square[-1]]
+    out = outline(dense)
+    for corner in square:
+        assert [round(corner[0], 5), round(corner[1], 5)] in out
+
+
+def test_a_short_route_is_kept_whole_and_rounded():
+    coords = [[-73.979912345, 40.743812345, 12.0], [-73.97, 40.75, 13.0]]  # elevation is dropped
+    assert outline(coords) == [[-73.97991, 40.74381], [-73.97, 40.75]]

@@ -117,3 +117,32 @@ def test_a_route_keeps_its_id_across_events():
     final = engine(fake_generate([first, second])).build(rc(), Start(40.7, -73.9, "x"), sent.append, "r_9")
     ids = [[r["id"] for r in e["routes"]] for e in sent] + [[r["id"] for r in final["routes"]]]
     assert ids == [["r_9.1"], ["r_9.1", "r_9.2"], ["r_9.1", "r_9.2"], ["r_9.1", "r_9.2"]]
+
+
+def fake_generate_with_candidates(cands):
+    """As fake_generate, and each candidate also arrives through on_candidate, from a worker thread."""
+    inner = fake_generate(cands)
+
+    def generate_fn(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, on_candidate=None, **kw):
+        for i, c in enumerate(cands):
+            t = threading.Thread(target=on_candidate, args=(c, 0.1 * (i + 1)))
+            t.start()
+            t.join()
+        return inner(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=top_n, **kw)
+
+    return generate_fn
+
+
+def test_each_candidate_streams_as_a_light_outline_with_its_route_id():
+    sent = []
+    cands = [candidate(label="first", score=90), candidate(label="second", score=80)]
+    engine(fake_generate_with_candidates(cands)).build(rc(), Start(40.7, -73.9, "x"), sent.append, "r_5")
+    outs = [e for e in sent if e["event"] == "candidates"]
+    assert [e["candidates"][0]["id"] for e in outs] == ["r_5.1", "r_5.2"]
+    one = outs[0]
+    assert set(one) == {"event", "v", "route_id", "elapsed_s", "candidates"} and one["route_id"] == "r_5"
+    c = one["candidates"][0]
+    assert set(c) == {"id", "kind", "points"} and c["kind"] == cands[0].kind
+    assert c["points"][0] == [round(x, 5) for x in cands[0].route.coordinates[0][:2]]
+    top3 = next(e for e in sent if e["event"] == "top3")
+    assert top3["routes"][0]["id"] == "r_5.1"  # the same id when it reaches the top 3

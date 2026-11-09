@@ -33,3 +33,27 @@ def line_touches_polygon(coords: list[list[float]], rings: list[list[list[float]
         return True
     edges = [(a, b) for ring in rings for a, b in zip(ring, ring[1:])]
     return any(segments_cross(p, q, a, b) for p, q in zip(coords, coords[1:]) for a, b in edges)
+
+
+# ---- outlines for the candidates event (step 7b, decision 031) ----------------------------------------------------
+
+OUTLINE_MAX_POINTS = 40
+OUTLINE_DECIMALS = 5  # about 1 m
+
+
+def outline(coords: list[list[float]], max_points: int = OUTLINE_MAX_POINTS) -> list[list[float]]:
+    """A light outline of a route for drawing while the engine works: Douglas-Peucker with the smallest tolerance
+    that leaves at most `max_points` points (20-40 on a long route), so corners and the ends are kept, then [lon, lat]
+    rounded to about 1 m. Elevation is dropped. Only for drawing: nothing is measured on it."""
+    from shapely.geometry import LineString
+
+    flat = [[c[0], c[1]] for c in coords]
+    pts = flat
+    if len(flat) > max_points:
+        line, tol = LineString(flat), 1e-6  # degrees; about 0.1 m
+        while True:
+            pts = [list(p) for p in line.simplify(tol, preserve_topology=False).coords]
+            if len(pts) <= max_points:
+                break
+            tol *= 1.5
+    return [[round(x, OUTLINE_DECIMALS), round(y, OUTLINE_DECIMALS)] for x, y in pts]

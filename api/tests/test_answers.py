@@ -151,3 +151,16 @@ def test_a_utc_clock_is_read_in_the_runners_time_zone():
     local = Context.from_request(req).now
     req["client"] = req["client"] | {"now": "2026-11-03T11:40:00Z"}
     assert Context.from_request(req).now == local
+
+
+@pytest.mark.parametrize("case_id,reach", [("P36", 5070), ("P38", 2630), ("P10", 3220), ("R01", None), ("R06", None)])
+def test_parsed_says_how_far_the_run_can_reach(case_id, reach):
+    """reach_m: half the longest the run may be (the distance plus its tolerance), in meters, to 10 m. 6 mi at 5%:
+    6 x 1.05 / 2 x 1609 = 5069 m. 5 km is 3.11 mi: 2628 m. "3-4 miles" reaches 4 mi / 2: 3219 m. Null with no
+    distance yet (R06 asks) or when the run ends somewhere else (R01)."""
+    ctx = Context.from_request(build_request(CASES[case_id], CONTEXTS))
+    out = build(IDEAL[case_id], ctx, FakePlaces())
+    assert out["parsed"]["reach_m"] == reach
+    if reach is not None:
+        again = parsed_for_constraints(out["parsed"]["constraints"], ctx, None)
+        assert again["reach_m"] == reach

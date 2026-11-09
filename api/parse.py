@@ -840,6 +840,20 @@ def _chip_place(p: dict) -> dict | None:
             "trust": p.get("trust", "listed"), "from": p.get("source")}
 
 
+METERS_PER_MILE = 1609.344
+
+
+def reach_m(constraints: dict) -> int | None:
+    """How far from the start the run can get, for the map while routes build (step 7b): half the longest the run
+    may be, the distance plus its tolerance, to 10 m. A loop or an out-and-back turns back by then. None with no
+    distance yet, or when the run ends somewhere else (an A-to-B reach comes with step 8)."""
+    miles = constraints.get("distance_mi")
+    if miles is None or constraints.get("end_place"):
+        return None
+    tol = constraints.get("tolerance_pct", RunConstraints.model_fields["tolerance_pct"].default)
+    return int(round(miles * (1 + tol / 100) * METERS_PER_MILE / 2, -1))
+
+
 def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) -> dict:
     """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
     trace. The question's answer map goes into the trace, never to the phone."""
@@ -892,7 +906,8 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
     _notes(b) if question is None else None
     chips = _chips(b)
     parsed = {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": chips,
-              "question": question, "cant": b.cant, "notes": b.notes, "constraints": b.constraints}
+              "question": question, "cant": b.cant, "notes": b.notes, "reach_m": reach_m(b.constraints),
+              "constraints": b.constraints}
     trace = {"sources": dict(b.sources), "lookups": b.lookups, "routing_calls": 0, "texts": b.texts,
              "answer_map": answer_map, "answers": b.answers, "later": b.later}
     return {"parsed": parsed, "trace": trace}
@@ -953,7 +968,7 @@ def parsed_for_constraints(constraints: dict, ctx: Context, places: Places) -> d
     b.sources = field_sources(rc)
     _notes(b)
     return {"event": "parsed", "v": 1, "parse_id": f"p_{secrets.token_hex(4)}", "chips": _chips(b), "question": None,
-            "cant": [], "notes": b.notes, "constraints": b.constraints}
+            "cant": [], "notes": b.notes, "reach_m": reach_m(b.constraints), "constraints": b.constraints}
 
 
 # ---- the Claude call --------------------------------------------------------------------------------------------

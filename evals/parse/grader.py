@@ -57,7 +57,7 @@ FIELD_CHIP = {
     "sources": None,
 }
 NUMBER_TOL = {"distance_mi": 0.05, "tolerance_pct": 0.1, "at_mile": 0.05}
-PARSED_KEYS = {"event", "v", "parse_id", "chips", "question", "cant", "notes", "constraints"}
+PARSED_KEYS = {"event", "v", "parse_id", "chips", "question", "cant", "notes", "reach_m", "constraints"}  # reach_m: step 7b
 MUST_NOT_CHECKS = ("no_question", "no_free_text", "field_absent", "field_not", "lookup_not_called", "no_cant",
                    "avoid_excludes", "text_absent")
 

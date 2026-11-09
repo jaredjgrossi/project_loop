@@ -68,6 +68,7 @@ for try await line in bytes.lines {
     let data = Data(line.dropFirst(5).utf8)
     switch try decoder.decode(EventKind.self, from: data).event {   // {"event": "parsed" | "top3" | ...}
     case "parsed": ...
+    case "candidates": ...                               // light outlines while the engine searches
     case "top3", "provisional": ...
     case "final": ...
     case "done": return
@@ -95,16 +96,18 @@ for try await line in bytes.lines {
    Show every string as sent; they all come from the server's templates. Lines with `gap: "later"` say what the
    engine can't build yet. When the request needs one of those (an end place, a via place, an along-avoid, a past
    route), the stream goes straight to `done` with no routes.
-2. **`top3`**, the first about 0.3–0.6 s after `parsed`, then again each time the top 3 changes:
+   `parsed.reach_m` is how far the run can get from the start, in meters (null with no distance yet, or an A-to-B run).
+2. **`candidates`**, from right after `parsed` until `final`, one event per route the engine tries: `{route_id, elapsed_s, candidates: [{id, kind, points}]}`. `points` is a light `[lon, lat]` outline, at most 40 points, about 1 KB an event, 50–100 a build. For drawing the search only. A candidate's `id` is the one it keeps if it reaches `top3`. Ignore it if you don't draw it.
+3. **`top3`**, the first about 0.3–0.6 s after `parsed`, then again each time the top 3 changes:
    `{route_id, elapsed_s, provisional, routes: [...]}`.
    - Each route has `{id, rank, kind, label, score, distance, geometry}`. That is the fixture's `top3` entry plus
      `id`.
    - **`id` is the same for the same route in every event of one build**, so a route that moved from #2 to #1 can
      morph, and a new one can be drawn in.
    - Don't show `score` (the fixture rule: the ranking score stays off screen).
-3. **`provisional`**, once: the same shape. This is the settle moment from decision 018; in testing, #1 has never
+4. **`provisional`**, once: the same shape. This is the settle moment from decision 018; in testing, #1 has never
    changed after it.
-4. **`final`**, 9–29 s after send, depending on distance. It carries:
+5. **`final`**, 9–29 s after send, depending on distance. It carries:
    - `routes`: the final top 3, the same as the last `top3`
    - `route`: the #1 in full, exactly the fixture's `route`, with summary, markers, stretches and pieces. It's null
      when no route could be built.
@@ -114,7 +117,7 @@ for try await line in bytes.lines {
    - `timing`: for logs only
 
    It's about 200 KB for 8 mi.
-5. **`done`**.
+6. **`done`**.
 
 **Building a `RouteFile` from `final`:**
 - `route` ← `final.route`

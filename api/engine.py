@@ -21,6 +21,7 @@ from api.constraints import RunConstraints, resolve_preferences, unsupported
 from api.copy import render
 from api.generate import TOLERANCE_PCT, Candidate, generate_loops
 from api.geocoding import GeocodeError, geocode
+from api.geometry import outline
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url
 from api.scripts import make_loop as ml
@@ -164,13 +165,18 @@ class Engine:
                       "provisional": ev["provisional"],
                       "routes": [entry(r, c, key(c)) for r, c in enumerate(ev["candidates"], 1)]})
 
+        def on_candidate(c: Candidate, elapsed: float) -> None:  # every route that passes the rules, as it does
+            send({"event": "candidates", "v": 1, "route_id": route_id, "elapsed_s": round(elapsed, 3),
+                  "candidates": [{"id": key(c), "kind": c.kind, "points": outline(c.route.coordinates)}]})
+
         try:
             result = self.generate_fn(
                 start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
                 shape=rc.shape, prefs=prefs, avoid=zones, closures=closures,
                 context_fn=ml.context_for(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment()),
                 anchor_fn=self.anchor_fn, feature_anchor_fn=self.feature_anchor_fn,
-                area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3)
+                area_route_fn=area_fn if self.feature_anchor_fn else None, on_top3=on_top3,
+                on_candidate=on_candidate)
         except RoutingError as exc:
             raise EngineUnavailable(f"GraphHopper: {exc}") from exc
         except psycopg.Error as exc:

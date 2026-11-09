@@ -62,9 +62,13 @@ Exactly one of `text`, `answer` or `constraints`.
   },
   "cant": [],
   "notes": [],
+  "reach_m": 5070,
   "constraints": { "...": "the RunConstraints this parse produced, for chip edits" }
 }
 ```
+
+### `reach_m` (step 7b)
+How far from the start the run can get, in meters, to 10 m: half the longest the run may be (the distance plus its tolerance), since a loop or an out-and-back has to turn back by then. Null when there's no distance yet, or when the run ends somewhere else (for now). For the map while routes build.
 
 ### Chips
 - One chip per thing the runner said, plus defaults that matter: start, end, via, distance, time, shape, mode, then preferences, avoids, amenities, and reuse and reverse. Code sets the order.
@@ -83,6 +87,16 @@ Exactly one of `text`, `answer` or `constraints`.
 - `cant`: `{"id", "gap", "text"}`, for example `{"id": "k_1", "gap": "G9", "text": "Can't plan around street lighting yet"}`.
 - `notes`: `{"id", "key", "text", "trust"}`, for example `{"key": "fountains_seasonal", "text": "Fountains may be off for the season", "trust": "listed"}`.
 - Evals match on `gap` and `key`, never on wording, so the UI chat can rewrite the copy freely.
+
+## Event: `candidates` (step 7b)
+Light outlines of the routes the engine is trying, one event per route that passes the rules, from right after `parsed` until `final`. For drawing the search, never for measuring.
+```json
+{"event": "candidates", "v": 1, "route_id": "r_51d0", "elapsed_s": 0.42,
+ "candidates": [{"id": "r_51d0.7", "kind": "out_and_back", "points": [[-73.97994, 40.74384], "..."]}]}
+```
+- `points`: `[lon, lat]`, at most 40 (Douglas-Peucker with the smallest tolerance that fits, so corners and ends stay), rounded to about 1 m. 35 points at the median.
+- `id` is the same id the route has if it reaches `top3`.
+- About 1 KB an event; 50–100 events a build (53–89 KB in all, measured 2026-11-08). `candidates` is a list so events can be batched later.
 
 ## Events: `top3`, `provisional`, `final`
 These are the engine's three stream events (decision 024 and the streaming notes in the UI decisions log), each carrying the route payload the iPhone slice already reads from `kips3-ui.json`, plus:
