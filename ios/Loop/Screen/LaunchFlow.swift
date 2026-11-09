@@ -64,7 +64,6 @@ extension MainModel {
             self.landingShown = true
             self.landingAnchor = self.landing.openHeight
             self.landing.settle(rest: .open, animated: !reduceMotion) { [weak self] in self?.landingAnchor = nil }
-            self.recenterLanding(animated: !reduceMotion)
             guard await wait(Timing.typeStart - Timing.sheetIn) else { return }
             if reduceMotion {
                 self.fieldExample = Self.exampleRequest
@@ -86,21 +85,28 @@ extension MainModel {
     }
 
     /// The runner taps the field: the example stops typing at once and the field is empty with a
-    /// static placeholder; the sheet shows matching recent and saved runs above the keyboard.
+    /// static placeholder; the sheet crossfades to matching runs and grows with the keyboard, on
+    /// the keyboard's own curve (the keyboard notification drives it).
     func beginTyping() {
         guard stage == .landing else { return }
         stage = .typing
         fieldExample = ""
-        layoutSearch(animated: !UIAccessibility.isReduceMotionEnabled)
+        // No keyboard coming (a hardware keyboard): settle on our own curve.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(0.6))
+            guard let self, self.searchMode, self.keyboardHeight == 0 else { return }
+            self.layoutSearch(animated: !UIAccessibility.isReduceMotionEnabled)
+        }
     }
 
-    /// Tapping the map or the sheet, or dragging it down: the keyboard goes, the text stays.
+    /// Tapping the map or the sheet, or dragging it down: the keyboard goes, the text stays. The
+    /// keyboard's hide drives the sheet back to its rest; with no keyboard up, it settles now.
     func endTyping() {
         guard stage == .typing, !demoTyping else { return }
         stage = .landing
-        let animated = !UIAccessibility.isReduceMotionEnabled
-        landing.settle(rest: landing.rest, animated: animated)
-        recenterLanding(animated: animated)
+        if keyboardHeight == 0 {
+            landing.settle(rest: landing.rest, animated: !UIAccessibility.isReduceMotionEnabled)
+        }
     }
 
     /// Cancel: ends editing, clears the field, and the placeholder comes back.
@@ -109,35 +115,30 @@ extension MainModel {
         endTyping()
     }
 
-    /// Search mode's height: the field, then one 40 pt row per match, above the keyboard.
-    var landingSearchHeight: CGFloat {
+    /// Search mode's height: the field and one 40 pt row per match, sitting on the keyboard (the
+    /// sheet runs on under the keyboard, so its height includes it).
+    func landingSearchHeight(keyboard: CGFloat) -> CGFloat {
         let inset = LandingSheet.bottomInset
         let fieldBottom = landing.baseCollapsed - 12 - inset
         let rows = CGFloat(fieldMatches.count)
-        return (fieldBottom + (rows > 0 ? 6 + rows * 40 : 0) + 10 + (keyboardHeight > 0 ? 0 : inset)).rounded()
+        return (fieldBottom + (rows > 0 ? 6 + rows * 40 : 0) + 10 + (keyboard > 0 ? keyboard : inset)).rounded()
     }
 
     /// While typing, the sheet fits the field and its matches (it changes as the runner types).
     func layoutSearch(animated: Bool) {
         guard searchMode else { return }
-        landing.slide(to: landingSearchHeight, animated: animated)
-        recenterLanding(animated: animated)
+        landing.slide(to: landingSearchHeight(keyboard: keyboardHeight), animated: animated,
+                      duration: 0.2, curve: SheetState.settleCurve)
     }
 
-    /// The keyboard came, went or changed: the sheet sits on it and the map re-centres above both.
+    /// The keyboard came, went or changed: the sheet moves with it, on its curve and duration, so
+    /// they move as one. The map's padding follows the sheet every frame (no camera animations).
     func keyboardChanged(height: CGFloat, duration: TimeInterval) {
         guard abs(height - keyboardHeight) > 0.5 else { return }
         keyboardHeight = height
-        guard landingShown else { return }
-        if searchMode { landing.slide(to: landingSearchHeight, animated: duration > 0) }
-        recenterLanding(animated: duration > 0, duration: duration > 0 ? duration : Motion.mapPan)
-    }
-
-    /// Keeps the location dot in view when the landing sheet changes height: centred in the map
-    /// area between the header and the sheet (and keyboard), moving with the sheet.
-    func recenterLanding(animated: Bool, duration: TimeInterval = SheetState.settleDuration, zoom: Double? = nil) {
-        let sheetTop = (searchMode ? landingSearchHeight : landing.height(for: landing.rest)) + keyboardHeight
-        requestCamera(.above(location, bottom: sheetTop, zoom: zoom), animated: animated, duration: duration)
+        guard landingShown, landingAnchor == nil else { return }
+        let target = searchMode ? landingSearchHeight(keyboard: height) : landing.height(for: landing.rest)
+        landing.slide(to: target, animated: duration > 0, duration: duration, curve: SheetState.keyboardCurve)
     }
 
     /// The sheet slides away (the Mapbox logo follows it down).
@@ -243,8 +244,15 @@ extension MainModel {
         locationPulsing = !reduceMotion
         landingShown = true
         landingAnchor = landing.openHeight
-        landing.settle(rest: .open, animated: !reduceMotion) { [weak self] in self?.landingAnchor = nil }
-        recenterLanding(animated: !reduceMotion, duration: 0.6, zoom: 14.2)
+        // One ease to the location above the open sheet, timed with the sheet's rise; the map's
+        // padding binds to the sheet again once both have arrived.
+        landingCameraBound = false
+        requestCamera(.above(location, bottom: landing.openHeight, zoom: 14.2), animated: !reduceMotion,
+                      duration: SheetState.settleDuration)
+        landing.settle(rest: .open, animated: !reduceMotion) { [weak self] in
+            self?.landingAnchor = nil
+            self?.landingCameraBound = true
+        }
         sheet.settle(open: false, animated: false)
     }
 

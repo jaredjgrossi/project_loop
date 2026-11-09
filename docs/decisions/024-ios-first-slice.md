@@ -125,9 +125,13 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   field and up to four recent requests and saved runs matching the typed title, newest first;
   a tap fills the field and sends. Tapping the map or the sheet ends editing (the text stays).
   A drag down while typing only ends editing; the list under the field takes the keyboard down
-  with the finger (`scrollDismissesKeyboard(.interactively)`). Whenever the landing sheet or the
-  keyboard changes height, the map re-centres the location in the area above them (camera
-  padding), moving with the sheet.
+  with the finger (`scrollDismissesKeyboard(.interactively)`).
+- **One motion, driven by the sheet (device review, 2026-11-09).** The landing sheet ignores the
+  keyboard's safe area; its own height grows over the keyboard on the keyboard's curve and
+  duration, so the field never moves separately. The map's bottom padding is bound to the sheet's
+  live height every frame (no camera animations started on height changes), so the location
+  glides with the sheet. Runs and the typing list crossfade in place (200 ms); "Cancel" fades in
+  beside the field; contents are clipped to the sheet's shape.
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).

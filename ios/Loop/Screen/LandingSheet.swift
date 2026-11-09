@@ -23,6 +23,7 @@ struct LandingSheet: View {
         let frameHeight = anchor ?? max(height, sheet.collapsedHeight)
         let offset = max(0, (anchor ?? sheet.collapsedHeight) - height)
         let expanded = Double(sheet.progress)
+        let searching = model.searchMode
 
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
@@ -41,41 +42,50 @@ struct LandingSheet: View {
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
 
-            if model.searchMode {
-                MatchList(model: model)
-            } else {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Your runs")
-                    .typeStyle(.eyebrow)
-                    .foregroundStyle(Palette.inkMuted.color)
-                    .padding(.top, 22)
-                    .accessibilityAddTraits(.isHeader)
+            // Runs and Recent, or the typing list: both in place under the field, crossfading (200 ms).
+            ZStack(alignment: .top) {
+                if searching {
+                    MatchList(model: model)
+                        .transition(.opacity)
+                }
 
-                TileRow(model: model)
-                    .padding(.top, 12)
-                    .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+                if !searching {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Your runs")
+                            .typeStyle(.eyebrow)
+                            .foregroundStyle(Palette.inkMuted.color)
+                            .padding(.top, 22)
+                            .accessibilityAddTraits(.isHeader)
 
-                if let first = runs.recents.first {
-                    Text("Recent")
-                        .typeStyle(.eyebrow)
-                        .foregroundStyle(Palette.inkMuted.color)
-                        .padding(.top, 20)
-                        .accessibilityAddTraits(.isHeader)
-                    RecentRow(recent: first) { model.openRun(request: first.request) }
-                        .padding(.top, 4)
-                        .background(bottomReader { setOpen($0) })
+                        TileRow(model: model, hidden: searching || expanded < 0.5)
+                            .padding(.top, 12)
+                            .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+
+                        if let first = runs.recents.first {
+                            Text("Recent")
+                                .typeStyle(.eyebrow)
+                                .foregroundStyle(Palette.inkMuted.color)
+                                .padding(.top, 20)
+                                .accessibilityAddTraits(.isHeader)
+                            RecentRow(recent: first, hidden: searching || expanded < 0.5) { model.openRun(request: first.request) }
+                                .padding(.top, 4)
+                                .background(bottomReader { setOpen($0) })
+                        }
+                    }
+                    .opacity(expanded)
+                    .accessibilityHidden(expanded < 0.5 || searching)
+
+                    // More rows, revealed by dragging up past the open rest.
+                    ForEach(runs.recents.dropFirst()) { recent in
+                        RecentRow(recent: recent, hidden: searching || sheet.readProgress < 0.5) { model.openRun(request: recent.request) }
+                            .opacity(Double(sheet.readProgress))
+                    }
+                }
+                .transition(.opacity)
                 }
             }
-            .opacity(expanded)
-            .accessibilityHidden(expanded < 0.5)
-
-            // More rows, revealed by dragging up past the open rest.
-            ForEach(runs.recents.dropFirst()) { recent in
-                RecentRow(recent: recent) { model.openRun(request: recent.request) }
-                    .opacity(Double(sheet.readProgress))
-                    .accessibilityHidden(sheet.readProgress < 0.5)
-            }
-            }
+            .animation(reduceMotion ? nil : Motion.crossfade, value: searching)
         }
         // Measured in the content's own space, inside the slide offset (else each measurement
         // would move the sheet and feed the next).
@@ -88,8 +98,9 @@ struct LandingSheet: View {
         })
         .frame(height: frameHeight, alignment: .top)
         .frame(maxWidth: .infinity)
+        // Everything stays inside the sheet's shape while it resizes.
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: Metrics.radiusSheet, topTrailingRadius: Metrics.radiusSheet))
         .background(sheetBackground)
-        .clipped()
         .offset(y: offset)
         .contentShape(Rectangle())
         // A tap on any part of the sheet that isn't a control ends editing.
@@ -101,7 +112,6 @@ struct LandingSheet: View {
     private func toggle() {
         if model.searchMode { model.endTyping(); return }
         sheet.settle(rest: sheet.restingOpen ? .collapsed : .open, animated: !reduceMotion)
-        model.recenterLanding(animated: !reduceMotion)
     }
 
     private func bottomReader(_ report: @escaping (CGFloat) -> Void) -> some View {
@@ -114,12 +124,18 @@ struct LandingSheet: View {
 
     /// Collapsed: just the field.
     private func setCollapsed(_ fieldBottom: CGFloat) {
-        update(&sheet.baseCollapsed, (fieldBottom + 12 + Self.bottomInset).rounded())
+        let h = (fieldBottom + 12 + Self.bottomInset).rounded()
+        guard abs(sheet.baseCollapsed - h) > 0.5 else { return }
+        sheet.baseCollapsed = h
+        refresh()
     }
 
     /// Open: down to the first recent row (or the tiles, with no recents).
     private func setOpen(_ contentBottom: CGFloat) {
-        update(&sheet.baseOpen, (contentBottom + 14 + Self.bottomInset).rounded())
+        let h = (contentBottom + 14 + Self.bottomInset).rounded()
+        guard abs(sheet.baseOpen - h) > 0.5 else { return }
+        sheet.baseOpen = h
+        refresh()
     }
 
     /// Taller: every recent row, up to three quarters of the screen; none with one recent.
@@ -129,12 +145,6 @@ struct LandingSheet: View {
         let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
         guard read != sheet.readHeight else { return }
         sheet.readHeight = read
-        refresh()
-    }
-
-    private func update(_ value: inout CGFloat, _ new: CGFloat) {
-        guard abs(value - new) > 0.5 else { return }
-        value = new
         refresh()
     }
 
@@ -175,7 +185,6 @@ struct LandingSheet: View {
                 if keyboardDrag { keyboardDrag = false; return }
                 guard model.landingAnchor == nil else { return }
                 sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in }
-                model.recenterLanding(animated: !reduceMotion)
             }
     }
 }
@@ -190,11 +199,13 @@ struct RequestField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let style = TypeStyle.field
+    /// "Cancel" in body plus its 14 pt gap.
+    private static let cancelWidth: CGFloat = 72
 
     var body: some View {
         let typing = model.stage == .typing
         let editing = model.searchMode
-        HStack(spacing: 14) {
+        HStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .semibold))
@@ -225,15 +236,22 @@ struct RequestField: View {
             .contentShape(Capsule())
             .onTapGesture { focused = true }
 
-            if editing {
-                Button("Cancel") { model.cancelTyping() }
-                    .typeStyle(.body)
-                    .foregroundStyle(Palette.ink.color)
-                    .frame(minHeight: Metrics.minTap)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            // Cancel fades in beside the same field (the field narrows to make room); never a copy.
+            ZStack(alignment: .leading) {
+                if editing {
+                    Button("Cancel") { model.cancelTyping() }
+                        .typeStyle(.body)
+                        .foregroundStyle(Palette.ink.color)
+                        .fixedSize()
+                        .frame(minHeight: Metrics.minTap)
+                        .padding(.leading, 14)
+                        .transition(.opacity)
+                }
             }
+            .frame(width: editing ? Self.cancelWidth : 0, alignment: .leading)
+            .clipped()
         }
-        .animation(reduceMotion ? nil : Motion.textArrive, value: editing)
+        .animation(reduceMotion ? nil : Motion.crossfade, value: editing)
         .onChange(of: focused) { _, isFocused in
             if isFocused { model.beginTyping() } else if model.searchMode { model.endTyping() }
         }
@@ -261,7 +279,7 @@ private struct MatchList: View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
                 ForEach(matches) { m in
-                    RecentRow(title: m.title, date: m.date, shape: m.shape) {
+                    RecentRow(title: m.title, date: m.date, shape: m.shape, hidden: !model.searchMode) {
                         model.fieldText = m.request
                         model.send(m.request, reduceMotion: reduceMotion)
                     }
@@ -277,22 +295,24 @@ private struct MatchList: View {
 /// "Your runs": the runner's runs, then suggestions, then a dashed Save tile.
 private struct TileRow: View {
     let model: MainModel
+    /// Faded out (typing, or the sheet collapsed): hidden from VoiceOver and taps.
+    var hidden = false
 
     var body: some View {
         GeometryReader { g in
             let side = ((g.size.width - 3 * 12) / 4).rounded(.down)
             HStack(alignment: .top, spacing: 12) {
                 ForEach(model.runs.saved.prefix(3)) { run in
-                    RunTile(side: side, name: run.name, detail: CardText.miles(run.distanceMi), shape: run.shape) {
+                    RunTile(side: side, name: run.name, detail: CardText.miles(run.distanceMi), shape: run.shape, hidden: hidden) {
                         model.openRun(request: run.request)
                     }
                 }
                 ForEach(model.runs.suggestedTiles) { s in
-                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph) {
+                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph, hidden: hidden) {
                         model.send(s.request, reduceMotion: false)
                     }
                 }
-                SaveTile(side: side)
+                SaveTile(side: side, hidden: hidden)
             }
         }
         .frame(height: Self.height(width: UIScreen.main.bounds.width - 2 * Metrics.s24))
@@ -308,6 +328,7 @@ private struct RunTile: View {
     let detail: String?
     let shape: [[Double]]?
     var glyph: SuggestedRun.Glyph? = nil
+    var hidden = false
     let action: () -> Void
 
     var body: some View {
@@ -339,12 +360,15 @@ private struct RunTile: View {
         .frame(width: side)
         .accessibilityLabel(detail.map { "\(name), \($0)" } ?? name)
         .accessibilityHint(shape == nil ? "Sends this request" : "Shows this route")
+        .accessibilityHidden(hidden)
+        .allowsHitTesting(!hidden)
     }
 }
 
 /// The dashed last tile. What it does from here is still open, so it isn't a button yet.
 private struct SaveTile: View {
     let side: CGFloat
+    var hidden = false
 
     var body: some View {
         VStack(spacing: 6) {
@@ -358,6 +382,7 @@ private struct SaveTile: View {
         }
         .frame(width: side)
         .accessibilityElement(children: .combine)
+        .accessibilityHidden(hidden)
     }
 }
 
@@ -365,14 +390,15 @@ private struct RecentRow: View {
     let title: String
     let date: Date
     let shape: [[Double]]
+    var hidden = false
     let action: () -> Void
 
-    init(recent: RecentRoute, action: @escaping () -> Void) {
-        self.init(title: RunStore.sentence(recent.request), date: recent.date, shape: recent.shape, action: action)
+    init(recent: RecentRoute, hidden: Bool = false, action: @escaping () -> Void) {
+        self.init(title: RunStore.sentence(recent.request), date: recent.date, shape: recent.shape, hidden: hidden, action: action)
     }
 
-    init(title: String, date: Date, shape: [[Double]], action: @escaping () -> Void) {
-        self.title = title; self.date = date; self.shape = shape; self.action = action
+    init(title: String, date: Date, shape: [[Double]], hidden: Bool = false, action: @escaping () -> Void) {
+        self.title = title; self.date = date; self.shape = shape; self.hidden = hidden; self.action = action
     }
 
     var body: some View {
@@ -393,6 +419,8 @@ private struct RecentRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityHidden(hidden)
+        .allowsHitTesting(!hidden)
     }
 }
 

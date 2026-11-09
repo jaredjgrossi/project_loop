@@ -60,6 +60,9 @@ final class MainModel {
     var fieldExample = ""
     /// What the runner has typed in the landing field (kept when editing ends, cleared by Cancel).
     var fieldText = ""
+    /// While true, the map's bottom padding follows the landing sheet's live height every frame, so
+    /// the location glides with the sheet. Off during a one-off camera ease (going home).
+    var landingCameraBound = true
     /// Bumped to focus the landing field (debug screenshots).
     var focusFieldRequest = 0
     /// The on-screen keyboard's height over the screen bottom (0 when hidden).

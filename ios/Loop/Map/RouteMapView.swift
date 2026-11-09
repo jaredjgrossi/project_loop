@@ -62,7 +62,6 @@ struct RouteMapView: UIViewRepresentable {
     /// don't jump when it comes; on send they follow it down.
     @MainActor static func ornamentInset(_ model: MainModel) -> CGFloat {
         if model.sheetShown { return model.sheet.height }
-        if model.landingShown, model.keyboardHeight > 0 { return model.landing.height + model.keyboardHeight }
         let beforeLanding = model.stage == .logo || (model.stage == .landing && !model.landingShown)
         return beforeLanding ? max(model.landing.height, model.landing.openHeight) : model.landing.height
     }
@@ -120,9 +119,10 @@ struct RouteMapView: UIViewRepresentable {
                 self?.setBottomInset(h)
                 self?.setOrnamentAlpha(RouteMapView.ornamentAlpha(model))
             }
-            model.landing.onHeightChange = { [weak self, weak model] _ in
+            model.landing.onHeightChange = { [weak self, weak model] h in
                 guard let model, !model.sheetShown else { return }
                 self?.setBottomInset(RouteMapView.ornamentInset(model))
+                self?.bindLandingPadding(h)
             }
             mapView.ornaments.options.attributionButton.tintColor = Palette.inkMuted.uiColor
             model.project = { [weak mapView] p in
@@ -441,6 +441,20 @@ struct RouteMapView: UIViewRepresentable {
             guard let map = mapView?.mapboxMap else { return }
             model.cameraDidChange(zoom: map.cameraState.zoom)
             updateRoadLabels()
+        }
+
+        /// On the landing, the map's bottom padding is the landing sheet's live height, set every
+        /// frame the sheet moves: whatever the map is centred on (the location, unless the runner
+        /// panned) stays centred in the space above the sheet and glides with it. No camera
+        /// animation is started, so nothing stacks or jumps.
+        private func bindLandingPadding(_ sheetHeight: CGFloat) {
+            guard let mapView, let map = mapView.mapboxMap, styleReady, model.landingCameraBound,
+                  [.logo, .landing, .typing].contains(model.stage), mapView.bounds.height > 0 else { return }
+            let top = model.headerBottom
+            let bottom = max(0, min(sheetHeight, mapView.bounds.height - top - 40))
+            let padding = UIEdgeInsets(top: sheetHeight > 0 ? top : 0, left: 0, bottom: bottom, right: 0)
+            guard map.cameraState.padding != padding else { return }
+            map.setCamera(to: CameraOptions(padding: padding))
         }
 
         func setOrnamentAlpha(_ alpha: CGFloat) {

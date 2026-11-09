@@ -131,6 +131,8 @@ enum Motion {
     static let textArrive = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.2)
     static let textRise: CGFloat = 6
     static let sheetSettle = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.32)
+    /// Swapping content in place (the landing sheet's runs and typing list): 200 ms crossfade.
+    static let crossfade = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.2)
     static let mapPan: TimeInterval = 0.4
     /// Route draw speed, metres of route per second (constant, linear).
     static let drawMetresPerSecond: Double = 2_500

@@ -86,9 +86,12 @@ struct MainScreen: View {
                 .allowsHitTesting(model.sheetShown)
 
             // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
+            // It ignores the keyboard's safe area: its own height grows with the keyboard on the
+            // keyboard's curve, so nothing else moves it.
             LandingSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea(.container, edges: .bottom)
+                .ignoresSafeArea(.all, edges: .bottom)
+                .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(model.landingShown)
                 .accessibilityHidden(!model.landingShown)
 

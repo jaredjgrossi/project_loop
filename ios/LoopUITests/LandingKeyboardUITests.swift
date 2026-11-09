@@ -18,6 +18,10 @@ final class LandingKeyboardUITests: XCTestCase {
         XCTAssertTrue(usual.waitForExistence(timeout: 3), "saved runs show under the field")
         XCTAssertFalse(app.buttons["By the water"].isHittable, "the tiles give way to the matches")
 
+        // Tapping inside the focused field (to move the cursor) keeps editing.
+        field.tap()
+        XCTAssertTrue(cancel.waitForExistence(timeout: 1), "a tap in the field doesn't end editing")
+
         // Typing filters by title.
         field.typeText("kips")
         let kips = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '3 miles from the Kips Bay'")).firstMatch
@@ -26,7 +30,7 @@ final class LandingKeyboardUITests: XCTestCase {
 
         // Cancel clears and ends editing.
         cancel.tap()
-        XCTAssertFalse(cancel.waitForExistence(timeout: 1))
+        XCTAssertTrue(cancel.waitForGone(timeout: 2))
         XCTAssertEqual(field.value as? String ?? "", "")
         XCTAssertTrue(app.buttons["By the water"].waitForHittable(timeout: 3), "the runs come back")
 
@@ -34,7 +38,7 @@ final class LandingKeyboardUITests: XCTestCase {
         field.tap()
         field.typeText("water")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-        XCTAssertFalse(cancel.waitForExistence(timeout: 2), "tapping the map ends editing")
+        XCTAssertTrue(cancel.waitForGone(timeout: 2), "tapping the map ends editing")
         XCTAssertEqual(field.value as? String, "water", "the text stays")
 
         // While typing, a drag down only ends editing; the next one collapses the sheet.
@@ -44,11 +48,23 @@ final class LandingKeyboardUITests: XCTestCase {
         handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95)),
                    withVelocity: .slow, thenHoldForDuration: 0.1)
-        XCTAssertFalse(cancel.waitForExistence(timeout: 2), "the first drag only ends editing")
+        XCTAssertTrue(cancel.waitForGone(timeout: 2), "the first drag only ends editing")
         XCTAssertTrue(app.descendants(matching: .any)["Hide your runs"].waitForExistence(timeout: 3), "the sheet stays open")
         app.descendants(matching: .any)["Hide your runs"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)),
                    withVelocity: .slow, thenHoldForDuration: 0.1)
         XCTAssertTrue(app.descendants(matching: .any)["Show your runs"].waitForExistence(timeout: 3), "the second drag collapses it")
+    }
+}
+
+extension XCUIElement {
+    /// Waits until the element is no longer in the tree (it may fade out first).
+    func waitForGone(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !exists { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return !exists
     }
 }

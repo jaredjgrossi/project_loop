@@ -47,7 +47,16 @@ final class SheetState {
     @ObservationIgnored var onHeightChange: ((CGFloat) -> Void)?
 
     @ObservationIgnored private var dragStart: CGFloat
-    @ObservationIgnored private var settle: (from: CGFloat, to: CGFloat, start: CFTimeInterval, done: () -> Void)?
+    @ObservationIgnored private var settle: (from: CGFloat, to: CGFloat, start: CFTimeInterval, duration: CFTimeInterval,
+                                             curve: Curve, done: () -> Void)?
+
+    /// A cubic-bezier timing curve (x1, y1, x2, y2).
+    typealias Curve = (Double, Double, Double, Double)
+    /// The sheet settle: cubic-bezier(0.2, 0, 0, 1).
+    static let settleCurve: Curve = (0.2, 0, 0, 1)
+    /// The iOS keyboard's own curve (UIKit's undocumented curve 7), as commonly measured, so the
+    /// landing sheet moves as one with the keyboard.
+    static let keyboardCurve: Curve = (0.38, 0.7, 0.125, 1.0)
     @ObservationIgnored private var link: CADisplayLink?
     @ObservationIgnored private lazy var proxy = DisplayLinkProxy { [weak self] in self?.step() }
 
@@ -115,7 +124,8 @@ final class SheetState {
 
     /// Moves to any height with the settle curve, frame by frame (the landing sheet rises from 0
     /// at launch and slides back to 0 on send, with the Mapbox logo following it).
-    func slide(to target: CGFloat, animated: Bool, completion: @escaping () -> Void = {}) {
+    func slide(to target: CGFloat, animated: Bool, duration: CFTimeInterval = SheetState.settleDuration,
+               curve: Curve = SheetState.settleCurve, completion: @escaping () -> Void = {}) {
         stopSettle()
         guard animated, abs(height - target) > 0.5 else {
             setHeight(target)
@@ -124,7 +134,7 @@ final class SheetState {
             return
         }
         isMoving = true
-        settle = (height, target, CACurrentMediaTime(), completion)
+        settle = (height, target, CACurrentMediaTime(), max(0.01, duration), curve, completion)
         let l = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire))
         l.add(to: .main, forMode: .common)
         link = l
@@ -132,8 +142,8 @@ final class SheetState {
 
     private func step() {
         guard let s = settle else { return }
-        let t = min(1, (CACurrentMediaTime() - s.start) / Self.settleDuration)
-        let e = CubicBezier.ease(0.2, 0, 0, 1, x: t)
+        let t = min(1, (CACurrentMediaTime() - s.start) / s.duration)
+        let e = CubicBezier.ease(s.curve.0, s.curve.1, s.curve.2, s.curve.3, x: t)
         setHeight(s.from + (s.to - s.from) * CGFloat(e))
         if t >= 1 {
             let done = s.done
