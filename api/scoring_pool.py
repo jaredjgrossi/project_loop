@@ -8,6 +8,11 @@ waits without holding the lock. The code that scores is the same `score_context`
 LOOP_CONTEXT_PROCESSES sets the number of processes (default CONTEXT_PROCESSES); 0 scores on the calling thread. Each
 process keeps one autocommit Postgres connection, so a score doesn't pay for a new connection and holds no transaction
 open between scores.
+
+One pool per process, started on first use and reused by every build, so builds don't add processes. A worker exits
+on its own when the process that started it is gone (checked every PARENT_CHECK_S): a parent killed outright (kill,
+a closed terminal, a test timeout) used to leave its workers and their Postgres connections running for good
+(2026-11-09: nine sets of orphans, 43 idle connections).
 """
 
 import os
@@ -16,6 +21,7 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
 
 CONTEXT_PROCESSES = 5  # decision 018: 5 processes with 6 generator threads was the best of the configurations tried
+PARENT_CHECK_S = 1.0
 _pool: ProcessPoolExecutor | None = None
 _lock = threading.Lock()
 _conn = None  # one per worker process
@@ -47,12 +53,41 @@ def _ready(_=None) -> int:
     return os.getpid()
 
 
+def _watch_parent(parent: int) -> None:
+    """In a worker: exit as soon as the process that started the pool is gone (the worker is re-parented)."""
+    import time
+    while os.getppid() == parent:
+        time.sleep(PARENT_CHECK_S)
+    os._exit(0)
+
+
+def _init_worker(parent: int) -> None:
+    threading.Thread(target=_watch_parent, args=(parent,), daemon=True, name="watch-parent").start()
+
+
+def _pid(delay: float = 0.0) -> int:
+    """A worker's process id, after a pause (tests: a pause makes the pool start every worker)."""
+    import time
+    time.sleep(delay)
+    return os.getpid()
+
+
 def pool() -> ProcessPoolExecutor | None:
     global _pool
     with _lock:
         if _pool is None and processes() > 0:
-            _pool = ProcessPoolExecutor(processes(), mp_context=get_context("spawn"))
+            _pool = ProcessPoolExecutor(processes(), mp_context=get_context("spawn"), initializer=_init_worker,
+                                        initargs=(os.getpid(),))
         return _pool
+
+
+def shutdown() -> None:
+    """Stop the pool's processes now (the server's shutdown; tests). The next build starts a new pool."""
+    global _pool
+    with _lock:
+        p, _pool = _pool, None
+    if p is not None:
+        p.shutdown(wait=True, cancel_futures=True)
 
 
 def warm() -> int:

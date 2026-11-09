@@ -180,10 +180,12 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
 
     @asynccontextmanager
     async def lifespan(_app):
+        from api import scoring_pool
         if warm:  # the scoring processes take a few seconds to start; not on the first request's clock
-            from api import scoring_pool
             threading.Thread(target=scoring_pool.warm, daemon=True).start()
         yield
+        if warm:  # stop them with the server (a restart starts a new set); a kill is caught by the workers themselves
+            scoring_pool.shutdown()
 
     app = FastAPI(title="Loop", version="1", lifespan=lifespan)
 
