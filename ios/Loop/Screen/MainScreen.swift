@@ -41,9 +41,21 @@ struct MainScreen: View {
                 .ignoresSafeArea()
             }
 
-            HeaderView(request: model.data.request, trailing: debugTrailing)
+            // The runner's location pulses while Loop waits (a public stand-in until location is wired).
+            if model.stage != .settled, let p = model.screenPoint(model.location) {
+                LocationPulse(pulsing: model.locationPulsing && !reduceMotion)
+                    .position(p)
+                    .ignoresSafeArea()
+            }
+
+            HeaderView(sentence: model.requestText, trailing: debugTrailing)
+                .contentShape(Rectangle())
+                // Edit mode (underlined words) comes with the API wiring; for now a tap reopens the bar.
+                .onTapGesture { if model.stage == .settled { model.beginTyping() } }
                 .background(GeometryReader { g in
-                    Color.clear.onAppear { model.headerBottom = g.frame(in: .global).maxY }
+                    Color.clear
+                        .onAppear { model.headerBottom = g.frame(in: .global).maxY }
+                        .onChange(of: g.frame(in: .global).maxY) { _, v in model.headerBottom = v }
                 })
 
             BetterRouteLayer(model: model)
@@ -64,15 +76,28 @@ struct MainScreen: View {
 
             RouteSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
+                .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
                 .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(model.sheetShown)
+
+            if model.barShown {
+                RequestBar(model: model)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 12)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            }
+
+            if model.logoShown {
+                LaunchLogo()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .zIndex(10)
+            }
         }
         .background(Palette.mapLand.color)
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
-        #if DEBUG
-        .task { await applyLaunchArguments() }
-        #endif
+        .task { await start() }
     }
 
     /// The replay button exists only in Debug builds.
@@ -81,6 +106,23 @@ struct MainScreen: View {
         AnyView(PlayBuildButton(model: model))
         #else
         nil
+        #endif
+    }
+
+    /// Launch: the logo fades into the map and the bar types an example. Debug launch arguments
+    /// that need a finished route (-LoopSettled, -LoopMile, -LoopZoomAt ...) skip straight to it.
+    private func start() async {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget"]
+        if args.contains(where: settledArgs.contains) {
+            model.requestText = model.data.request.text
+            await applyLaunchArguments()
+            return
+        }
+        model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
+        #else
+        model.runLaunch(reduceMotion: reduceMotion, autoSend: false)
         #endif
     }
 
@@ -131,9 +173,11 @@ struct MainScreen: View {
 /// Debug: replays a build. Tap for the standard schedule; hold for the late-better-route one.
 struct PlayBuildButton: View {
     let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Menu {
+            Button("Replay launch") { model.runLaunch(reduceMotion: reduceMotion, autoSend: true) }
             Button(BuildScript.standard.name) { model.play(.standard) }
             Button(BuildScript.lateBetterRoute.name) { model.play(.lateBetterRoute) }
         } label: {
@@ -148,7 +192,7 @@ struct PlayBuildButton: View {
             .frame(height: Metrics.minTap)
             .contentShape(Rectangle())
         } primaryAction: {
-            model.play(.standard)
+            model.send(MainModel.exampleRequest, reduceMotion: reduceMotion)
         }
         .accessibilityLabel("Replay build, debug")
         .accessibilityHint("Replays how a live build arrives. Hold for more.")

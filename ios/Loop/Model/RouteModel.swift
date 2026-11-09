@@ -209,6 +209,8 @@ struct RequestCard: Equatable {
     let text: String
     let provenance: String
     let startHourText: String
+    /// The mode (Training, Exploring), for the sheet's eyebrow.
+    var mode: String = ""
 }
 
 /// The decoded file turned into what the screen uses.

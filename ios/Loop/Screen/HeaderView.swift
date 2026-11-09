@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Wordmark, preferences button, request text and provenance line, over a fade from the map.
+/// Wordmark and preferences button, then the runner's sentence: the header's only content once a
+/// request is sent (UI chat, 2026-11-08: no chips, no provenance line).
 struct HeaderView: View {
-    let request: RequestCard
+    let sentence: String?
     var trailing: AnyView? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -16,20 +18,16 @@ struct HeaderView: View {
                 if let trailing { trailing }
                 PreferencesButton()
             }
-            VStack(alignment: .leading, spacing: 0) {
-                Text(request.text)
+            if let sentence {
+                Text(sentence)
                     .typeStyle(.request)
                     .foregroundStyle(Palette.ink.color)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel("Your run: \(request.text)")
-                Rectangle().fill(Palette.requestRule.color).frame(height: 1)
+                    .accessibilityLabel("Your run: \(sentence)")
+                    .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 8)))
             }
-            Text(request.provenance)
-                .typeStyle(.data)
-                .foregroundStyle(Palette.inkMuted.color)
         }
         .padding(.horizontal, Metrics.s24)
         .padding(.top, 4)

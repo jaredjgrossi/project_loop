@@ -22,8 +22,8 @@ final class CardTextTests: XCTestCase {
     }
 
     func testEyebrow() {
-        XCTAssertEqual(CardText.eyebrow(kind: "OUT AND BACK", bestOf: nil), "OUT AND BACK")
-        XCTAssertEqual(CardText.eyebrow(kind: "OUT AND BACK", bestOf: 31), "BEST OF 31 · OUT AND BACK")
+        XCTAssertEqual(CardText.eyebrow(kind: "TRAINING", bestOf: nil), "TRAINING")
+        XCTAssertEqual(CardText.eyebrow(kind: "TRAINING", bestOf: 31), "TRAINING · BEST OF 31")
         XCTAssertEqual(CardText.kindText("out_and_back"), "OUT AND BACK")
         XCTAssertEqual(CardText.kindText("loop"), "LOOP")
     }
@@ -44,6 +44,7 @@ final class CardTextTests: XCTestCase {
         let data = try LoopData(file: RouteFile.loadBundled())
         XCTAssertEqual(data.request.text, "3 miles from the Kips Bay Library at 7 am.")
         XCTAssertEqual(data.request.provenance, "3 mi · 7:00 am you said · Training preset")
+        XCTAssertEqual(data.request.mode, "Training")
     }
 
     func testWrapAtSeparators() {

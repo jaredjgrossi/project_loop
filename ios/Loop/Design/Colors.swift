@@ -54,6 +54,13 @@ enum Palette {
     /// The "mi" after the distance.
     static let unitInk = Token(paper: 0x4A3F33, night: 0xCFC5B2)
 
+    // The wait (loop-launch-and-wait-v1). Paper values from the video; Night values are first picks.
+    /// Dims the map outside the reach ring.
+    static let reachDim = Token(paper: 0xE9E1CE, night: 0x0F0D0B)
+    /// Water and parks inside the reach ring, warmed up.
+    static let warmWater = Token(paper: 0xB9D0D5, night: 0x2A4750)
+    static let warmPark = Token(paper: 0xCFE0AE, night: 0x2E3D27)
+
     static func drawColor(_ kind: DrawKind) -> Token {
         switch kind {
         case .waterfront: return routeWater

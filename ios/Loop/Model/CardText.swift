@@ -27,10 +27,10 @@ enum CardText {
 
     // MARK: Eyebrow
 
-    /// Before the final top 3 arrives, only the route kind; after, "BEST OF 31 · OUT AND BACK".
+    /// The mode first; at the final the count joins it: "TRAINING · BEST OF 31" (UI chat, 2026-11-08).
     static func eyebrow(kind: String, bestOf: Int?) -> String {
         guard let n = bestOf else { return kind }
-        return "BEST OF \(n) · \(kind)"
+        return kind.isEmpty ? "BEST OF \(n)" : "\(kind) · BEST OF \(n)"
     }
 
     static func kindText(_ kind: String) -> String {
@@ -157,7 +157,8 @@ enum CardText {
         return RequestCard(
             text: "\(milesWord) from the \(place) at \(shortTime).",
             provenance: "\(distance) · \(fullTime) you said · \(mode) preset",
-            startHourText: "\(hour):\(pad(minute))")
+            startHourText: "\(hour):\(pad(minute))",
+            mode: mode)
     }
 
     // MARK: Formatting helpers

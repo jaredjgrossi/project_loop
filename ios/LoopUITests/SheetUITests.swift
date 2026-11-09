@@ -4,6 +4,7 @@ import XCTest
 final class SheetUITests: XCTestCase {
     func testDragOpenAndClosed() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-LoopSettled"]   // start on a finished route, not the launch sequence
         app.launch()
 
         let send = app.buttons["Send to watch"]

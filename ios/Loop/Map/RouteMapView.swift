@@ -9,12 +9,15 @@ struct CameraRequest: Equatable {
         case overview
         /// Put a point just above the sheet, a little right of center (room for the chip).
         case focus(GeoPoint)
-        /// A fixed center and zoom (debug and screenshots).
+        /// A center and zoom (launch, the push-in while reading; debug screenshots).
         case at(GeoPoint, zoom: Double)
+        /// Fit a circle (the reach ring) between the header and the bottom.
+        case circle(GeoPoint, radiusM: Double)
     }
     var id = 0
     var kind: Kind = .overview
     var animated = false
+    var duration: TimeInterval = Motion.mapPan
 }
 
 /// Full-bleed Mapbox map. Draws the route frames the model hands it and reports camera moves
@@ -46,6 +49,8 @@ struct RouteMapView: UIViewRepresentable {
         let c = context.coordinator
         c.reduceMotion = reduceMotion
         c.setDark(colorScheme == .dark)
+        // Logo and attribution sit above whatever is at the bottom: the sheet, the bar, or nothing.
+        c.setBottomInset(model.sheetShown ? model.sheet.height : model.barShown ? 64 + 12 + 34 : 34)
         c.handle(model.cameraRequest)
     }
 
@@ -82,12 +87,19 @@ struct RouteMapView: UIViewRepresentable {
             mapView.mapboxMap.onCameraChanged.observe { [weak self] _ in
                 MainActor.assumeIsolated { self?.cameraChanged() }
             }.store(in: &cancelables)
+            // The logo fades into the map once the map has drawn (style and tiles loaded).
+            mapView.mapboxMap.onMapIdle.observeNext { [weak self] _ in
+                MainActor.assumeIsolated { self?.model.mapReady = true }
+            }.store(in: &cancelables)
             // Taps only (Mapbox's tap recognizer): drags and pans never select.
             mapView.gestures.onMapTap.observe { [weak self] context in
                 MainActor.assumeIsolated { self?.mapTapped(at: context.point) }
             }.store(in: &cancelables)
             // Logo and attribution ride 8 pt above the sheet on every frame, outside SwiftUI.
-            model.sheet.onHeightChange = { [weak self] h in self?.setBottomInset(h) }
+            model.sheet.onHeightChange = { [weak self, weak model] h in
+                guard let model, model.sheetShown else { return }
+                self?.setBottomInset(h)
+            }
             mapView.ornaments.options.attributionButton.tintColor = Palette.inkMuted.uiColor
             model.project = { [weak mapView] p in
                 guard let mapView else { return nil }
@@ -163,13 +175,20 @@ struct RouteMapView: UIViewRepresentable {
             static let base = "loop-route-base"
             static let pathBed = "loop-route-path-bed"
             static let waterSource = "loop-water"
+            static let reachSource = "loop-reach"
+            static let candidatesSource = "loop-candidates"
+            static let reachDim = "loop-reach-dim"
+            static let reachRing = "loop-reach-ring"
+            static let warmWater = "loop-warm-water"
+            static let warmPark = "loop-warm-park"
+            static let candidates = "loop-candidates"
             static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.routeSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -186,6 +205,46 @@ struct RouteMapView: UIViewRepresentable {
             others.lineDasharray = .constant([0.01, 2.2])   // round dots
             others.slot = slot
             try? map.addLayer(others)
+
+            // The wait: warm water and parks (from Mapbox Streets' own shapes, token only), the dim
+            // outside the reach ring, the ring, and the candidate lines. All under the route.
+            if MapStyle.hasToken {
+                var warmWater = FillLayer(id: Ids.warmWater, source: Ids.waterSource)
+                warmWater.sourceLayer = "water"
+                warmWater.fillOpacity = .constant(0)
+                warmWater.fillEmissiveStrength = .constant(1)
+                warmWater.slot = .middle
+                try? map.addLayer(warmWater)
+                var warmPark = FillLayer(id: Ids.warmPark, source: Ids.waterSource)
+                warmPark.sourceLayer = "landuse"
+                warmPark.filter = Exp(.eq) { Exp(.get) { "class" }; "park" }
+                warmPark.fillOpacity = .constant(0)
+                warmPark.fillEmissiveStrength = .constant(1)
+                warmPark.slot = .middle
+                try? map.addLayer(warmPark)
+            }
+            var dim = FillLayer(id: Ids.reachDim, source: Ids.reachSource)
+            dim.filter = Exp(.eq) { Exp(.get) { "kind" }; "dim" }
+            dim.fillOpacity = .constant(0)
+            dim.fillEmissiveStrength = .constant(1)
+            dim.slot = slot
+            try? map.addLayer(dim)
+            var ring = LineLayer(id: Ids.reachRing, source: Ids.reachSource)
+            ring.filter = Exp(.eq) { Exp(.get) { "kind" }; "ring" }
+            ring.lineWidth = .constant(1.6)
+            ring.lineDasharray = .constant([4 / 1.6, 6 / 1.6])   // 4/6 pt, in line widths
+            ring.lineOpacity = .constant(0)
+            ring.lineEmissiveStrength = .constant(1)
+            ring.slot = slot
+            try? map.addLayer(ring)
+            var cands = LineLayer(id: Ids.candidates, source: Ids.candidatesSource)
+            cands.lineWidth = .constant(1.4)
+            cands.lineCap = .constant(.round)
+            cands.lineJoin = .constant(.round)
+            cands.lineOpacity = .constant(0)
+            cands.lineEmissiveStrength = .constant(1)
+            cands.slot = slot
+            try? map.addLayer(cands)
 
             // The casing is one line for the whole route (feature kind "casing"), under every run.
             var casing = LineLayer(id: Ids.casing, source: Ids.routeSource)
@@ -260,6 +319,11 @@ struct RouteMapView: UIViewRepresentable {
             set(Ids.lead, "line-color", Palette.routeWater)
             set(Ids.base, "line-color", Palette.routeStreet)
             set(Ids.pathBed, "line-color", Palette.routeCasing)
+            set(Ids.reachRing, "line-color", Palette.action)
+            set(Ids.candidates, "line-color", Palette.action)
+            try? map.setLayerProperty(for: Ids.reachDim, property: "fill-color", value: Palette.reachDim.hex(dark: dark))
+            try? map.setLayerProperty(for: Ids.warmWater, property: "fill-color", value: Palette.warmWater.hex(dark: dark))
+            try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
             set(Ids.others, "line-color", Palette.routeStreet)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
@@ -306,10 +370,39 @@ struct RouteMapView: UIViewRepresentable {
                 }
                 map.updateGeoJSONSource(withId: Ids.othersSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
+            if frame.reach != lastFrame?.reach { drawReach(map, frame.reach) }
+            if frame.candidates != lastFrame?.candidates {
+                let features = frame.candidates.map { Feature(geometry: LineString($0.map(\.coordinate))) }
+                map.updateGeoJSONSource(withId: Ids.candidatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.candidateOpacity != lastFrame?.candidateOpacity {
+                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity", value: frame.candidateOpacity)
+            }
             if frame.othersOpacity != lastFrame?.othersOpacity {
                 try? map.setLayerProperty(for: Ids.others, property: "line-opacity", value: frame.othersOpacity)
             }
             lastFrame = frame
+        }
+
+        /// The reach ring and the dim outside it; warm water and parks fade with the ring.
+        private func drawReach(_ map: MapboxMap, _ reach: RouteFrame.Reach?) {
+            var features: [Feature] = []
+            if let r = reach, r.radiusM > 1 {
+                let circle = RouteFrame.circle(r.center, radiusM: r.radiusM).map(\.coordinate)
+                let world = [(-179.9, -85.0), (179.9, -85.0), (179.9, 85.0), (-179.9, 85.0), (-179.9, -85.0)]
+                    .map { CLLocationCoordinate2D(latitude: $0.1, longitude: $0.0) }
+                var dim = Feature(geometry: Polygon([world, circle.reversed()]))
+                dim.properties = ["kind": .string("dim")]
+                var ring = Feature(geometry: LineString(circle))
+                ring.properties = ["kind": .string("ring")]
+                features = [dim, ring]
+            }
+            map.updateGeoJSONSource(withId: Ids.reachSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            try? map.setLayerProperty(for: Ids.reachDim, property: "fill-opacity", value: reach?.dimOpacity ?? 0)
+            try? map.setLayerProperty(for: Ids.reachRing, property: "line-opacity", value: reach?.ringOpacity ?? 0)
+            // Warm water and parks inside the ring (the dim softens them outside it).
+            try? map.setLayerProperty(for: Ids.warmWater, property: "fill-opacity", value: reach?.warmOpacity ?? 0)
+            try? map.setLayerProperty(for: Ids.warmPark, property: "fill-opacity", value: reach?.warmOpacity ?? 0)
         }
 
         // MARK: Camera
@@ -384,10 +477,15 @@ struct RouteMapView: UIViewRepresentable {
                 target = CameraOptions(center: map.coordinate(for: shifted))
             case let .at(point, zoom):
                 target = CameraOptions(center: point.coordinate, zoom: zoom)
+            case let .circle(center, radiusM):
+                let ring = RouteFrame.circle(center, radiusM: radiusM, points: 32).map(\.coordinate)
+                let padding = UIEdgeInsets(top: model.headerBottom + 20, left: 24, bottom: 60, right: 24)
+                target = try? map.camera(for: ring, camera: CameraOptions(), coordinatesPadding: padding,
+                                         maxZoom: 17, offset: nil)
             }
             guard let target else { return }
             if request.animated && !reduceMotion {
-                mapView.camera.ease(to: target, duration: Motion.mapPan, curve: .easeInOut)
+                mapView.camera.ease(to: target, duration: request.duration, curve: .easeInOut)
             } else {
                 map.setCamera(to: target)
             }

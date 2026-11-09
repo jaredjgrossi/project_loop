@@ -28,6 +28,27 @@ struct RouteFrame: Equatable {
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
 
+    /// The wait: the reach ring (dim outside, warm parks and water inside) and candidate lines.
+    struct Reach: Equatable {
+        let center: GeoPoint
+        let radiusM: Double
+        let ringOpacity: Double
+        let dimOpacity: Double
+        let warmOpacity: Double
+    }
+    var reach: Reach?
+    var candidates: [[GeoPoint]] = []
+    var candidateOpacity: Double = 0
+
+    /// A circle as a closed ring of points, `radiusM` metres around `center`.
+    static func circle(_ center: GeoPoint, radiusM: Double, points n: Int = 96) -> [GeoPoint] {
+        let dLat = radiusM / 111_320, dLon = radiusM / (111_320 * cos(center.lat * .pi / 180))
+        return (0...n).map { i in
+            let a = Double(i) / Double(n) * 2 * .pi
+            return GeoPoint(lon: center.lon + dLon * cos(a), lat: center.lat + dLat * sin(a))
+        }
+    }
+
     /// Path dash pattern on the map, in points.
     static let dashOn: Double = 9
     static let dashOff: Double = 6

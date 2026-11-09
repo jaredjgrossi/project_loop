@@ -6,6 +6,7 @@ final class SheetDragPerfTests: XCTestCase {
     func testSheetDragHitches() throws {
         guard #available(iOS 26.0, *) else { throw XCTSkip("XCTHitchMetric needs iOS 26") }
         let app = XCUIApplication()
+        app.launchArguments = ["-LoopSettled"]   // start on a finished route, not the launch sequence
         app.launch()
         XCTAssertTrue(app.buttons["Send to watch"].waitForExistence(timeout: 30))
         sleep(4)   // let the map tiles and style settle first

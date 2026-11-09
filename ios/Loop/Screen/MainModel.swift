@@ -11,15 +11,15 @@ final class MainModel {
     let data: LoopData
 
     // Route: the build replay decides what is shown.
-    private(set) var build: BuildState
+    var build: BuildState
     @ObservationIgnored private var playback: Task<Void, Never>?
     @ObservationIgnored private var resampled: [Int: [GeoPoint]] = [:]
     /// Bumped whenever what the map draws changes outside of time-based animation.
-    private(set) var frameVersion = 0
+    var frameVersion = 0
     /// Bumped when the route settles, to send one ring out from the turnaround.
     private(set) var pulseID = 0
     /// How much of the shown route is drawn, 0...1 (markers appear as the line passes them).
-    private(set) var drawnFraction: Double = 1
+    var drawnFraction: Double = 1
 
     var shownRank: Int? { build.shownRank }
     var otherRanks: [Int] { build.otherRanks }
@@ -51,6 +51,35 @@ final class MainModel {
     }
     var lookAroundTarget: LookAroundTarget?
 
+    // Launch and the wait (loop-launch-and-wait-v1): logo, bar, reading, reach, candidates, build.
+    enum Stage: Equatable { case logo, bar, typing, reading, building, settled }
+    var stage: Stage = .settled
+    /// The runner's sentence, shown as the whole header once sent.
+    var requestText: String?
+    /// The example the bar types in its placeholder colour at launch.
+    var barExample = ""
+    /// The logo covering the map at launch.
+    var logoShown = false
+    /// The bottom bar (launch, typing).
+    var barShown = false
+    /// The sheet is hidden while Loop reads and slides up at the settle.
+    var sheetShown = true
+    /// The location pulses until the leader starts drawing.
+    var locationPulsing = false
+    /// The map has drawn its first full frame (style and tiles): the logo fades only after this.
+    var mapReady = false
+    /// The debug demo plays "you tap and send" without bringing up the keyboard.
+    var demoTyping = false
+    @ObservationIgnored var reachStart: CFTimeInterval?
+    @ObservationIgnored var reachFadeStart: CFTimeInterval?
+    @ObservationIgnored var candidatesStart: CFTimeInterval?
+    @ObservationIgnored var flow: Task<Void, Never>?
+    /// The runner's location. A public stand-in (the fixture's start) until location is wired.
+    var location: GeoPoint { data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0] }
+    /// How far the runner can go from the start: half the distance, out and back. Until the server
+    /// sends parsed.reach_m.
+    var reachMetres: Double { (data.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile }
+
     // Camera and projection (set by the map)
     var cameraRequest = CameraRequest()
     var zoom: Double = 14
@@ -72,7 +101,7 @@ final class MainModel {
     var overviewCoordinates: [GeoPoint] { (data.candidate(rank: 1) ?? shown)?.line.points ?? [] }
 
     var eyebrowText: String {
-        CardText.eyebrow(kind: shown?.kindText ?? "", bestOf: showsCount ? data.bestOf : nil)
+        CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
     }
 
     // MARK: Interaction
@@ -105,6 +134,9 @@ final class MainModel {
             }
         }
     }
+
+    func receiveEvent(_ event: BuildEvent, at t: CFTimeInterval) { receive(event, at: t) }
+    func playbackCancel() { playback?.cancel() }
 
     private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
         let wasSettled = build.settleAt
@@ -232,8 +264,8 @@ final class MainModel {
         cameraTick &+= 1
     }
 
-    func requestCamera(_ kind: CameraRequest.Kind, animated: Bool) {
-        cameraRequest = CameraRequest(id: cameraRequest.id + 1, kind: kind, animated: animated)
+    func requestCamera(_ kind: CameraRequest.Kind, animated: Bool, duration: TimeInterval = Motion.mapPan) {
+        cameraRequest = CameraRequest(id: cameraRequest.id + 1, kind: kind, animated: animated, duration: duration)
     }
 
     func screenPoint(_ p: GeoPoint) -> CGPoint? {
@@ -248,6 +280,7 @@ final class MainModel {
 
     /// True while the route is still drawing or morphing (the map redraws every frame).
     func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
+        if waitIsMoving(now: now, reduceMotion: reduceMotion) { return true }
         guard !reduceMotion, let shown else { return false }
         if build.outlineOpacity(at: now, peak: 1, fade: Motion.outlineFade) > 0, build.provisional { return true }
         if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
@@ -266,6 +299,8 @@ final class MainModel {
     /// point by point from the line on screen (no redraw from scratch). Reduce Motion: drawn whole.
     func frame(now: CFTimeInterval, reduceMotion: Bool) -> RouteFrame {
         var frame = RouteFrame()
+        frame.reach = reachFrame(now: now, reduceMotion: reduceMotion)
+        (frame.candidates, frame.candidateOpacity) = candidateFrame(now: now, reduceMotion: reduceMotion)
         let outline = reduceMotion
             ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
             : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)
