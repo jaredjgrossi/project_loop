@@ -287,8 +287,9 @@ final class MainModel {
             frame.casing = frame.lead.first?.points ?? []
         } else {
             let mpp = MapScale.metresPerPoint(zoom: zoom, latitude: shown.line.points[0].lat)
-            frame.lead = RouteFrame.segments(for: shown, fraction: fraction, metresPerPoint: mpp)
-            frame.casing = shown.line.slice(from: 0, to: shown.line.length * fraction)
+            let drawn = RouteFrame.route(for: shown, fraction: fraction, metresPerPoint: mpp)
+            frame.casing = drawn.casing
+            frame.lead = drawn.lead
         }
         return frame
     }

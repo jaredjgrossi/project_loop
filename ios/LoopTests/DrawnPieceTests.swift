@@ -70,7 +70,8 @@ final class ZoomDetailTests: XCTestCase {
     func testCloseInEveryRunShowsAndPathIsDashed() {
         let mpp = MapScale.metresPerPoint(zoom: 18, latitude: 40.74)   // about 0.45 m per pt
         let kinds = RouteFrame.layerKinds(for: candidate, metresPerPoint: mpp)
-        XCTAssertEqual(kinds, candidate.detail!.drawn.map(\.kind.rawValue), "all 11 runs, path dashed")
+        XCTAssertEqual(kinds, candidate.detail!.drawn.filter { $0.kind != .street }.map(\.kind.rawValue),
+                       "every waterfront and path run styled on the base line; street is the base line")
     }
 
     func testOverviewMergesShortRunsAndKeepsRulesOnScreen() {
@@ -96,15 +97,16 @@ final class ZoomDetailTests: XCTestCase {
         XCTAssertEqual(lengths[0] / mpp, 9, accuracy: 9 * 0.5)
     }
 
-    func testRunsOverlapByAboutOnePointAtJoins() {
+    func testStyledRunsAreCutEdgeToEdgeFromTheDrawnLine() {
         let mpp = MapScale.metresPerPoint(zoom: 18, latitude: 40.74)
-        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp)
-        // The first run reaches 0.5 pt past its end; the second 0.5 pt past both ends.
+        let display = RouteFrame.displayLine(for: candidate.line, metresPerPoint: mpp)
         let runs = candidate.detail!.drawn
-        let first = segs[0]
-        XCTAssertEqual(Polyline(first.points).length, runs[0].lengthM + 0.5 * mpp, accuracy: 0.01)
-        XCTAssertEqual(segs.first { !$0.isDash && $0.kind == runs[1].kind }.map { Polyline($0.points).length } ?? 0,
-                       runs[1].lengthM + 1.0 * mpp, accuracy: 0.01)
+        let segs = RouteFrame.segments(for: candidate, fraction: 1, metresPerPoint: mpp).filter { !$0.isDash }
+        // Each styled run spans exactly its mapped range on the drawn line: no overlap past a join.
+        for (seg, run) in zip(segs, runs.filter { $0.kind != .street }) {
+            let expected = display.along(fromFull: run.toM) - display.along(fromFull: run.fromM)
+            XCTAssertEqual(Polyline(seg.points).length, expected, accuracy: 0.01)
+        }
     }
 
     func testCasingIsOneLineForTheWholeRoute() async throws {
@@ -113,7 +115,9 @@ final class ZoomDetailTests: XCTestCase {
             let model = MainModel(data: data)
             return model.frame(now: 0, reduceMotion: true)
         }
-        XCTAssertEqual(Polyline(frame.casing).length, candidate.line.length, accuracy: 0.01)
+        // One line for the whole route, the same geometry the base line uses.
+        let display = RouteFrame.displayLine(for: candidate.line, metresPerPoint: MapScale.metresPerPoint(zoom: 14, latitude: candidate.line.points[0].lat))
+        XCTAssertEqual(frame.casing, display.line.points)
     }
 
     func testShortPathRunDrawsSolidAndRouteWithoutPiecesIsOneLine() {
@@ -144,6 +148,58 @@ final class StripRunTests: XCTestCase {
             let pts = (r.toMile - r.fromMile) * ptPerMile
             XCTAssertGreaterThanOrEqual(pts, 16)
             XCTAssertEqual(r.dashed, r.kind == .path && pts >= 10.5)
+        }
+    }
+}
+
+final class DisplayLineTests: XCTestCase {
+    // East 200 m with a 3 m step to the north at 100 m, then a real 90° turn north for 100 m.
+    private func stepped() -> Polyline {
+        let m = 1 / 111_000.0, mx = 1 / (111_320 * cos(50 * Double.pi / 180))
+        return Polyline([
+            GeoPoint(lon: 10, lat: 50),
+            GeoPoint(lon: 10 + 100 * mx, lat: 50),
+            GeoPoint(lon: 10 + 100 * mx, lat: 50 + 3 * m),
+            GeoPoint(lon: 10 + 200 * mx, lat: 50 + 3 * m),
+            GeoPoint(lon: 10 + 200 * mx, lat: 50 + 103 * m),
+        ])
+    }
+
+    func testSmallJogRemovedRealTurnKept() {
+        let d = DisplayLine(full: stepped(), toleranceMetres: 5)
+        XCTAssertEqual(d.line.points.count, 3, "start, the corner, the end")
+        XCTAssertEqual(d.line.points.first, stepped().points.first)
+        XCTAssertEqual(d.line.points.last, stepped().points.last)
+        XCTAssertEqual(DisplayLine(full: stepped(), toleranceMetres: 1).line.points.count, 5, "close in, every jog stays")
+        XCTAssertEqual(DisplayLine(full: stepped(), toleranceMetres: 0).line, stepped())
+    }
+
+    func testAlongMapIsMonotonicWithMatchingEnds() {
+        let full = stepped()
+        let d = DisplayLine(full: full, toleranceMetres: 5)
+        XCTAssertEqual(d.along(fromFull: 0), 0)
+        XCTAssertEqual(d.along(fromFull: full.length), d.line.length, accuracy: 1e-9)
+        var last = -1.0
+        for a in stride(from: 0.0, through: full.length, by: 7) {
+            let m = d.along(fromFull: a)
+            XCTAssertGreaterThanOrEqual(m, last)
+            last = m
+        }
+    }
+
+    func testOutAndBackLegsStayOnTopOfEachOther() throws {
+        let line = try LoopData(file: RouteFile.loadBundled()).candidate(rank: 1)!.line
+        for z in [13.5, 15.0, 16.5] {
+            let d = DisplayLine(full: line, toleranceMetres: MapScale.metresPerPoint(zoom: z, latitude: 40.74) * 2.5)
+            // Every kept vertex on the esplanade's outbound leg has a kept twin on the return leg.
+            let turn = 2439.0
+            let outbound = d.line.points.enumerated().filter { d.fullAlong[$0.offset] > 1700 && d.fullAlong[$0.offset] < turn - 20 }
+            let returning = d.line.points.enumerated().filter { d.fullAlong[$0.offset] > turn + 20 }.map(\.element)
+            for (_, p) in outbound {
+                let nearest = returning.map { $0.distance(to: p) }.min() ?? .infinity
+                XCTAssertLessThan(nearest, 0.5, "zoom \(z)")
+            }
+            XCTAssertLessThan(d.line.points.count, line.points.count, "zoom \(z) drops sub-2.5 pt jogs")
         }
     }
 }

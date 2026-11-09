@@ -130,3 +130,64 @@ enum RouteHit {
         return best
     }
 }
+
+/// The route line as drawn at one zoom: the full-resolution line with jogs too small to see at
+/// that scale removed (Douglas–Peucker over the whole line at once), plus a map from along-route
+/// metres on the full line to along-route metres on the drawn line, so runs and dashes are cut
+/// from the drawn line at the right places. Display only; the full line stays the source of truth.
+struct DisplayLine {
+    let line: Polyline
+    /// For each drawn vertex, its along-route metres on the full line.
+    let fullAlong: [Double]
+
+    /// Jogs smaller than this on screen are removed (the route line is 4.5 pt wide).
+    static let tolerancePoints: Double = 2.5
+
+    init(full: Polyline, toleranceMetres: Double) {
+        let keep = DisplayLine.simplify(full.points, tolerance: toleranceMetres)
+        line = Polyline(keep.map { full.points[$0] })
+        fullAlong = keep.map { full.cumulative[$0] }
+    }
+
+    /// Along-route metres on the drawn line for along-route metres on the full line.
+    func along(fromFull a: Double) -> Double {
+        if a <= fullAlong[0] { return 0 }
+        guard let last = fullAlong.last, a < last else { return line.length }
+        var lo = 0, hi = fullAlong.count - 1
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if fullAlong[mid] <= a { lo = mid } else { hi = mid }
+        }
+        let span = fullAlong[hi] - fullAlong[lo]
+        let t = span > 0 ? (a - fullAlong[lo]) / span : 0
+        return line.cumulative[lo] + t * (line.cumulative[hi] - line.cumulative[lo])
+    }
+
+    /// Indices of the vertices Douglas–Peucker keeps (local metres, equirectangular).
+    static func simplify(_ pts: [GeoPoint], tolerance: Double) -> [Int] {
+        guard pts.count > 2, tolerance > 0 else { return Array(pts.indices) }
+        let lat0 = pts[0].lat * .pi / 180
+        let mx = 111_320 * cos(lat0), my = 110_574.0
+        let xy = pts.map { (($0.lon - pts[0].lon) * mx, ($0.lat - pts[0].lat) * my) }
+        var keep = [Bool](repeating: false, count: pts.count)
+        keep[0] = true; keep[pts.count - 1] = true
+        var stack = [(0, pts.count - 1)]
+        while let (a, b) = stack.popLast() {
+            guard b > a + 1 else { continue }
+            let (ax, ay) = xy[a], (bx, by) = xy[b]
+            let dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy
+            var worst = -1.0, idx = -1
+            for i in (a + 1)..<b {
+                let (px, py) = xy[i]
+                let t = l2 > 0 ? max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0
+                let d = hypot(px - (ax + dx * t), py - (ay + dy * t))
+                if d > worst { worst = d; idx = i }
+            }
+            if worst > tolerance {
+                keep[idx] = true
+                stack.append((a, idx)); stack.append((idx, b))
+            }
+        }
+        return keep.indices.filter { keep[$0] }
+    }
+}
