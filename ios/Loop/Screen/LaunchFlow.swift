@@ -40,6 +40,7 @@ extension MainModel {
         logoShown = true
         landingShown = false
         landing.slide(to: 0, animated: false)
+        landingAnchor = nil
         sheetShown = false
         fieldExample = ""
         clearSelection()
@@ -59,8 +60,10 @@ extension MainModel {
             self.locationPulsing = !reduceMotion
             self.stage = .landing
             guard await wait(Timing.sheetIn - Timing.pulseIn) else { return }
+            // It arrives open (field, runs, recent), rising whole.
             self.landingShown = true
-            self.landing.settle(open: false, animated: !reduceMotion)
+            self.landingAnchor = self.landing.openHeight
+            self.landing.settle(rest: .open, animated: !reduceMotion) { [weak self] in self?.landingAnchor = nil }
             guard await wait(Timing.typeStart - Timing.sheetIn) else { return }
             if reduceMotion {
                 self.fieldExample = Self.exampleRequest
@@ -90,6 +93,7 @@ extension MainModel {
     /// The sheet slides away (the Mapbox logo follows it down).
     private func hideLanding(reduceMotion: Bool) {
         landingShown = false
+        landingAnchor = max(landing.height, landing.collapsedHeight)
         landing.slide(to: 0, animated: !reduceMotion)
     }
 

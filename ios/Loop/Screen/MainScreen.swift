@@ -149,6 +149,12 @@ struct MainScreen: View {
             return
         }
         model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
+        if args.contains("-LoopCollapsed") {
+            // Screenshots: collapse the landing sheet once it has risen and typed its example.
+            while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(2.5))
+            model.landing.settle(rest: .collapsed, animated: true)
+        }
         #else
         model.runLaunch(reduceMotion: reduceMotion, autoSend: false)
         #endif

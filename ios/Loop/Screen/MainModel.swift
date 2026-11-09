@@ -64,6 +64,8 @@ final class MainModel {
     var landingShown = false
     /// The landing sheet's height, frame by frame (its own observable, like the route sheet).
     let landing = SheetState(collapsed: 300, open: 300)
+    /// While the landing sheet rises or slides away it moves whole, anchored at this height.
+    var landingAnchor: CGFloat?
     /// Saved runs and recent routes, on the phone.
     let runs: RunStore
     /// The request whose route goes to Recent once it settles (sent requests only).

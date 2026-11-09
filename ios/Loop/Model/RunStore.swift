@@ -26,12 +26,19 @@ struct RecentRoute: Codable, Identifiable, Equatable {
     var shape: [[Double]]
 }
 
-/// A tile shown until the runner has runs of their own: no route yet, so a neutral shape, and
-/// tapping it sends the request.
+/// A tile shown until the runner has runs of their own. There's no route yet, so it shows a small
+/// glyph in route style (never a fake route), and tapping it sends the request.
 struct SuggestedRun: Identifiable, Equatable {
+    enum Glyph: Equatable {
+        /// A small loop returning to the start dot.
+        case loop
+        /// A line running along a wavy shoreline.
+        case water
+    }
     let id: String
     let name: String
     let request: String
+    let glyph: Glyph
 }
 
 /// Saved runs and recent routes, kept in one small JSON file in Application Support (no account).
@@ -47,8 +54,8 @@ final class RunStore {
 
     /// Suggestions for the tiles after the runner's own runs (the UI chat's examples).
     static let suggestions = [
-        SuggestedRun(id: "s_here", name: "3 mi from here", request: "3 miles from here"),
-        SuggestedRun(id: "s_water", name: "By the water", request: "3 miles by the water"),
+        SuggestedRun(id: "s_here", name: "3 mi from here", request: "3 miles from here", glyph: .loop),
+        SuggestedRun(id: "s_water", name: "By the water", request: "3 miles by the water", glyph: .water),
     ]
 
     private struct File: Codable {

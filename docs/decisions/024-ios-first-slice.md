@@ -110,8 +110,14 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   which never leave the phone. A first launch seeds "Usual" and one recent from the fixture's #1;
   every sent request that builds a route goes to the top of Recent.
 - **Tiles.** A route's own shape (route-water line, vermilion start dot). Suggestions ("3 mi from
-  here", "By the water") fill the row after the runner's own runs, with a neutral dashed loop, and
-  send their request. A saved run or recent row draws its route with no wait and opens its card.
+  here", "By the water") fill the row after the runner's own runs and send their request; with no
+  route yet they draw a small glyph in the same style (a loop back to the dot; a line along a wavy
+  shoreline), never an empty placeholder or a fake route. A saved run or recent row draws its
+  route with no wait and opens its card.
+- **Collapsible.** Three rests on the route card's `SheetState` (same 1:1 drag and 320 ms settle;
+  no haptic, like the route card): collapsed to just the field, open (field, runs, first recent:
+  how it arrives), and taller for more recents. Tapping the handle toggles; tapping the field
+  while collapsed starts typing without opening the runs.
 - **Weather.** WeatherKit needs the paid developer program; the build uses a Personal Team, so
   Debug builds show fixed sample weather (48°, partly cloudy) and Release builds hide the line.
 - **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
@@ -137,9 +143,9 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   and also 0 for the previous build, so synthetic drags don't reproduce what was felt. On the
   device by hand, Jared reports the reworked drag smooth (2026-11-04, Debug build).
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.
-- Landing sheet height: the content (field, tiles with two label lines, one recent row) needs
-  about 370 pt including the home indicator; the brief said about 262 pt. A new runner's (no
-  recents) is about 290 pt.
+- Landing sheet height: open, the content (field, tiles with two label lines, one recent row)
+  needs about 370 pt including the home indicator; the brief said about 262 pt. A new runner's
+  (no recents) is about 290 pt; collapsed, about 120 pt.
 - The Save tile isn't a button yet: what it saves from the landing is undecided.
 - No way back from a route's card to the landing sheet yet.
 - WeatherKit and its required Apple Weather attribution, once the paid program is in place.

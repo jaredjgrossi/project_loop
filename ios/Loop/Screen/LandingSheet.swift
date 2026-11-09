@@ -2,8 +2,10 @@ import SwiftUI
 import UIKit
 
 /// The landing sheet (UI chat, 2026-11-09; modeled on Apple Maps' home sheet, minimal): the request
-/// field, "Your runs" tiles, and "Recent". It rises at launch, slides away on send, and drags up for
-/// more recent rows. Design-system tokens only; no data (mono) styling on this screen.
+/// field, "Your runs" tiles, and "Recent". Three rests on the route card's `SheetState`: collapsed
+/// (just the field, the map takes the rest), open (field, runs, first recent row: how it arrives),
+/// and, with more recents, a taller rest showing them. It rises at launch and slides away on send.
+/// Design-system tokens only; no data (mono) styling on this screen.
 struct LandingSheet: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -13,48 +15,60 @@ struct LandingSheet: View {
 
     var body: some View {
         let height = sheet.height
-        let rest = sheet.collapsedHeight
+        // Rising or sliding away, the sheet moves whole (anchored at its rest); otherwise it is
+        // clipped to its height, and below the collapsed rest it moves down whole.
+        let anchor = model.landingAnchor
+        let frameHeight = anchor ?? max(height, sheet.collapsedHeight)
+        let offset = max(0, (anchor ?? sheet.collapsedHeight) - height)
+        let expanded = Double(sheet.progress)
+
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
                 .fill(Palette.grabber.color)
                 .frame(width: 36, height: 4)
                 .padding(.top, 10)
                 .frame(maxWidth: .infinity)
-                .frame(height: 14, alignment: .top)
-                .accessibilityHidden(runs.recents.count < 2)
+                .frame(height: 24, alignment: .top)
+                .contentShape(Rectangle())
+                .onTapGesture { toggle() }
                 .accessibilityElement()
-                .accessibilityLabel(sheet.restingOpen ? "Show fewer recent runs" : "Show more recent runs")
+                .accessibilityLabel(sheet.restingOpen ? "Hide your runs" : "Show your runs")
                 .accessibilityAddTraits(.isButton)
-                .accessibilityAction { sheet.settle(open: !sheet.restingOpen, animated: !reduceMotion) }
+                .accessibilityAction { toggle() }
 
             RequestField(model: model)
-                .padding(.top, 10)
+                .background(bottomReader { setCollapsed($0) })
 
-            Text("Your runs")
-                .typeStyle(.eyebrow)
-                .foregroundStyle(Palette.inkMuted.color)
-                .padding(.top, 22)
-                .accessibilityAddTraits(.isHeader)
-
-            TileRow(model: model)
-                .padding(.top, 12)
-                .background(rowBottom(isLast: runs.recents.isEmpty))
-
-            if let first = runs.recents.first {
-                Text("Recent")
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Your runs")
                     .typeStyle(.eyebrow)
                     .foregroundStyle(Palette.inkMuted.color)
-                    .padding(.top, 20)
+                    .padding(.top, 22)
                     .accessibilityAddTraits(.isHeader)
-                RecentRow(recent: first) { model.openRun(request: first.request) }
-                    .padding(.top, 4)
-                    .background(rowBottom(isLast: true))
-                // More rows, revealed by dragging up.
-                ForEach(runs.recents.dropFirst()) { recent in
-                    RecentRow(recent: recent) { model.openRun(request: recent.request) }
-                        .opacity(Double(sheet.progress))
-                        .accessibilityHidden(sheet.progress < 0.5)
+
+                TileRow(model: model)
+                    .padding(.top, 12)
+                    .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+
+                if let first = runs.recents.first {
+                    Text("Recent")
+                        .typeStyle(.eyebrow)
+                        .foregroundStyle(Palette.inkMuted.color)
+                        .padding(.top, 20)
+                        .accessibilityAddTraits(.isHeader)
+                    RecentRow(recent: first) { model.openRun(request: first.request) }
+                        .padding(.top, 4)
+                        .background(bottomReader { setOpen($0) })
                 }
+            }
+            .opacity(expanded)
+            .accessibilityHidden(expanded < 0.5)
+
+            // More rows, revealed by dragging up past the open rest.
+            ForEach(runs.recents.dropFirst()) { recent in
+                RecentRow(recent: recent) { model.openRun(request: recent.request) }
+                    .opacity(Double(sheet.readProgress))
+                    .accessibilityHidden(sheet.readProgress < 0.5)
             }
         }
         // Measured in the content's own space, inside the slide offset (else each measurement
@@ -63,40 +77,58 @@ struct LandingSheet: View {
         .padding(.horizontal, Metrics.s24)
         .background(GeometryReader { g in
             Color.clear
-                .onAppear { setOpen(g.size.height) }
-                .onChange(of: g.size.height) { _, h in setOpen(h) }
+                .onAppear { setFull(g.size.height) }
+                .onChange(of: g.size.height) { _, h in setFull(h) }
         })
-        .frame(height: max(height, rest), alignment: .top)
+        .frame(height: frameHeight, alignment: .top)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
         .clipped()
-        .offset(y: max(0, rest - height))
+        .offset(y: offset)
         .contentShape(Rectangle())
         .gesture(drag)
     }
 
-    /// The collapsed rest ends just under the first recent row (or the tiles, with no recents).
-    private func rowBottom(isLast: Bool) -> some View {
+    /// Tapping the handle: collapsed opens; open (or taller) collapses.
+    private func toggle() {
+        sheet.settle(rest: sheet.restingOpen ? .collapsed : .open, animated: !reduceMotion)
+    }
+
+    private func bottomReader(_ report: @escaping (CGFloat) -> Void) -> some View {
         GeometryReader { g in
             Color.clear
-                .onAppear { if isLast { setCollapsed(g.frame(in: .named("landing")).maxY) } }
-                .onChange(of: g.frame(in: .named("landing")).maxY) { _, y in if isLast { setCollapsed(y) } }
+                .onAppear { report(g.frame(in: .named("landing")).maxY) }
+                .onChange(of: g.frame(in: .named("landing")).maxY) { _, y in report(y) }
         }
     }
 
-    private func setCollapsed(_ contentBottom: CGFloat) {
-        let h = (contentBottom + 14 + Self.bottomInset).rounded()
-        guard abs(h - sheet.baseCollapsed) > 0.5 else { return }
-        let wasOpen = sheet.baseOpen
-        sheet.baseCollapsed = h
-        sheet.baseOpen = max(h, wasOpen)
-        if model.landingShown { sheet.refreshRest() }
+    /// Collapsed: just the field.
+    private func setCollapsed(_ fieldBottom: CGFloat) {
+        update(&sheet.baseCollapsed, (fieldBottom + 12 + Self.bottomInset).rounded())
     }
 
-    /// Dragged up, the sheet shows every recent row, up to three quarters of the screen.
-    private func setOpen(_ contentHeight: CGFloat) {
-        let full = (contentHeight + 14 + Self.bottomInset).rounded()
-        sheet.baseOpen = max(sheet.baseCollapsed, min(full, UIScreen.main.bounds.height * 0.75))
+    /// Open: down to the first recent row (or the tiles, with no recents).
+    private func setOpen(_ contentBottom: CGFloat) {
+        update(&sheet.baseOpen, (contentBottom + 14 + Self.bottomInset).rounded())
+    }
+
+    /// Taller: every recent row, up to three quarters of the screen; none with one recent.
+    private func setFull(_ contentHeight: CGFloat) {
+        let full = min((contentHeight + 14 + Self.bottomInset).rounded(), UIScreen.main.bounds.height * 0.75)
+        let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
+        guard read != sheet.readHeight else { return }
+        sheet.readHeight = read
+        refresh()
+    }
+
+    private func update(_ value: inout CGFloat, _ new: CGFloat) {
+        guard abs(value - new) > 0.5 else { return }
+        value = new
+        refresh()
+    }
+
+    private func refresh() {
+        if model.landingShown, model.landingAnchor == nil { sheet.refreshRest() }
     }
 
     static var bottomInset: CGFloat {
@@ -114,10 +146,17 @@ struct LandingSheet: View {
             .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.08), radius: 15, y: -8)
     }
 
+    /// Same as the route card: 1:1 under the finger, then the 320 ms settle to the nearest rest.
     private var drag: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
-            .onChanged { v in sheet.drag(translation: v.translation.height) }
-            .onEnded { v in sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in } }
+            .onChanged { v in
+                guard model.landingAnchor == nil else { return }
+                sheet.drag(translation: v.translation.height)
+            }
+            .onEnded { v in
+                guard model.landingAnchor == nil else { return }
+                sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in }
+            }
     }
 }
 
@@ -184,7 +223,7 @@ private struct TileRow: View {
                     }
                 }
                 ForEach(model.runs.suggestedTiles) { s in
-                    RunTile(side: side, name: s.name, detail: nil, shape: nil) {
+                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph) {
                         model.send(s.request, reduceMotion: false)
                     }
                 }
@@ -203,6 +242,7 @@ private struct RunTile: View {
     let name: String
     let detail: String?
     let shape: [[Double]]?
+    var glyph: SuggestedRun.Glyph? = nil
     let action: () -> Void
 
     var body: some View {
@@ -210,7 +250,8 @@ private struct RunTile: View {
             VStack(spacing: 6) {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Palette.surfaceSunken.color)
-                    .overlay(RouteThumbnail(shape: shape, lineWidth: 2.4, dot: 7))
+                    .overlay(RouteThumbnail(shape: shape, glyph: glyph, lineWidth: 2.4, dot: 7)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
                     .frame(width: side, height: side)
                 VStack(spacing: 0) {
                     Text(name)
@@ -283,10 +324,11 @@ private struct RecentRow: View {
     static func sentence(_ s: String) -> String { s.hasSuffix(".") ? String(s.dropLast()) : s }
 }
 
-/// A route's own shape as a small line drawing: route-water line, vermilion start dot. With no
-/// route yet (a suggestion), a neutral dashed loop.
+/// A route's own shape as a small line drawing: route-water line, vermilion start dot. A suggestion
+/// (no route yet) draws its glyph in the same style instead. Never an empty placeholder.
 struct RouteThumbnail: View {
     let shape: [[Double]]?
+    var glyph: SuggestedRun.Glyph? = nil
     var lineWidth: CGFloat = 2.4
     var dot: CGFloat = 7
     /// Margin as a share of the side.
@@ -297,23 +339,63 @@ struct RouteThumbnail: View {
             let side = min(size.width, size.height)
             let box = CGRect(x: (size.width - side) / 2 + side * inset, y: (size.height - side) / 2 + side * inset,
                              width: side * (1 - 2 * inset), height: side * (1 - 2 * inset))
-            guard let pts = shape.map(Self.project), pts.count >= 2 else {
-                let ring = Path(ellipseIn: box.insetBy(dx: box.width * 0.08, dy: box.height * 0.08))
-                ctx.stroke(ring, with: .color(Palette.lineControl.color.opacity(0.8)),
-                           style: StrokeStyle(lineWidth: 1.6, lineCap: .round, dash: [3, 4.5]))
+            let line: Path, start: CGPoint
+            if let pts = shape.map(Self.project), pts.count >= 2 {
+                let fitted = Self.fit(pts, in: box)
+                var path = Path()
+                path.addLines(fitted)
+                line = path; start = fitted[0]
+            } else if let glyph {
+                (line, start) = Self.glyph(glyph, in: box, ctx: ctx)
+            } else {
                 return
             }
-            let fitted = Self.fit(pts, in: box)
-            var path = Path()
-            path.addLines(fitted)
-            ctx.stroke(path, with: .color(Palette.routeWater.color),
+            ctx.stroke(line, with: .color(Palette.routeWater.color),
                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-            if dot > 0, let s = fitted.first {
-                ctx.fill(Path(ellipseIn: CGRect(x: s.x - dot / 2, y: s.y - dot / 2, width: dot, height: dot)),
+            if dot > 0 {
+                ctx.fill(Path(ellipseIn: CGRect(x: start.x - dot / 2, y: start.y - dot / 2, width: dot, height: dot)),
                          with: .color(Palette.accentStart.color))
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// The suggestion glyphs, drawn in the unit box. Returns the route-style line and its start.
+    static func glyph(_ glyph: SuggestedRun.Glyph, in box: CGRect, ctx: GraphicsContext) -> (Path, CGPoint) {
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: box.minX + x * box.width, y: box.minY + y * box.height) }
+        switch glyph {
+        case .loop:
+            // Out from the dot, round a small loop, and back to the dot.
+            var path = Path()
+            path.move(to: p(0.30, 0.86))
+            path.addCurve(to: p(0.88, 0.58), control1: p(0.56, 0.98), control2: p(0.90, 0.80))
+            path.addCurve(to: p(0.50, 0.08), control1: p(0.86, 0.32), control2: p(0.72, 0.08))
+            path.addCurve(to: p(0.10, 0.44), control1: p(0.26, 0.08), control2: p(0.08, 0.24))
+            path.addCurve(to: p(0.30, 0.86), control1: p(0.12, 0.64), control2: p(0.18, 0.80))
+            return (path, p(0.30, 0.86))
+        case .water:
+            // Water to the right of a wavy shoreline (the map's shore colour) out to the tile's
+            // edges (the tile clips it), the line running alongside on the land side, from the dot up.
+            func shore(_ y: CGFloat) -> CGFloat { 0.72 + 0.07 * sin(y * .pi * 2.4) }
+            let steps = 40
+            var water = Path()
+            water.move(to: p(shore(-0.6), -0.6))
+            for i in 0...steps {
+                let y = -0.6 + 2.2 * CGFloat(i) / CGFloat(steps)
+                water.addLine(to: p(shore(y), y))
+            }
+            water.addLine(to: p(2, 1.6))
+            water.addLine(to: p(2, -0.6))
+            water.closeSubpath()
+            ctx.fill(water, with: .color(Palette.mapShore.color))
+            var path = Path()
+            for i in 0...steps {
+                let y = 0.92 - 0.84 * CGFloat(i) / CGFloat(steps)
+                let pt = p(shore(y) - 0.24, y)
+                if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+            }
+            return (path, p(shore(0.92) - 0.24, 0.92))
+        }
     }
 
     /// Lon/lat to local metres (equirectangular), y up.

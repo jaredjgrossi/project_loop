@@ -59,7 +59,7 @@ struct RouteMapView: UIViewRepresentable {
     @MainActor static func ornamentInset(_ model: MainModel) -> CGFloat {
         if model.sheetShown { return model.sheet.height }
         let beforeLanding = model.stage == .logo || (model.stage == .landing && !model.landingShown)
-        return beforeLanding ? max(model.landing.height, model.landing.collapsedHeight) : model.landing.height
+        return beforeLanding ? max(model.landing.height, model.landing.openHeight) : model.landing.height
     }
 
     static func dismantleUIView(_ uiView: MapView, coordinator: Coordinator) {
