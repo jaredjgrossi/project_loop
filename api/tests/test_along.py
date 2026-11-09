@@ -127,6 +127,7 @@ def test_the_engine_avoids_running_along_and_says_when_a_street_is_not_found():
                                                       {"name": "Times Square", "how": "area"}]),
                     Start(*KIPS, "x"), lambda ev: None, "r_a")
     assert asked["names"] == ["Test Ave", "Nowhere St"] and asked["router_alongs"] == [ave]
+    assert final["routes"]
     assert all(not runs_along(r["geometry"]["coordinates"], [ave]) for r in final["routes"])
     assert [n["key"] for n in final["notes"] if n["key"] == "avoid_not_found"] == ["avoid_not_found"]
     assert "Nowhere St" in final["notes"][-1]["text"]

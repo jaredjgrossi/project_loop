@@ -260,6 +260,7 @@ class Engine:
     routers_fn: Callable = ml.routers_for  # (zones, lights, closures) -> route, round-trip and area routers
     vias_fn: Callable = db_vias  # via PlaceRefs -> [Via] with their shapes
     alongs_fn: Callable = None  # (names, (lat, lon)) -> ([along.Along], names not found); default db_alongs_near
+    context_for_fn: Callable = ml.context_for  # (lights, grid, use_prior=, start=) -> a route scorer (Postgres)
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
@@ -328,7 +329,7 @@ class Engine:
             send({"event": "candidates", "v": 1, "route_id": route_id, "elapsed_s": round(elapsed, 3),
                   "candidates": [{"id": key(c), "kind": c.kind, "points": outline(c.route.coordinates)}]})
 
-        context_fn = ml.context_for(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment())
+        context_fn = self.context_for_fn(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment())
         try:
             if end is not None:
                 result = self.a_to_b_fn(

@@ -92,7 +92,8 @@ def fake_generate(cands, threads=True):
 
 def engine(generate_fn, **kw) -> Engine:
     base = dict(generate_fn=generate_fn, grid_fn=lambda lat, lon: GRID, closures_fn=None, stretch_fn=None,
-                anchor_fn=None, feature_anchor_fn=[], ready_fn=lambda: True)
+                anchor_fn=None, feature_anchor_fn=[], ready_fn=lambda: True,
+                context_for_fn=lambda *a, **kw: None)  # no Postgres in unit tests (decision 019): context not scored
     return Engine(**(base | kw))
 
 
