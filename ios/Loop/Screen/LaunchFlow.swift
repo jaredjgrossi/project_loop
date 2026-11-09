@@ -1,9 +1,11 @@
 import Foundation
 import QuartzCore
 import SwiftUI
+import UIKit
 
 /// Launch and the wait, as in loop-launch-and-wait-v1 (UI chat, 2026-11-08):
-/// logo fades into the map → location pulses → the bottom bar types an example → send →
+/// logo fades into the map → location pulses → the landing sheet rises and its field types an
+/// example (UI chat, 2026-11-09: the sheet replaces the floating bar) → send →
 /// camera pushes in while Loop reads (~3 s) → camera pulls back, the reach ring opens with warm
 /// parks and water → candidate lines draw → the leader draws → the existing settle.
 /// The parse is simulated from the saved file until the iPhone is wired to the Phase 3 server.
@@ -13,7 +15,7 @@ extension MainModel {
     enum Timing {
         static let logoFade: TimeInterval = 0.9
         static let pulseIn: TimeInterval = 1.3
-        static let barIn: TimeInterval = 1.7
+        static let sheetIn: TimeInterval = 1.7
         static let typeStart: TimeInterval = 2.2
         static let typeStep: TimeInterval = 0.055
         /// Send → parsed (the parser's median, decision log 2026-11-08).
@@ -36,9 +38,10 @@ extension MainModel {
         requestText = nil
         stage = .logo
         logoShown = true
-        barShown = false
+        landingShown = false
+        landing.slide(to: 0, animated: false)
         sheetShown = false
-        barExample = ""
+        fieldExample = ""
         clearSelection()
         requestCamera(.at(location, zoom: 14.2), animated: false)
         flow = Task { @MainActor [weak self] in
@@ -54,16 +57,17 @@ extension MainModel {
             withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.6)) { self.logoShown = false }
             guard await wait(Timing.pulseIn - Timing.logoFade) else { return }
             self.locationPulsing = !reduceMotion
-            self.stage = .bar
-            guard await wait(Timing.barIn - Timing.pulseIn) else { return }
-            withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.5)) { self.barShown = true }
-            guard await wait(Timing.typeStart - Timing.barIn) else { return }
+            self.stage = .landing
+            guard await wait(Timing.sheetIn - Timing.pulseIn) else { return }
+            self.landingShown = true
+            self.landing.settle(open: false, animated: !reduceMotion)
+            guard await wait(Timing.typeStart - Timing.sheetIn) else { return }
             if reduceMotion {
-                self.barExample = Self.exampleRequest
+                self.fieldExample = Self.exampleRequest
             } else {
                 for ch in Self.exampleRequest {
-                    guard self.stage == .bar else { return }
-                    self.barExample.append(ch)
+                    guard self.stage == .landing else { return }
+                    self.fieldExample.append(ch)
                     guard await wait(Timing.typeStep) else { return }
                 }
             }
@@ -77,11 +81,16 @@ extension MainModel {
         }
     }
 
-    /// The runner taps the bar.
+    /// The runner taps the field.
     func beginTyping() {
-        guard stage == .bar || stage == .settled else { return }
+        guard stage == .landing else { return }
         stage = .typing
-        withAnimation(.timingCurve(0.2, 0, 0, 1, duration: 0.3)) { barShown = true }
+    }
+
+    /// The sheet slides away (the Mapbox logo follows it down).
+    private func hideLanding(reduceMotion: Bool) {
+        landingShown = false
+        landing.slide(to: 0, animated: !reduceMotion)
     }
 
     /// Send a request. Until the API is wired, every request resolves to the saved Kips Bay file.
@@ -96,10 +105,9 @@ extension MainModel {
         frameVersion += 1
         reachStart = nil; reachFadeStart = nil; candidatesStart = nil
         demoTyping = false
-        withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.4)) {
-            barShown = false
-            sheetShown = false
-        }
+        recordOnSettle = sentence
+        hideLanding(reduceMotion: reduceMotion)
+        withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.4)) { sheetShown = false }
         let shown = sentence.hasSuffix(".") ? sentence : sentence + "."
         withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = shown }
         exitEditMode()
@@ -147,7 +155,36 @@ extension MainModel {
             guard await wait(1.8) else { return }
             self.receiveEvent(.final(self.data.candidates.map(\.rank)), at: CACurrentMediaTime())
             self.stage = .settled
+            if let request = self.recordOnSettle, let route = self.shown {
+                self.recordOnSettle = nil
+                self.runs.addRecent(request: request, distanceMi: route.distanceMi, line: route.line)
+            }
         }
+    }
+
+    /// A saved run or a recent row: the sheet slides away and the route draws straight away (no
+    /// wait: nothing to read), then its card opens. Until the API is wired, every run is the saved file's.
+    func openRun(request: String) {
+        let sentence = request.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sentence.isEmpty, stage == .landing || stage == .typing else { return }
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        flow?.cancel()
+        playbackCancel()
+        clearSelection()
+        build = BuildState()
+        drawnFraction = 0
+        frameVersion += 1
+        reachStart = nil; reachFadeStart = nil; candidatesStart = nil
+        recordOnSettle = nil
+        hideLanding(reduceMotion: reduceMotion)
+        sheet.settle(open: false, animated: false)
+        let shown = sentence.hasSuffix(".") ? sentence : sentence + "."
+        withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = shown }
+        readOut = ReadOut.simulated(shown, data: data, file: nil)
+        locationPulsing = false
+        stage = .building
+        Haptics.prepareSettle()
+        startBuild(reduceMotion: reduceMotion)
     }
 
     // MARK: Map frames for the wait

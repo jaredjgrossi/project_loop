@@ -5,7 +5,19 @@ struct LoopApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .preferredColorScheme(Self.forcedScheme)
         }
+    }
+
+    /// Debug: `-LoopTheme light|dark` forces Paper or Night (device screenshots of both themes).
+    private static var forcedScheme: ColorScheme? {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-LoopTheme"), i + 1 < args.count {
+            return args[i + 1] == "dark" ? .dark : args[i + 1] == "light" ? .light : nil
+        }
+        #endif
+        return nil
     }
 }
 

@@ -164,6 +164,8 @@ enum CardText {
     // MARK: Formatting helpers
 
     static func oneDecimal(_ v: Double) -> String { String(format: "%.1f", v) }
+    /// "3.0 mi" (landing tiles).
+    static func miles(_ v: Double) -> String { oneDecimal(v) + " mi" }
 
     /// 8.0 → "8", 8.5 → "8.5"
     static func trimmed(_ v: Double) -> String {

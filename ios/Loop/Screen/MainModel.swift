@@ -51,17 +51,23 @@ final class MainModel {
     }
     var lookAroundTarget: LookAroundTarget?
 
-    // Launch and the wait (loop-launch-and-wait-v1): logo, bar, reading, reach, candidates, build.
-    enum Stage: Equatable { case logo, bar, typing, reading, building, settled }
+    // Launch and the wait (loop-launch-and-wait-v1): logo, landing sheet, reading, reach, candidates, build.
+    enum Stage: Equatable { case logo, landing, typing, reading, building, settled }
     var stage: Stage = .settled
     /// The runner's sentence, shown as the whole header once sent.
     var requestText: String?
-    /// The example the bar types in its placeholder colour at launch.
-    var barExample = ""
+    /// The example the landing field types in its placeholder colour at launch.
+    var fieldExample = ""
     /// The logo covering the map at launch.
     var logoShown = false
-    /// The bottom bar (launch, typing).
-    var barShown = false
+    /// The landing sheet is up (it rises at launch and slides away on send).
+    var landingShown = false
+    /// The landing sheet's height, frame by frame (its own observable, like the route sheet).
+    let landing = SheetState(collapsed: 300, open: 300)
+    /// Saved runs and recent routes, on the phone.
+    let runs: RunStore
+    /// The request whose route goes to Recent once it settles (sent requests only).
+    @ObservationIgnored var recordOnSettle: String?
     /// The sheet is hidden while Loop reads and slides up at the settle.
     var sheetShown = true
     /// The location pulses until the leader starts drawing.
@@ -99,9 +105,11 @@ final class MainModel {
     @ObservationIgnored var project: ((GeoPoint) -> CGPoint?)?
     var headerBottom: CGFloat = 230
 
-    init(data: LoopData) {
+    init(data: LoopData, runs: RunStore) {
         self.data = data
+        self.runs = runs
         build = .settled(top3: data.candidates.map(\.rank))
+        landing.slide(to: 0, animated: false)
     }
 
     var shown: Candidate? { shownRank.flatMap { data.candidate(rank: $0) } }

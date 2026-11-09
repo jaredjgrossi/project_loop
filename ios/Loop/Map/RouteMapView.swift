@@ -49,10 +49,17 @@ struct RouteMapView: UIViewRepresentable {
         let c = context.coordinator
         c.reduceMotion = reduceMotion
         c.setDark(colorScheme == .dark)
-        // Logo and attribution sit above the sheet, or above the bar's place whenever there is no
-        // sheet (from launch, before the bar slides in), so they never jump when the bar comes.
-        c.setBottomInset(model.sheetShown ? model.sheet.height : Metrics.requestBarHeight + 12 + 34)
+        c.setBottomInset(Self.ornamentInset(model))
         c.handle(model.cameraRequest)
+    }
+
+    /// Logo and attribution ride 8 pt above whatever is at the bottom: the route sheet, or the
+    /// landing sheet. Before the landing sheet first rises they already sit above its place, so they
+    /// don't jump when it comes; on send they follow it down.
+    @MainActor static func ornamentInset(_ model: MainModel) -> CGFloat {
+        if model.sheetShown { return model.sheet.height }
+        let beforeLanding = model.stage == .logo || (model.stage == .landing && !model.landingShown)
+        return beforeLanding ? max(model.landing.height, model.landing.collapsedHeight) : model.landing.height
     }
 
     static func dismantleUIView(_ uiView: MapView, coordinator: Coordinator) {
@@ -100,6 +107,10 @@ struct RouteMapView: UIViewRepresentable {
             model.sheet.onHeightChange = { [weak self, weak model] h in
                 guard let model, model.sheetShown else { return }
                 self?.setBottomInset(h)
+            }
+            model.landing.onHeightChange = { [weak self, weak model] _ in
+                guard let model, !model.sheetShown else { return }
+                self?.setBottomInset(RouteMapView.ornamentInset(model))
             }
             mapView.ornaments.options.attributionButton.tintColor = Palette.inkMuted.uiColor
             model.project = { [weak mapView] p in

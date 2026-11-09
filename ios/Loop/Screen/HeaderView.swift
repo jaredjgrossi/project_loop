@@ -16,8 +16,14 @@ struct HeaderView: View {
                     .foregroundStyle(Palette.ink.color)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                if let trailing { trailing }
+                // Debug replay only once there's a route: the landing has no mono or data styling.
+                if let trailing, model.requestText != nil { trailing }
                 PreferencesButton()
+            }
+            if model.requestText == nil {
+                WeatherLine()
+                    .padding(.top, -6)
+                    .transition(.opacity)
             }
             if let sentence = model.requestText {
                 Group {

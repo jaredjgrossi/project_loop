@@ -99,6 +99,24 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **App icon.** Single-size 1024 AppIcon with light, dark and tinted appearances, from the design
   folder unchanged; `project.yml` names it so `xcodegen` keeps it.
 
+## Landing sheet (UI chat, 2026-11-09)
+- **Sheet, not bar.** The floating request bar is replaced by a bottom sheet modeled on Apple
+  Maps' home sheet: the request field (sunken, Fraunces placeholder; the launch typing happens
+  here), "Your runs" tiles, and "Recent". It rises at launch and slides away on send, driven by
+  the same frame-by-frame `SheetState` as the route card, so the Mapbox logo follows it.
+- **Runs live on the phone.** `RunStore` keeps saved runs and recent routes in one JSON file in
+  Application Support (no account). A recent route is the contract's `recent_routes` item (id,
+  date, name, distance_mi, times_run) plus the request text and a simplified thumbnail shape,
+  which never leave the phone. A first launch seeds "Usual" and one recent from the fixture's #1;
+  every sent request that builds a route goes to the top of Recent.
+- **Tiles.** A route's own shape (route-water line, vermilion start dot). Suggestions ("3 mi from
+  here", "By the water") fill the row after the runner's own runs, with a neutral dashed loop, and
+  send their request. A saved run or recent row draws its route with no wait and opens its card.
+- **Weather.** WeatherKit needs the paid developer program; the build uses a Personal Team, so
+  Debug builds show fixed sample weather (48°, partly cloudy) and Release builds hide the line.
+- **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
+  dropped; the flat map stays.
+
 ## Open
 - Apple's MapKit terms for showing Look Around beside a non-Apple map: unchecked. Fine for a build
   on Jared's own phone; must be checked before any public release.
@@ -119,3 +137,9 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   and also 0 for the previous build, so synthetic drags don't reproduce what was felt. On the
   device by hand, Jared reports the reworked drag smooth (2026-11-04, Debug build).
 - Dynamic Type: sizes are fixed; `TypeStyle.scale` is the one place scaling would plug in.
+- Landing sheet height: the content (field, tiles with two label lines, one recent row) needs
+  about 370 pt including the home indicator; the brief said about 262 pt. A new runner's (no
+  recents) is about 290 pt.
+- The Save tile isn't a button yet: what it saves from the landing is undecided.
+- No way back from a route's card to the landing sheet yet.
+- WeatherKit and its required Apple Weather attribution, once the paid program is in place.

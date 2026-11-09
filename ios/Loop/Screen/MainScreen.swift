@@ -5,7 +5,16 @@ struct MainScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(data: LoopData) {
-        _model = State(initialValue: MainModel(data: data))
+        _model = State(initialValue: MainModel(data: data, runs: Self.makeRunStore(data)))
+    }
+
+    /// Saved runs and recents from the phone. Debug `-LoopNewUser` shows a new runner's landing
+    /// (suggestions only) from an in-memory store, leaving the real file alone.
+    private static func makeRunStore(_ data: LoopData) -> RunStore {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-LoopNewUser") { return RunStore() }
+        #endif
+        return RunStore.load(data: data)
     }
 
     var body: some View {
@@ -76,12 +85,12 @@ struct MainScreen: View {
                 .ignoresSafeArea(edges: .bottom)
                 .allowsHitTesting(model.sheetShown)
 
-            if model.barShown {
-                RequestBar(model: model)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 12)
-                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-            }
+            // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
+            LandingSheet(model: model)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .ignoresSafeArea(.container, edges: .bottom)
+                .allowsHitTesting(model.landingShown)
+                .accessibilityHidden(!model.landingShown)
 
             // Edit mode: tapping the map leaves it.
             if model.editMode && model.editing == nil && !model.editingText {
