@@ -233,6 +233,11 @@ final class MainModel {
     }
 
     func sheetDragEnded(predictedTranslation: CGFloat, animated: Bool) {
+        // Swiped down past collapsed: dismiss the card and go home.
+        if sheet.isDismissSwipe(predictedTranslation: predictedTranslation) {
+            goHome()
+            return
+        }
         let wasOpen = sheet.restingOpen
         sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { [weak self] open in
             if open != wasOpen { self?.requestCamera(.overview, animated: animated) }

@@ -104,12 +104,13 @@ final class RunStore {
     }
 
     /// A request that built a route goes to the top of Recent (the same request again moves up).
-    func addRecent(request: String, distanceMi: Double, line: Polyline, now: Date = Date()) {
+    /// `countsAsRun` false (dismissing a card) moves it up without counting another run.
+    func addRecent(request: String, distanceMi: Double, line: Polyline, countsAsRun: Bool = true, now: Date = Date()) {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = Self.key(text)
         var times = 1
         if let i = recents.firstIndex(where: { Self.key($0.request) == key }) {
-            times = recents[i].timesRun + 1
+            times = recents[i].timesRun + (countsAsRun ? 1 : 0)
             recents.remove(at: i)
         }
         let item = RecentRoute(id: "rt_\(Int(now.timeIntervalSince1970))", date: now, name: text,

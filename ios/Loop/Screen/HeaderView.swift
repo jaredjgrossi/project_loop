@@ -11,10 +11,15 @@ struct HeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                // The wordmark is a shortcut home once there's a route or a request.
                 Text("Loop")
                     .typeStyle(.wordmark)
                     .foregroundStyle(Palette.ink.color)
-                    .accessibilityAddTraits(.isHeader)
+                    .frame(minHeight: Metrics.minTap)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.goHome() }
+                    .accessibilityAddTraits(model.requestText != nil ? [.isHeader, .isButton] : .isHeader)
+                    .accessibilityHint(model.requestText != nil ? "Goes back home" : "")
                 Spacer()
                 // Debug replay only once there's a route: the landing has no mono or data styling.
                 if let trailing, model.requestText != nil { trailing }

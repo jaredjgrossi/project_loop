@@ -86,6 +86,12 @@ final class SheetState {
         setHeight(h)
     }
 
+    /// A drag that ends below the collapsed rest and would carry the sheet well past it (the
+    /// route card: dismiss it). The drag resists below collapsed, so a little overshoot counts.
+    func isDismissSwipe(predictedTranslation: CGFloat) -> Bool {
+        height < collapsedHeight - 12 && dragStart - predictedTranslation < collapsedHeight - 90
+    }
+
     /// Picks a state from where the finger would have carried the sheet, then settles there.
     func endDrag(predictedTranslation: CGFloat, animated: Bool, completion: @escaping (Bool) -> Void) {
         let predicted = dragStart - predictedTranslation

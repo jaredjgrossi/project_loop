@@ -70,6 +70,7 @@ struct RouteSheet: View {
         .onChange(of: readContentHeight) { _, h in updateReadHeight(h) }
         .onChange(of: model.headerBottom) { _, _ in updateReadHeight(readContentHeight) }
         .padding(.horizontal, Metrics.s24)
+        .overlay(alignment: .topTrailing) { CloseCardButton { model.goHome() }.padding(.top, 12).padding(.trailing, 14) }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
@@ -104,6 +105,26 @@ struct RouteSheet: View {
             .onEnded { v in
                 model.sheetDragEnded(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion)
             }
+    }
+}
+
+/// The card's close button: clears the route and goes back to the home sheet.
+struct CloseCardButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.inkMuted.color)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Palette.surfaceSunken.color))
+                .frame(width: Metrics.minTap, height: Metrics.minTap)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close route")
+        .accessibilityHint("Clears this route and goes back home")
     }
 }
 

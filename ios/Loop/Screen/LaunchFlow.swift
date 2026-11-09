@@ -166,6 +166,37 @@ extension MainModel {
         }
     }
 
+    /// Back to home (the card's ×, swiping the card down past collapsed, or the wordmark): the
+    /// route and the sentence clear, the shown route goes to the top of Recent, the camera returns
+    /// to the location and the landing sheet rises open.
+    func goHome() {
+        guard stage != .logo, stage != .landing, stage != .typing else { return }
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        if let text = requestText, let route = shown, cardRevealed {
+            runs.addRecent(request: text, distanceMi: route.distanceMi, line: route.line, countsAsRun: false)
+        }
+        flow?.cancel()
+        playbackCancel()
+        clearSelection()
+        exitEditMode()
+        recordOnSettle = nil
+        reachStart = nil; reachFadeStart = nil; candidatesStart = nil
+        build = BuildState()
+        drawnFraction = 0
+        frameVersion += 1
+        withAnimation(reduceMotion ? nil : Motion.sheetSettle) { sheetShown = false }
+        withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = nil }
+        readOut = nil
+        fieldExample = ""
+        stage = .landing
+        locationPulsing = !reduceMotion
+        requestCamera(.at(location, zoom: 14.2), animated: !reduceMotion, duration: 0.6)
+        landingShown = true
+        landingAnchor = landing.openHeight
+        landing.settle(rest: .open, animated: !reduceMotion) { [weak self] in self?.landingAnchor = nil }
+        sheet.settle(open: false, animated: false)
+    }
+
     /// A saved run or a recent row: the sheet slides away and the route draws straight away (no
     /// wait: nothing to read), then its card opens. Until the API is wired, every run is the saved file's.
     func openRun(request: String) {
