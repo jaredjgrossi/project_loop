@@ -19,7 +19,14 @@ extension MainModel {
         static let typeStart: TimeInterval = 2.2
         static let typeStep: TimeInterval = 0.055
         /// Send → parsed (the parser's median, decision log 2026-11-08).
-        static let parse: TimeInterval = 3.0
+        static var parse: TimeInterval {
+            #if DEBUG
+            // Debug: `-LoopParseAt 1.7` simulates when `parsed` arrives (median 1.7 s, p90 3.1 s, 2026-11-09).
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-LoopParseAt"), i + 1 < args.count, let t = Double(args[i + 1]) { return t }
+            #endif
+            return 3.0
+        }
         /// parsed → first route.
         static let firstRoute: TimeInterval = 1.0
         static let candidatesAfterParse: TimeInterval = 0.5
@@ -126,7 +133,7 @@ extension MainModel {
 
     /// While typing, the sheet fits the field and its matches (it changes as the runner types).
     func layoutSearch(animated: Bool) {
-        guard searchMode else { return }
+        guard searchMode, landingShown, landingAnchor == nil else { return }
         landing.slide(to: landingSearchHeight(keyboard: keyboardHeight), animated: animated,
                       duration: 0.2, curve: SheetState.settleCurve)
     }
@@ -152,6 +159,8 @@ extension MainModel {
     func send(_ text: String, reduceMotion: Bool) {
         let sentence = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sentence.isEmpty else { return }
+        // Leave typing first, so nothing reacting to the cleared field thinks the runner is still typing.
+        stage = .reading
         flow?.cancel()
         playbackCancel()
         clearSelection()
