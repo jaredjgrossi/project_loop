@@ -200,7 +200,7 @@ struct CardBlock: View {
                                 .typeStyle(.numeralXL)
                                 .foregroundStyle(Palette.ink.color)
                             Text("mi")
-                                .typeStyle(.unit)
+                                .typeStyle(.numeralL)
                                 .foregroundStyle(Palette.unitInk.color)
                             // Only the file's own label, never a default.
                             if let trust = shown.distanceTrust {
@@ -227,7 +227,7 @@ struct CardBlock: View {
                             Button { model.openReadIt() } label: {
                                 HStack(spacing: 8) {
                                     Circle().strokeBorder(Palette.inkMuted.color, lineWidth: 1.5).frame(width: 9, height: 9)
-                                    Text(line).typeStyle(TypeStyle(family: .instrumentSans, size: 13.5, lineHeight: 18, weight: 400))
+                                    Text(line).typeStyle(.label)
                                         .foregroundStyle(Palette.inkSoft.color)
                                 }
                                 .frame(height: 26, alignment: .bottom)

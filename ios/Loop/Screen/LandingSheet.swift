@@ -168,7 +168,8 @@ struct RequestField: View {
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let style = TypeStyle(family: .fraunces, size: 20, lineHeight: 24, weight: 400)
+    /// Fraunces 24/26 (numeral-l's metrics): the design system's Fraunces size that fits the field.
+    private static let style = TypeStyle.numeralL
 
     var body: some View {
         let typing = model.stage == .typing
@@ -255,7 +256,7 @@ private struct RunTile: View {
                     .frame(width: side, height: side)
                 VStack(spacing: 0) {
                     Text(name)
-                        .typeStyle(TypeStyle(family: .instrumentSans, size: 14, lineHeight: 18, weight: 500))
+                        .typeStyle(.label)
                         .foregroundStyle(Palette.ink.color)
                     if let detail {
                         Text(detail)
@@ -288,7 +289,7 @@ private struct SaveTile: View {
                 .overlay(Image(systemName: "plus").font(.system(size: 18, weight: .regular)).foregroundStyle(Palette.inkMuted.color))
                 .frame(width: side, height: side)
             Text("Save")
-                .typeStyle(TypeStyle(family: .instrumentSans, size: 14, lineHeight: 18, weight: 500))
+                .typeStyle(.label)
                 .foregroundStyle(Palette.inkMuted.color)
         }
         .frame(width: side)
@@ -311,7 +312,7 @@ private struct RecentRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(RunStore.dayText(recent.date))
-                    .typeStyle(TypeStyle(family: .instrumentSans, size: 14, lineHeight: 18, weight: 400))
+                    .typeStyle(.label)
                     .foregroundStyle(Palette.inkMuted.color)
             }
             .frame(height: 40)
@@ -439,10 +440,10 @@ struct WeatherLine: View {
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(Palette.inkMuted.color)
                     Text(r.temperature)
-                        .typeStyle(TypeStyle(family: .fraunces, size: 18, lineHeight: 22, weight: 400))
+                        .typeStyle(.numeralL)
                         .foregroundStyle(Palette.inkSoft.color)
                     Text("· " + Self.dayTime(context.date))
-                        .typeStyle(TypeStyle(family: .instrumentSans, size: 15, lineHeight: 20, weight: 400))
+                        .typeStyle(.body)
                         .foregroundStyle(Palette.inkMuted.color)
                 }
                 .accessibilityElement(children: .ignore)

@@ -25,6 +25,19 @@ struct TypeStyle {
     var uppercase = false
     var tabularNumerals = false
 
+    /// Only the design system's twelve styles exist (below): the initializer is private to this
+    /// file, so a view can't make an off-list size or family.
+    fileprivate init(family: FontFamily, size: CGFloat, lineHeight: CGFloat, weight: CGFloat,
+                     tracking: CGFloat = 0, uppercase: Bool = false, tabularNumerals: Bool = false) {
+        self.family = family
+        self.size = size
+        self.lineHeight = lineHeight
+        self.weight = weight
+        self.tracking = tracking
+        self.uppercase = uppercase
+        self.tabularNumerals = tabularNumerals
+    }
+
     static var scale: CGFloat = 1
 
     var pointSize: CGFloat { size * Self.scale }
@@ -71,11 +84,11 @@ struct TypeStyle {
     var lineSpacing: CGFloat { max(0, lineHeight * Self.scale - uiFont.lineHeight) }
 }
 
+/// The brief's twelve type styles ("Type styles", ios-build-brief-v1). Tracking on numeral-xl,
+/// wordmark and body-strong is the D mockup's.
 extension TypeStyle {
     static let numeralXL = TypeStyle(family: .fraunces, size: 56, lineHeight: 56, weight: 380, tracking: -0.02, tabularNumerals: true)
     static let numeralL = TypeStyle(family: .fraunces, size: 24, lineHeight: 26, weight: 400, tabularNumerals: true)
-    /// The "mi" beside the distance (Fraunces 22, as drawn).
-    static let unit = TypeStyle(family: .fraunces, size: 22, lineHeight: 26, weight: 400)
     static let request = TypeStyle(family: .fraunces, size: 27, lineHeight: 31, weight: 400)
     static let wordmark = TypeStyle(family: .fraunces, size: 22, lineHeight: 26, weight: 600, tracking: -0.01)
     static let body = TypeStyle(family: .instrumentSans, size: 16, lineHeight: 22, weight: 400)

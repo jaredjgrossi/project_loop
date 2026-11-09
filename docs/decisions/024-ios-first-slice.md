@@ -120,6 +120,11 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   while collapsed starts typing without opening the runs.
 - **Weather.** WeatherKit needs the paid developer program; the build uses a Personal Team, so
   Debug builds show fixed sample weather (48°, partly cloudy) and Release builds hide the line.
+- **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
+  the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
+  (without counting another run).
+- **Type.** Only the brief's twelve type styles exist (`TypeStyle`'s initializer is private to
+  `Typography.swift`); the audit and what changed are in `docs/ios-type-audit.md`.
 - **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
   dropped; the flat map stays.
 
@@ -147,5 +152,4 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   needs about 370 pt including the home indicator; the brief said about 262 pt. A new runner's
   (no recents) is about 290 pt; collapsed, about 120 pt.
 - The Save tile isn't a button yet: what it saves from the landing is undecided.
-- No way back from a route's card to the landing sheet yet.
 - WeatherKit and its required Apple Weather attribution, once the paid program is in place.
