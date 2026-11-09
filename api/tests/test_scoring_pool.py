@@ -98,3 +98,25 @@ def test_workers_exit_when_their_parent_is_killed():
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+# ---- from decision 018 ----------------------------------------------------------------------------------------------
+
+def test_scoring_runs_in_another_process_and_can_be_turned_off(monkeypatch):
+    # The pool runs the same score_context; here _score is swapped for a stand-in that needs no database.
+    monkeypatch.setenv("LOOP_CONTEXT_PROCESSES", "0")
+    monkeypatch.setattr(scoring_pool, "_pool", None)
+    monkeypatch.setattr(scoring_pool, "_score", lambda *a: ("inline", os.getpid()))
+    assert scoring_pool.pool() is None
+    assert scoring_pool.score([[0, 0]], True, None, None, None) == ("inline", os.getpid())
+
+
+def test_a_worker_process_answers_from_its_own_pid(monkeypatch):
+    monkeypatch.setenv("LOOP_CONTEXT_PROCESSES", "1")
+    monkeypatch.setattr(scoring_pool, "_pool", None)
+    p = scoring_pool.pool()
+    try:
+        assert p.submit(os.getpid).result() != os.getpid()
+    finally:
+        p.shutdown()
+        scoring_pool._pool = None
