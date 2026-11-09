@@ -1,6 +1,6 @@
 # Parse evals
 
-The 50 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
+The 51 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
 
 ```
 make eval-parse                          # the stub parser: every case fails
@@ -35,3 +35,4 @@ the place lookups made, the routing calls made, and the template key behind ever
   keep list is the minimum that must be kept. Must-nots still apply to every case.
 - Rule 8 (spans, 2026-11-09) applies to every outcome: a said chip without a span, or a span that isn't the request's
   words at its positions, fails the case. The oracle gives each said chip the whole sentence as its span.
+- Rule 9 (via modes, 2026-11-09) compares each via's `mode` with the case's, `through` when the case lists none.

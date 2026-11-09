@@ -30,11 +30,12 @@ from pydantic import ValidationError
 
 from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints, field_sources
 from api.copy import render
+from api.loops import loop_by_id, loop_named, mode_for, place_for
 from api.places import is_streetlike, normalize
 from api.spans import find_span
 
-PROMPT_VERSION = "parse_v4"  # v4 (2026-11-09) quotes the runner's words in `said`, for spans. Earlier versions stay in
-# api/prompts/: their calls are in llm_calls by version.
+PROMPT_VERSION = "parse_v5"  # v5 (2026-11-09) records each via's `word` (around or through, decision 035); v4 quoted
+# the runner's words in `said`, for spans. Earlier versions stay in api/prompts/: their calls are in llm_calls by version.
 PROMPT = (Path(__file__).parent / "prompts" / f"{PROMPT_VERSION}.md").read_text()
 DEFAULT_MODEL = "claude-haiku-5-5"
 DEFAULT_EFFORT = "low"
@@ -118,7 +119,7 @@ TOOL = {
         "start": _PLACE,
         "end": _PLACE,
         "via": {"type": "array", "items": _obj({"name": _STR, "kind": _ENUM("place", "the_park"),
-                                                "whole_way": _BOOL})},
+                                                "whole_way": _BOOL, "word": _STR})},
         "avoid": {"type": "array", "items": _obj({"name": _STR, "how": _ENUM("along", "area")})},
         **_PREFS,
         "amenities": {"type": "array", "items": _obj({"kind": _ENUM("restroom", "water"), "at_mile": _NUM,
@@ -348,6 +349,7 @@ class _Build:
     start_point: tuple[float, float] | None = None
     answers: dict = field(default_factory=dict)  # what earlier answers settled (see `answer_overrides`)
     via_from: list = field(default_factory=list)  # for each via chip, its 1-based item in the extraction's via list
+    via_modes: list = field(default_factory=list)  # for each via chip, its loops.Mode (decision 035)
     amenity_from: list = field(default_factory=list)  # the same for amenity chips
     span_from: dict = field(default_factory=dict)  # a chip code set from another chip's words: chip id -> that id
     later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
@@ -643,6 +645,7 @@ def _vias(b: _Build, ext: dict) -> list:
             out.append((v, b.answers[f"place:{target}"]))
             b.via_from.append(i + 1)
             continue
+        named = loop_named(v["name"]) if v["kind"] == "place" else None  # "the Reservoir", "McCarren track"
         if f"text:{target}" in b.answers:
             v = {**v, "kind": "place", "name": b.answers[f"text:{target}"]}
         if v["kind"] == "the_park":
@@ -655,7 +658,7 @@ def _vias(b: _Build, ext: dict) -> list:
             b.via_from.append(i + 1)
             continue
         b.lookups.append({"name": v["name"], "role": "via"})
-        found = b.places.lookup(v["name"], near=point)
+        found = b.places.lookup(place_for(named) if named else v["name"], near=point)
         if not found:
             b.ask("via", "places", "question.place.not_found", typed=typed, name=v["name"])
         chosen = found[0] if len(found) == 1 else b.places.pick(found, borough)
@@ -696,6 +699,8 @@ def _distance(b: _Build, ext: dict) -> None:
         b.ask("distance", "parser", "question.distance.workout", _miles_options(ASK_WORKOUT), typed=MILES_TYPED)
     if ext.get("long_run"):
         b.ask("distance", "parser", "question.distance.long_run", _miles_options(ASK_LONG_RUN), typed=MILES_TYPED)
+    if any(md.mode == "around" for md in b.via_modes):
+        return  # "a loop of Prospect Park": the lap and the way there set the length (decision 035)
     if b.ctx.usual_mi:
         b.set("distance_mi", b.ctx.usual_mi, "usual")
         return
@@ -827,8 +832,11 @@ def _chips(b: _Build) -> list[dict]:
         chips.append(_chip(b, "c_end", "end", key, src["end_place"], name=p.get("name") or p.get("id"),
                            borough=p.get("borough")) | {"place": _chip_place(p)})
     for i, p in enumerate(c.get("via_places") or []):
-        chips.append(_chip(b, f"c_via_{i + 1}", "via", "chip.via.place", src["via_places"], name=p["name"],
-                           borough=p["borough"]) | {"place": _chip_place(p)})
+        around = p.get("mode") == "around"
+        lap = (loop_by_id(p["loop"]) or {}).get("name") if p.get("loop") else None
+        chips.append(_chip(b, f"c_via_{i + 1}", "via", "chip.via.lap" if around else "chip.via.place",
+                           src["via_places"], name=lap or p["name"], borough=p["borough"])
+                     | {"place": _chip_place(p), "mode": p.get("mode", "through")})
     if c.get("distance_mi") is not None:
         if "tolerance_pct" in c:  # a range said as "3-4 miles" (decision 025: one chip)
             d, t = c["distance_mi"], c["tolerance_pct"] / 100
@@ -841,6 +849,8 @@ def _chips(b: _Build) -> list[dict]:
         chips.append(_chip(b, "c_distance", "distance", "chip.distance.shortest", "default"))
     elif c.get("reuse_route_id"):
         chips.append(_chip(b, "c_distance", "distance", "chip.distance.reused", "default"))
+    elif any(v.get("mode") == "around" for v in c.get("via_places") or []):
+        chips.append(_chip(b, "c_distance", "distance", "chip.distance.lap", "default"))
     if c.get("start_time"):
         srcs = {src.get("start_time"), src.get("start_date")}
         source = "said" if "said" in srcs else "usual" if "usual" in srcs else "default"
@@ -977,7 +987,12 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
     vias = step(lambda: _vias(b, ext)) or []
     step(lambda: _start(b, ext, vias))
     if vias:
-        b.set("via_places", [_ref(m) for _, m in vias], "said")
+        b.via_modes = [mode_for(spec.get("word"), spec.get("name") or "", m.matched, m.kind) for spec, m in vias]
+        for md in b.via_modes:  # a lap Loop can't run: say so, and pass the place instead (rule 3)
+            if md.cant:
+                b.cant.append({"id": f"k_{len(b.cant) + 1}", "gap": "lap", "text": b.say(md.cant, name=md.name)})
+        b.set("via_places", [_ref(m) | {"mode": md.mode} | ({"loop": md.loop} if md.loop else {})
+                             for (_, m), md in zip(vias, b.via_modes)], "said")
         if "scenery" not in b.constraints and any(m.kind in ("park", "water") for _, m in vias):
             b.set("scenery", "park_or_water", "said")  # "a few miles in the park" asks for park scenery
             first = next(k for k, (_, m) in enumerate(vias, 1) if m.kind in ("park", "water"))

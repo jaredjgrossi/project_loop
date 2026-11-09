@@ -1,0 +1,58 @@
+{
+  "_doc": "Known running loops (decision 035). A via on one of these `places` runs a full lap of the loop when the runner says around, loop of or lap of; `around_alone` places mean the lap when named on their own (\"Central park reservor\"). `names` are the loop's own names, which always mean the lap. `published_mi` and `source` are what the park says; `etl.build_running_loops` measures the ring from OSM and records both. `geometry: null` means the router can't run the loop yet: Loop says so and routes to it instead (rule 3). Keep this list short; anything not on it is a plain via.",
+  "loops": [
+    {
+      "id": "reservoir",
+      "name": "the Reservoir running track",
+      "places": ["Central Park Reservoir", "Jacqueline Kennedy Onassis Reservoir"],
+      "around_alone": true,
+      "names": ["Reservoir", "Reservoir track", "Reservoir loop", "Reservoir running track", "Shuman running track"],
+      "published_mi": 1.58,
+      "source": "https://centralparknyc.org/locations/stephanie-and-fred-shuman-running-track",
+      "direction": "counterclockwise",
+      "direction_source": "Central Park Conservancy: the track is one-way, counterclockwise",
+      "geometry": {"from": "osm_way", "way_id": 179679714}
+    },
+    {
+      "id": "central_park_drive",
+      "name": "the Central Park drive loop",
+      "places": ["Central Park"],
+      "around_alone": false,
+      "names": ["Central Park loop", "Central Park drive", "Central Park full loop", "Central Park Drive loop"],
+      "published_mi": 6.1,
+      "source": "https://centralparknyc.org/activities/running",
+      "direction": "counterclockwise",
+      "direction_source": "The drives' traffic direction (runners keep to the left lane)",
+      "geometry": {"from": "drive_ring", "place": "Central Park", "ways": ["East Drive", "West Drive", "Center Drive"],
+                   "highways": ["pedestrian", "unclassified"]}
+    },
+    {
+      "id": "prospect_park_drive",
+      "name": "the Prospect Park drive loop",
+      "places": ["Prospect Park"],
+      "around_alone": false,
+      "names": ["Prospect Park loop", "Prospect Park drive", "Prospect Park Drive loop"],
+      "published_mi": 3.35,
+      "source": "https://citibikenyc.com/rides/prospect-park-loop",
+      "direction": "counterclockwise",
+      "direction_source": "The drive's traffic direction",
+      "geometry": {"from": "drive_ring", "place": "Prospect Park", "ways": ["East Drive", "West Drive"],
+                   "highways": ["pedestrian", "unclassified"], "gap_m": 10},
+      "length_note": "OSM's drive ring measures 3.49 mi; the 3.35 mi most sources give is likely measured on the inside lane or without the bend at Grand Army Plaza. Loop counts the routed lap"
+    },
+    {
+      "id": "mccarren_track",
+      "name": "the McCarren Park track",
+      "places": [],
+      "around_alone": false,
+      "names": ["McCarren track", "McCarren Park track", "McCarren running track"],
+      "place_for_names": "McCarren Park",
+      "published_mi": 0.25,
+      "source": "https://greenpointers.com/2019/01/29/mccarren-park-track-reopens-following-improvements",
+      "direction": "counterclockwise",
+      "direction_source": "Standard track direction",
+      "geometry": null,
+      "why_no_geometry": "OSM maps the track as an area (leisure=track, way 4102021), not a path, so the router can't run on it"
+    }
+  ]
+}

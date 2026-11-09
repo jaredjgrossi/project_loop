@@ -84,7 +84,7 @@ def generate_a_to_b(
     on_candidate: Callable[[Candidate, float], None] | None = None,
     on_top3: Callable[[dict], None] | None = None,
     vias: Sequence[tuple[float, float]] = (),  # step 9: places to pass on the way, in order
-    through: Sequence[tuple[dict, float]] = (),  # their shapes, which every route must pass
+    through: Sequence[tuple[dict, float, float | None]] = (),  # their rules (via.through_rules): pass or lap each
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through))

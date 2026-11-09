@@ -88,6 +88,13 @@ class PlaceRef(BaseModel):
         return render("request.place", name=self.name, borough=self.borough)
 
 
+class ViaRef(PlaceRef):
+    """A via place and how the run uses it (decision 035): `through` passes it; `around` runs a full lap of its ring,
+    a known running loop (`loop`, an id in etl/curated/running_loops.json) or the place's outline. Code sets both."""
+    mode: Literal["through", "around"] = "through"
+    loop: str | None = None
+
+
 class Span(BaseModel):
     """Where a chip's words sit in the request text: the runner's own characters, Unicode code points, end exclusive
     (api/spans.py)."""
@@ -123,7 +130,7 @@ class RunConstraints(BaseModel):
     use_my_location: bool = False
     start_place: PlaceRef | None = None
     end_place: PlaceRef | None = None  # A to B (Phase 3, step 7)
-    via_places: list[PlaceRef] = Field(default_factory=list, max_length=5)  # through or along, in order (step 8)
+    via_places: list[ViaRef] = Field(default_factory=list, max_length=5)  # through, along or around, in order
     # Optional only when an end or a reused route sets the length (R10).
     distance_mi: float | None = Field(default=None, ge=0.5, le=30)
     tolerance_pct: float = Field(default=5, gt=0, le=25)
@@ -178,8 +185,9 @@ class RunConstraints(BaseModel):
     def _check(self) -> "RunConstraints":
         if sum([bool(self.start_address), self.use_my_location, self.start_place is not None]) != 1:
             raise ValueError("give exactly one start: an address, use_my_location or a start place")
-        if self.distance_mi is None and self.end_place is None and self.reuse_route_id is None:
-            raise ValueError("a distance is needed unless the run ends somewhere else or reuses a route")
+        if (self.distance_mi is None and self.end_place is None and self.reuse_route_id is None
+                and not any(v.mode == "around" for v in self.via_places)):
+            raise ValueError("a distance is needed unless the run ends somewhere else, reuses a route or runs a lap")
         if self.distance_mi is not None:
             for a in self.amenities:
                 if a.at_mile > self.distance_mi:

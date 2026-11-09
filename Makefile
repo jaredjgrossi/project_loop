@@ -24,6 +24,7 @@ setup:
 	uv run python -m etl.build_corridors
 	uv run python -m etl.build_closures
 	uv run python -m etl.load_places
+	uv run python -m etl.build_running_loops
 
 up:
 	docker compose up -d --wait
@@ -36,6 +37,7 @@ data:
 
 corridors:
 	uv run python -m etl.build_corridors
+	uv run python -m etl.build_running_loops
 	uv run python -m etl.build_closures
 
 closures:

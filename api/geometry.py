@@ -87,3 +87,43 @@ def passes_through(coords: list[list[float]], shape: dict, tolerance_m: float) -
     if len(coords) < 2:
         return False
     return shapes_within({"type": "LineString", "coordinates": [c[:2] for c in coords]}, shape, tolerance_m)
+
+
+def _flat(origin: tuple[float, float]):
+    """[lon, lat] -> meters on a local flat projection around `origin` ([lon, lat])."""
+    import numpy as np
+    lon0, lat0 = origin
+    scale = np.array([111_320 * math.cos(math.radians(lat0)), 110_574])
+    return lambda xy: (xy - np.array([lon0, lat0])) * scale
+
+
+def line_length_m(coords: list[list[float]]) -> float:
+    """The length of a [lon, lat] line in meters (local flat projection; exact enough across the city)."""
+    import shapely
+    from shapely.geometry import LineString
+    return shapely.transform(LineString([c[:2] for c in coords]), _flat(coords[0][:2])).length
+
+
+def covered_share(coords: list[list[float]], line: dict, tolerance_m: float) -> float:
+    """The share of a GeoJSON line (a lap's ring) that a [lon, lat] route runs along: the length of the line within
+    `tolerance_m` of the route over the line's length (decision 035)."""
+    import shapely
+    from shapely.geometry import LineString
+    from shapely.geometry import shape as to_shape
+
+    if len(coords) < 2:
+        return 0.0
+    flat = _flat(coords[0][:2])
+    route = shapely.transform(LineString([c[:2] for c in coords]), flat)
+    ring = shapely.transform(to_shape(line), flat)
+    if ring.length == 0:
+        return 0.0
+    return ring.intersection(route.buffer(tolerance_m)).length / ring.length
+
+
+def oriented(coords: list, direction: str) -> list:
+    """A closed ring's [lon, lat] coordinates, turned to run counterclockwise or clockwise."""
+    from shapely.geometry import LinearRing
+
+    ccw = LinearRing([c[:2] for c in coords]).is_ccw
+    return list(coords) if ccw == (direction == "counterclockwise") else list(coords)[::-1]

@@ -84,7 +84,69 @@ def test_only_features_on_a_via_anchor_the_routes():
 
 def test_a_park_via_is_passed_by_touching_its_outline():
     park = Via(NORTH[0], NORTH[1], "Test Park", square(NORTH, 300))
-    (shape, tol), = through_rules([park])
-    assert tol == 30 and shape["type"] == "Polygon"
+    (shape, tol, share), = through_rules([park])
+    assert tol == 30 and share is None and shape["type"] == "Polygon"
     result = run([park], 4.0)
     assert result.candidates
+
+
+# ---- around: a full lap (decision 035) -----------------------------------------------------------------------------
+
+from api.geometry import covered_share  # noqa: E402
+from api.via import LAP_SHARE, lap_points  # noqa: E402
+
+
+def ring(centre=NORTH, half_m=300):
+    """A square ring, counterclockwise, as a lap's [lon, lat] coordinates."""
+    return tuple(tuple(c) for c in square(centre, half_m)["coordinates"][0])
+
+
+def lap_via(centre=NORTH, half_m=300, name="Test Loop"):
+    return Via(centre[0], centre[1], name, square(centre, half_m), ring(centre, half_m))
+
+
+def test_lap_points_run_the_whole_ring_from_the_nearest_point_and_back():
+    r = ring()
+    pts = lap_points(r, KIPS)  # coming from the south
+    assert pts[0] == pytest.approx(pts[-1])
+    assert pts[0][0] == pytest.approx(NORTH[0] - 300 / M_LAT, abs=1e-6)  # entered on the south side
+    line = {"type": "LineString", "coordinates": [list(c) for c in r]}
+    assert covered_share([[lon, lat] for lat, lon in pts], line, 1.0) == pytest.approx(1.0)
+    # in the ring's direction: from the south side, east first (counterclockwise)
+    assert pts[1][1] > pts[0][1]
+
+
+def test_tour_runs_a_lap_for_an_around_via():
+    v = lap_via()
+    t = tour(KIPS, [v])
+    assert t[0] == KIPS and t[-1] == KIPS and len(t) > 6
+    assert v.mode == "around" and point_via().mode == "through"
+
+
+def test_the_lap_rule_is_the_ring_and_a_share():
+    (shape, tol, share), = through_rules([lap_via()])
+    assert shape["type"] == "LineString" and tol == 30 and share == LAP_SHARE
+
+
+def test_every_route_runs_the_whole_lap_and_fits_the_distance():
+    v = lap_via()
+    lap_m = 2400  # 4 x 600 m
+    result = run([v], 4.0)
+    assert result.candidates
+    line = through_rules([v])[0][0]
+    for c in result.candidates:
+        assert covered_share(c.route.coordinates, line, 30) >= LAP_SHARE and abs(c.miss_pct) <= 5
+        assert c.route.distance_m > lap_m
+    assert "out_and_back" not in {c.kind for c in result.candidates}  # a lap isn't run twice
+
+
+def test_a_route_that_only_touches_the_ring_is_rejected():
+    v = lap_via()
+    shortest = straight_route(tour(KIPS, [v]))
+
+    def touch(points, custom_model=None):  # to the ring's south side and back, never round it
+        return straight_route([KIPS, (NORTH[0] - 300 / M_LAT, NORTH[1]), KIPS])
+    result = generate_loops(KIPS[0], KIPS[1], 4.0, GRID, route_fn=touch, round_trip_fn=None, top_n=10,
+                            only_anchored=True, through=through_rules([v]),
+                            extra_jobs=via_jobs(KIPS, [v], 4.0, touch, shortest, "any"))
+    assert result.candidates == [] and result.rejected["misses_lap"] > 0

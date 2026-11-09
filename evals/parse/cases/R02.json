@@ -13,7 +13,7 @@
     "end",
     "via"
   ],
-  "doc": "ASK (start, places) · \"Which 86th St?\" · options East side (5th Ave) · West side (Central Park West) · keep via_places=[place:\"Central Park Reservoir\"], end_place=place:\"Central Park South\"",
+  "doc": "ASK (start, places) · \"Which 86th St?\" · options East side (5th Ave) · West side (Central Park West) · keep via_places=[place:\"Central Park Reservoir\", around] (the Reservoir named on its own is its running track, decision 035), end_place=place:\"Central Park South\"",
   "expect": {
     "outcome": "ASK",
     "question": {
@@ -28,7 +28,8 @@
       "via_places": {
         "value": [
           {
-            "place": "Central Park Reservoir"
+            "place": "Central Park Reservoir",
+            "mode": "around"
           }
         ]
       },

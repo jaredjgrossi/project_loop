@@ -29,7 +29,7 @@ def _actual(name, value):
         ref = {"kind": kind, "id": value[kind]} if kind == "saved" else {"kind": kind, "name": value[kind]}
         return ref | ({"borough": value["borough"]} if "borough" in value else {})
     if name == "via_places":
-        return [_actual("start_place", v) for v in value]
+        return [_actual("start_place", v) | {"mode": v.get("mode", "through")} for v in value]
     return copy.deepcopy(value)
 
 
@@ -86,10 +86,10 @@ def reasons(case_id: str, output: dict) -> list[str]:
 
 # ---- the fixtures ----------------------------------------------------------------------------------------------
 
-def test_fifty_cases_with_the_docs_coverage():
-    assert len(CASES) == 50 and len(BY_ID) == 50
-    assert [c["seq"] for c in CASES] == list(range(1, 51))
-    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 11, "E": 4, "F": 7, "G": 6,
+def test_fifty_one_cases_with_the_docs_coverage():  # P50 joined for decision 035
+    assert len(CASES) == 51 and len(BY_ID) == 51
+    assert [c["seq"] for c in CASES] == list(range(1, 52))
+    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 12, "E": 4, "F": 7, "G": 6,
                                                      "H": 5, "I": 3, "J": 3}
     assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 13  # P16, P46 parse since R19
     assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 16
@@ -142,8 +142,8 @@ def test_request_follows_the_contract_and_drops_human_labels():
 
 def test_stub_fails_every_case():
     rows = runner.run(runner.load_parser("evals.parse.stub:parse"))
-    assert len(rows) == 50 and not any(g.passed for _, g, _ in rows)
-    assert "passed 0/50" in runner.table(rows)
+    assert len(rows) == 51 and not any(g.passed for _, g, _ in rows)
+    assert "passed 0/51" in runner.table(rows)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])
@@ -326,3 +326,9 @@ def test_a_default_has_no_span_and_a_question_names_a_real_chip():
     out["parsed"]["question"]["chip_id"] = "c_nope"
     got = reasons("R06", out)
     assert any("has a span" in r for r in got) and any("isn't a chip" in r for r in got)
+
+
+def test_a_via_in_the_wrong_mode_fails():  # rule 9 (decision 035)
+    out = oracle(BY_ID["P50"])
+    out["parsed"]["constraints"]["via_places"][0]["mode"] = "through"
+    assert any(r.startswith("via_places") for r in reasons("P50", out))

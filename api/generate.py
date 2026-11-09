@@ -31,7 +31,7 @@ from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
-from api.geometry import passes_through
+from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
 from api.route_context import ContextScores
@@ -235,7 +235,9 @@ class _Rules:
     avoid: tuple[NoGoZone, ...]
     context_fn: ContextFn | None = None
     closures: tuple[Closure, ...] = ()
-    through: tuple[tuple[dict, float], ...] = ()  # step 9: (GeoJSON shape, meters) the route must pass, each one
+    # step 9: (GeoJSON shape, meters, None) the route must pass, each one; decision 035: (ring, meters, share) a lap
+    # it must run along
+    through: tuple[tuple[dict, float, float | None], ...] = ()
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -258,8 +260,11 @@ def _evaluate(
         return Rejection(method, label, "no_go_zone")
     if passed(route.coordinates, rules.closures):  # decision 017: a hard rule, like a no-go zone
         return Rejection(method, label, "closure")
-    if rules.through and not all(passes_through(route.coordinates, shape, tol) for shape, tol in rules.through):
-        return Rejection(method, label, "misses_via")  # step 9: through or along every via place
+    for shape, tol, share in rules.through:  # step 9: through or along every via place; 035: a lap of each ring
+        if share is None and not passes_through(route.coordinates, shape, tol):
+            return Rejection(method, label, "misses_via")
+        if share is not None and covered_share(route.coordinates, shape, tol) < share:
+            return Rejection(method, label, "misses_lap")
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
@@ -483,7 +488,7 @@ def generate_loops(
     # extra_jobs, and every route must pass each `through` shape.
     only_anchored: bool = False,
     extra_jobs: Callable[["_Rules"], list[tuple[int, Callable]]] | None = None,
-    through: Sequence[tuple[dict, float]] = (),
+    through: Sequence[tuple[dict, float, float | None]] = (),
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)

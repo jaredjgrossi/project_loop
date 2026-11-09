@@ -1,3 +1,5 @@
+import pytest
+
 from api.geometry import line_touches_polygon, point_in_ring
 
 # A 100 x 100 square (lon/lat units don't matter to the predicate).
@@ -110,3 +112,26 @@ def test_a_route_along_part_of_a_path_passes_it():
     path = {"type": "MultiLineString", "coordinates": [[_east(2000), _east(3000)], [_east(5000), _east(6000)]]}
     assert passes_through([_east(0), _east(2500)], path, 60)
     assert not passes_through([[-73.9799, 40.70], [-73.97, 40.70]], path, 60)
+
+
+# ---- laps (decision 035) -------------------------------------------------------------------------------------------
+
+def _square(n=0.002):
+    return [[-73.97, 40.78], [-73.97 + n, 40.78], [-73.97 + n, 40.78 + n], [-73.97, 40.78 + n], [-73.97, 40.78]]
+
+
+def test_covered_share_of_a_ring():
+    from api.geometry import covered_share
+    ring = {"type": "LineString", "coordinates": _square()}
+    assert covered_share(_square(), ring, 30) == pytest.approx(1.0)
+    half = _square()[:3]  # two of four sides
+    assert covered_share(half, ring, 5) == pytest.approx(0.5, abs=0.02)
+    assert covered_share([[-73.90, 40.70], [-73.89, 40.70]], ring, 30) == 0.0
+
+
+def test_line_length_and_orientation():
+    from api.geometry import line_length_m, oriented
+    sq = _square()
+    assert line_length_m(sq) == pytest.approx(4 * 0.002 * 110_574 * 0.5 + 4 * 0.002 * 111_320 * 0.758 * 0.5, rel=0.03)
+    assert oriented(sq, "counterclockwise") == sq  # east, north, west, south: counterclockwise
+    assert oriented(sq, "clockwise") == sq[::-1]

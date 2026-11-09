@@ -68,6 +68,7 @@ New: `start_place`, `end_place`, `via_places` (place refs: places like `place:"P
   3. Otherwise, ask.
 
   The chip always names the borough.
+- **R20. Around or through** (decision 035). Claude records the runner's word for each via (`word`); code sets the mode. "Around", "loop of" and "lap of" mean a full lap (`mode=around`). "Through", "in", "along" and "past" mean `through`. A known running loop named on its own means its lap: the Reservoir ("Central park reservor") and each loop's own name ("the Prospect Park loop", "McCarren track"). Anything else is `through`. An around via with no distance said sets no distance, not the usual one: the lap and the way there set it. A lap Loop can't run (McCarren's track) or a place with no loop to run (a street) is passed instead, with a can't-do line (`gap: "lap"`).
 
 **Past routes and planned runs**
 - **R17. Past routes come only from the recent-routes list.** Match by date or name. Several matches: ask. None: say so. "My usual" means the most-run route, rebuilt for now. Without one, it means usual distance plus `familiar=favor`.
@@ -129,8 +130,8 @@ Must not: add a can't-do line. This is covered now.
 PARSE · `distance_mi=8 (said)` · `scenery=park_or_water (said)` · `end_place=place:"McCarren Park" (said)` · `use_my_location (default)` · `start_date=today (said)`
 
 **R02** · C1 · `Central park reservor, starting at 86th st and ending at central park south` *(Jared)* · [lookup]
-ASK (start, places) · "Which 86th St?" · options `East side (5th Ave) · West side (Central Park West)` · keep `via_places=[place:"Central Park Reservoir"]`, `end_place=place:"Central Park South"`
-Must not: ask for a distance (R10).
+ASK (start, places) · "Which 86th St?" · options `East side (5th Ave) · West side (Central Park West)` · keep `via_places=[place:"Central Park Reservoir", around]`, `end_place=place:"Central Park South"`
+Must not: ask for a distance (R10). The Reservoir named on its own is its running track (R20); end to end, the route is a full Reservoir lap between 86th St (west) and Central Park South.
 
 **R03** · C1 · `Chill run on the west side highway, 3 easy miles` *(Jared)* · [lookup] [engine]
 PARSE · `distance_mi=3 (said)` · `via_places=[place:"Hudson River Greenway"] (said)` · `use_my_location (default)`
@@ -164,6 +165,10 @@ ASK (start, places) · "Which park?" with the nearest parks as options (no major
 **P46** · C1 · `run to work, 5 mi, office is 120 broadway` · [lookup]
 PARSE · `end_place=address:"120 Broadway" (Manhattan, said)` · `distance_mi=5 (said)` · `use_my_location (default)`
 The route starts in Manhattan, so R19 picks the Manhattan address. The chip names the borough.
+
+**P50** · C2 · `Loop of Prospect Park from Grand Army Plaza` *(Jared, 2026-11-09)* · [lookup] [engine]
+PARSE · `start_place=place:"Grand Army Plaza" (Brooklyn, said)` · `via_places=[place:"Prospect Park", around] (said)` · `scenery=park_or_water (said)`
+Must not: use the usual 3.1 mi; the lap sets the length (R20). End to end, a full lap of the Prospect Park drive and back to the plaza.
 
 ### E. Avoid
 **R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup]
@@ -272,16 +277,16 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | A. Bare and vague | 4 | 1 | 2 |
 | B. Distance and units | 4 | 1 | 0 |
 | C. Time | 3 | 0 | 1 |
-| D. Start, end and places | 11 | 5 | 4 |
+| D. Start, end and places | 12 | 5 | 4 |
 | E. Avoid | 4 | 0 | 1 |
 | F. Preferences | 7 | 0 | 0 |
 | G. Training, Exploring and novelty | 6 | 2 | 3 |
 | H. Past routes | 5 | 2 | 5 |
 | I. Multi-part and contradictory | 3 | 0 | 0 |
 | J. Impossible and feasibility | 3 | 2 | 0 |
-| **Total** | **50** | **13** | **16** |
+| **Total** | **51** | **13** | **16** |
 
-The set is at the cap. Each diary phrasing replaces the synthetic case closest to it.
+The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035). Each diary phrasing replaces the synthetic case closest to it.
 
 Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, P40, P41 and P43. Each was covered by a real phrasing or another case, or was changed by a decision.
 
@@ -295,6 +300,7 @@ A case passes when:
 6. No "must not" is violated. Any violation fails the case.
 7. Every text the runner sees comes from the templates (R1).
 8. Spans (2026-11-09): every chip whose source is `said` has a span, the request's own words at its positions; every other chip has `span: null`; and the question's `chip_id` is a chip in the event, or null.
+9. Via modes (2026-11-09, R20): each listed via has the listed `mode`, `through` when none is listed.
 
 Cases marked [lookup] run against the places table. Cases marked [engine] also have an end-to-end check in Phase 3's route evals.
 

@@ -101,11 +101,13 @@ def start_for(rc: RunConstraints, location: dict | None, saved: dict, geocode_fn
 
 
 def via_far_question(vias, shortest_m: float) -> EngineQuestion:
-    """'Going through Hudson River Greenway takes at least 3.9 mi. Make it 3.9 mi?' (brief, step 9; rule 3)."""
+    """'Going through Hudson River Greenway takes at least 3.9 mi. Make it 3.9 mi?' (brief, step 9; rule 3). With a
+    lap (decision 035): 'A lap of the Reservoir running track and the way there takes at least 2.3 mi. ...'"""
     miles = ask_miles(shortest_m)
     shown = f"{miles:g}"
+    key = "question.engine.lap_far" if any(v.lap is not None for v in vias) else "question.engine.via_far"
     q = {"id": "q_1", "about": "distance", "from": "engine",
-         "text": render("question.engine.via_far", name=" and ".join(v.name for v in vias), miles=shown),
+         "text": render(key, name=" and ".join(v.name for v in vias), miles=shown),
          "options": [{"id": "a", "text": render("option.miles", miles=shown)}], "allow_text": True}
     return EngineQuestion(q, {"options": {"a": {"distance": miles}}, "typed": {"kind": "miles"}})
 
@@ -125,6 +127,7 @@ def db_vias(refs) -> list[Via]:
     with psycopg.connect(database_url()) as conn:
         for r in refs:
             shape = {"type": "Point", "coordinates": [r.lon, r.lat]}
+            name, lap = r.name, None
             found = lookup(r.name, near=(r.lat, r.lon), conn=conn)
             if found:
                 row = conn.execute(
@@ -134,8 +137,33 @@ def db_vias(refs) -> list[Via]:
                     {"ids": list(found[0].ids), "lon": r.lon, "lat": r.lat, "reach": VIA_SHAPE_REACH_M}).fetchone()
                 if row and row[0]:
                     shape = json.loads(row[0])
-            out.append(Via(r.lat, r.lon, r.name, shape))
+            if getattr(r, "mode", "through") == "around":
+                name, lap = lap_ring(conn, r, shape)
+            out.append(Via(r.lat, r.lon, name, shape, lap))
     return out
+
+
+def lap_ring(conn, ref, shape: dict) -> tuple[str, tuple | None]:
+    """An around via's name and ring (decision 035): the curated loop from running_loops, or the outline of the
+    place's biggest polygon, counterclockwise. No ring (a loop the table lacks, a place with no outline): None, and
+    the via is passed instead."""
+    import json
+
+    from api.geometry import oriented
+
+    if ref.loop:
+        row = conn.execute("SELECT name, ST_AsGeoJSON(geom) FROM running_loops WHERE id = %s AND geom IS NOT NULL",
+                           (ref.loop,)).fetchone()
+        if row is None:
+            return ref.name, None
+        return row[0], tuple(tuple(c) for c in json.loads(row[1])["coordinates"])
+    polys = ([shape["coordinates"]] if shape["type"] == "Polygon" else
+             shape["coordinates"] if shape["type"] == "MultiPolygon" else [])
+    if not polys:
+        return ref.name, None
+    from shapely.geometry import Polygon
+    biggest = max(polys, key=lambda rings: Polygon(rings[0]).area)[0]
+    return ref.name, tuple(tuple(c[:2]) for c in oriented(biggest, "counterclockwise"))
 
 
 def end_for(rc: RunConstraints, saved: dict) -> tuple[float, float] | None:
@@ -283,15 +311,17 @@ class Engine:
                     here, end, miles, grid, route_fn=route_fn, shortest=shortest, top_n=TOP_N,
                     prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn, anchor_fn=self.anchor_fn,
                     feature_anchor_fn=self.feature_anchor_fn, area_route_fn=area_fn if self.feature_anchor_fn else None,
-                    on_top3=on_top3, on_candidate=on_candidate, vias=[v.point for v in vias], through=through)
+                    on_top3=on_top3, on_candidate=on_candidate, vias=tour(here, vias, end)[1:-1],
+                    through=through)
             elif vias:  # through or along named places, back to the start (step 9)
                 sources = self.feature_anchor_fn or []
                 sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
+                passed = [v for v in vias if v.lap is None]  # features anchor routes only on vias passed, not laps
                 result = self.generate_fn(
                     start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
                     shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
-                    anchor_fn=None, feature_anchor_fn=[features_on_vias(f, vias) for f in sources],
-                    area_route_fn=area_fn if sources else None, on_top3=on_top3, on_candidate=on_candidate,
+                    anchor_fn=None, feature_anchor_fn=[features_on_vias(f, passed) for f in sources] if passed else [],
+                    area_route_fn=area_fn if sources and passed else None, on_top3=on_top3, on_candidate=on_candidate,
                     only_anchored=True, extra_jobs=via_jobs(here, vias, miles, route_fn, shortest, rc.shape),
                     through=through)
             else:

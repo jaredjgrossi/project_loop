@@ -152,9 +152,10 @@ def _unordered(want: list, got, same) -> bool:
 def same_value(name: str, want, got) -> bool:
     if name in ("start_place", "end_place"):
         return _same_place(want, got)
-    if name == "via_places":  # order matters: the route goes through them in turn
+    if name == "via_places":  # order matters: the route goes through them in turn; rule 9: and each one's mode
         return (isinstance(got, list) and len(got) == len(want)
-                and all(_same_place(w, g) for w, g in zip(want, got)))
+                and all(_same_place(w, g) and isinstance(g, dict)
+                        and g.get("mode", "through") == w.get("mode", "through") for w, g in zip(want, got)))
     if name == "avoid_places":
         return _unordered(want, got, _same_avoid)
     if name == "amenities":

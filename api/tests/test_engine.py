@@ -232,3 +232,36 @@ def test_a_loop_through_a_via_passes_it():
 def test_via_far_question_names_two_places():
     two = [Via(0, 0, "A", {}), Via(0, 0, "B", {})]
     assert via_far_question(two, 6000).question["text"].startswith("Going through A and B takes at least 3.8 mi")
+
+
+# ---- around: a lap (decision 035) ----------------------------------------------------------------------------------
+
+from api.tests.test_via import lap_via  # noqa: E402
+
+LAP_AT = (KIPS_POINT[0] + 1500 / M_LAT, KIPS_POINT[1])
+
+
+def lap_engine(**kw) -> Engine:
+    from api.generate import generate_loops
+    return engine(generate_loops, routers_fn=lambda zones, lights, closures: (straight_route, None, area_route),
+                  vias_fn=lambda refs: [lap_via(LAP_AT, 300, "Test Loop") for _ in refs], **kw)
+
+
+def lap_ref():
+    return via_ref(LAP_AT, "Test Park") | {"mode": "around"}
+
+
+def test_a_lap_too_long_for_the_distance_asks():
+    with pytest.raises(EngineQuestion) as asked:
+        lap_engine().build(rc(distance_mi=2.0, via_places=[lap_ref()]), Start(*KIPS_POINT, "x"), lambda e: None, "r_l")
+    q = asked.value.question
+    assert q["text"].startswith("A lap of Test Loop and the way there takes at least")
+    assert asked.value.answer_map["options"]["a"]["distance"] > 2.0
+
+
+def test_a_lap_with_no_distance_is_the_lap_and_the_way_there():
+    final = lap_engine().build(rc(distance_mi=None, via_places=[lap_ref()]), Start(*KIPS_POINT, "x"),
+                               lambda e: None, "r_l2")
+    assert final["routes"] and final["notes"] == []
+    d = final["routes"][0]["distance"]["value"]
+    assert d >= (2 * 1200 + 2400) / 1609.344 * 0.95  # there (1.2 km), a 2.4 km lap, back

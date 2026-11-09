@@ -77,6 +77,7 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 - `text` is short and plain ("5 mi", "Avoid crowds", "End: McCarren Park"). It always comes from templates.
 - `span` (2026-11-09, for the request screen: the runner's sentence is the header and the understood words light up): `{"text", "start", "end"}`, the runner's exact words behind the chip and where they are in the request `text`. Positions count Unicode code points (Swift: `text.unicodeScalars`), start inclusive, end exclusive; `text` is always the request's own characters at those positions. Claude quotes the words; code finds them and never guesses: words that aren't in the request give `span: null`. `null` for `preset`, `default` and `usual` values. One phrase may feed two chips, so spans can overlap. A chip code set from another one's words (park scenery from "a few miles in the park") shares that chip's span. Example: `{"id": "c_distance", "field": "distance", "text": "8 mi", "source": "said", "editable": true, "span": {"text": "8 miles", "start": 19, "end": 26}}`.
 - Source words (`source`) stay in the chip data; the app shows them only in the chip editor.
+- **Via chips carry `mode`** (decision 035): `"through"` (pass the place: "Through Hudson River Greenway, Manhattan") or `"around"` (a full lap of it: "A lap of the Reservoir running track, Manhattan"). Code sets it from the runner's word, never Claude: "around", "loop of", "lap of" mean around; "through", "in", "along", "past" mean through; a known running loop named on its own means around ("Central park reservor", "the Prospect Park loop"); anything else is through. The chip editor can switch it. In `constraints.via_places`, each via has the same `mode` and, for a known running loop, `loop` (its id: `reservoir`, `central_park_drive`, `prospect_park_drive`). With an around via and no distance said, there's no usual distance: the distance chip reads "The lap and the way there" (`source: "default"`), and the engine builds the lap plus the shortest way there and on.
 - `constraints.spans` carries the same spans by chip id, so a chip edit (which sends `constraints`, not text) keeps the other chips' spans. When the runner edits a chip, the app drops that chip's entry from `constraints.spans` (and from `constraints.sources`): an edited value is said, but not in the sentence. Spans are never stored with a build (R8).
 
 ### Question
@@ -89,6 +90,7 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 
 ### Can't-do lines and notes
 - `cant`: `{"id", "gap", "text"}`, for example `{"id": "k_1", "gap": "G9", "text": "Can't plan around street lighting yet"}`.
+- `gap: "lap"` (decision 035): a lap Loop can't run, and the route passes the place instead: "Can't run laps of the McCarren Park track yet: it isn't in Loop's path data. These routes go to it", or "Can't run a lap of 2nd Ave: it isn't a loop. These routes go through it".
 - `notes`: `{"id", "key", "text", "trust"}`, for example `{"key": "fountains_seasonal", "text": "Fountains may be off for the season", "trust": "listed"}`.
 - Evals match on `gap` and `key`, never on wording, so the UI chat can rewrite the copy freely.
 
@@ -116,7 +118,7 @@ Same shape as `parsed.question`, with `from: "engine"` and its own `parse_id`. T
 {"event": "question", "v": 1, "parse_id": "p_9b21", "id": "q_1", "about": "distance", "from": "engine",
  "text": "The shortest way there is 4.5 mi. Make it 4.5 mi?", "options": [{"id": "a", "text": "4.5 mi"}], "allow_text": true}
 ```
-Step 9 adds the same question for via places: "Going through Hudson River Greenway takes at least 4.3 mi. Make it 4.3 mi?" when the shortest way through them (and back, or on to the end) is longer than the distance. Answer it as any question, with this event's `parse_id`. The offer is the shortest way rounded up to 0.1 mi; a typed distance works too. The answer is a said distance; Claude isn't called again.
+Step 9 adds the same question for via places: "Going through Hudson River Greenway takes at least 4.3 mi. Make it 4.3 mi?" when the shortest way through them (and back, or on to the end) is longer than the distance. With a lap (decision 035): "A lap of the Reservoir running track and the way there takes at least 2.4 mi. Make it 2.4 mi?"; the lap counts toward the distance. Answer it as any question, with this event's `parse_id`. The offer is the shortest way rounded up to 0.1 mi; a typed distance works too. The answer is a said distance; Claude isn't called again.
 
 ## Event: `planned`
 ```json
@@ -133,6 +135,7 @@ The app saves it to the planned list. Opening it on the day calls `POST /v1/runs
 - **`done` ends every clean stream**, including one that ends with a question, so the app can tell a finished stream from a dropped connection. `error` ends a stream that failed.
 - **A to B (step 8):** with an end place, route `kind` is `"a_to_b"`. No distance means the shortest way (the distance chip says "Shortest way"); a distance shorter than the shortest way gets the engine's `question`. `reach_m` stays null for these runs.
 - **Via places (step 9):** every route passes every via place, within 30 m of a park's or a lake's outline, 60 m of a path or street, or 150 m of a point. With an end too, the route goes through the vias on its way there.
+- **Laps (decision 035):** an `around` via is a full lap, in the loop's running direction (counterclockwise for the four known loops), entered and left at the point nearest the way in. Every route runs along at least 90% of the lap's ring, within 30 m, and the lap counts toward the distance. Known loops run their curated ring (the Reservoir track 1.57 mi, the Central Park drive 6.05 mi, the Prospect Park drive 3.49 mi, measured from OSM); any other park or water runs its outline. A lap isn't run twice, so there are no out-and-backs through it.
 - **Route entries** in `top3`, `provisional` and `final` carry `id`, the same for the same route in every event of one build (step 6).
 - **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
 - **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.

@@ -81,10 +81,12 @@ TEMPLATES: dict[str, str] = {
     "chip.end.place": "End: {name}, {borough}",
     "chip.end.saved": "End: {name}",
     "chip.via.place": "Through {name}, {borough}",
+    "chip.via.lap": "A lap of {name}, {borough}",
     "chip.distance": "{miles} mi",
     "chip.distance.range": "{low}–{high} mi",
     "chip.distance.shortest": "Shortest way",
     "chip.distance.reused": "Same distance as before",
+    "chip.distance.lap": "The lap and the way there",
     "chip.time.now": "Now",
     "chip.time.today": "Today, {time}",
     "chip.time.today_now": "Today, now",
@@ -142,6 +144,7 @@ TEMPLATES: dict[str, str] = {
     # From the engine (contract: the question event, from "engine")
     "question.engine.shortest": "The shortest way there is {miles} mi. Make it {miles} mi?",
     "question.engine.via_far": "Going through {name} takes at least {miles} mi. Make it {miles} mi?",
+    "question.engine.lap_far": "A lap of {name} and the way there takes at least {miles} mi. Make it {miles} mi?",
     "option.miles": "{miles} mi",
     "option.plus_miles": "+{miles} mi",
     "option.place": "{name}, {borough}",
@@ -162,6 +165,8 @@ TEMPLATES: dict[str, str] = {
     "cant.later.hills": "Can't score hills yet; these routes ignore them",
     "cant.later.planned": "Can't plan the second run yet; only the first was built",
     "cant.avoid_unknown": "Can't avoid {name} yet: it isn't on the list of places Loop can avoid",
+    "cant.lap_unrouted": "Can't run laps of {name} yet: it isn't in Loop's path data. These routes go to it",
+    "cant.around_shape": "Can't run a lap of {name}: it isn't a loop. These routes go through it",
 
     # Notes: caveats that aren't refusals
     "note.crowds_estimated": "Crowds near schools and ferry landings are estimated for {time}; other stretches aren't scored",

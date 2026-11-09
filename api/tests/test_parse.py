@@ -34,6 +34,9 @@ PLACES = {
     "east river path": [pm("East River Greenway", "path", "Manhattan", 40.7400, -73.9720)],
     "1st ave & e 23rd st": [pm("1st Ave & E 23rd St", "crossing", "Manhattan", 40.7366, -73.9786)],
     "2nd ave": [pm("2nd Ave", "street", "Manhattan", 40.7450, -73.9770)],
+    "prospect park": [pm("Prospect Park", "park", "Brooklyn", 40.6602, -73.9690)],
+    "grand army plaza": [pm("Grand Army Plaza", "square", "Brooklyn", 40.6742, -73.9700),
+                         pm("Grand Army Plaza", "square", "Manhattan", 40.7644, -73.9737)],
 }
 AT_CENTRAL_PARK = {"86th st": [pm("86th St", "street", "Manhattan", 40.7814, -73.9601, at="5th Ave"),
                                pm("86th St", "street", "Manhattan", 40.7854, -73.9697, at="Central Park West")]}
@@ -150,6 +153,8 @@ IDEAL = {  # the extraction a correct model returns, per case
     "P48": ext(distance=mi(0.3), shape="loop_word"),
     "P49": ext(distance=mi(15), surface="paths",
                via=[{"name": "East River Path", "kind": "place", "whole_way": True}], cant=["whole_way"]),
+    "P50": ext(start=place("place", "Grand Army Plaza"),
+               via=[{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": "Loop of"}]),
 }
 
 
@@ -211,6 +216,7 @@ QUOTES = {  # the runner's words behind each chip, per case (spans, 2026-11-09)
     "P47": said(("distance", "100 mile"), ("shape", "loop")),
     "P48": said(("distance", "0.3 mi"), ("shape", "loop")),
     "P49": said(("distance", "15 miles"), ("via", "the east river path", 1), ("surface", "staying on the east river path")),
+    "P50": said(("via", "Loop of Prospect Park", 1), ("start", "from Grand Army Plaza")),
 }
 for _cid, _q in QUOTES.items():
     IDEAL[_cid]["said"] = _q
