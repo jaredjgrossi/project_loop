@@ -201,7 +201,7 @@ PARSE · `crowds=dont_mind (said)` · `scenery=park_or_water (said)`
 PARSE · `surface=paths (said)` · `distance_mi=4 (said)`
 Must not: store or repeat the knee detail.
 
-**P33** · C1 · `6mi flat`
+**P33** · C1 · `6mi flat` · [engine]
 PARSE · `distance_mi=6 (said)` · `hills=avoid (said)`
 
 **P34** · C1 · `6, need a bathroom around mile 3`
@@ -218,7 +218,7 @@ PARSE · `mode=training (said)` · `distance_mi=6 (said)` · `lights=waits (said
 **P38** · C1 · `5k at race pace, needs to be uninterrupted`
 PARSE · `mode=training (said)` · `distance_mi=3.11 (said)` · `lights=waits (said)`
 
-**R11** · C1 · `4xmile workout - avoid hills` *(Jared)*
+**R11** · C1 · `4xmile workout - avoid hills` *(Jared)* · [engine]
 ASK (distance, parser) · "How far in total, warm-up and cool-down included?" · options `6 mi · 7 mi · 8 mi` · keep `mode=training`, `hills=avoid` · `cant: routes built around workout segments (G8)`
 
 **R08** · C1 · `Create a route that is new from everything else I have tried` *(Jared)*

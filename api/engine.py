@@ -33,8 +33,8 @@ from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
 BLOCKING = ("reuse_route_id",)
-# These leave a buildable run: hills aren't scored (step 9) and the second run isn't planned (step 10). The first run
-# is built, with a can't-do line.
+# A planned second run leaves a buildable run: it isn't planned yet (step 11), so the first run is built, with a can't-do
+# line.
 TOP_N = 3
 
 

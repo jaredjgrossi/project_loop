@@ -44,11 +44,11 @@ Scenery = Literal["park_or_water", "some", "dont_mind"]
 Surface = Literal["paths", "any"]
 Turns = Literal["fewer", "dont_mind"]
 Familiar = Literal["favor", "some", "new"]  # "matches routes you run": turn it up, leave it, or ask for new ground
-Hills = Literal["avoid", "dont_mind"]  # "flat" is avoid; scored from elevation in Phase 3, step 9
+Hills = Literal["avoid", "dont_mind"]  # "flat" is avoid; scored from elevation every 0.1 mi (decision 037)
 PREFERENCES = ("lights", "crowds", "scenery", "surface", "turns", "familiar", "hills")
 
 # Starting points from discovery (docs/discovery/summary.md, theme 2); to be tuned with ratings. Hills stays neutral
-# in both presets until it is scored (step 9), so adding it changes no ranking.
+# in both presets: only a runner who asks for flat gets it scored (decision 037).
 PRESETS: dict[Mode, dict] = {
     Mode.TRAINING: {"lights": Lights.WAITS, "crowds": "avoid", "scenery": "some", "surface": "any", "turns": "fewer",
                     "familiar": "favor", "hills": "dont_mind"},
@@ -262,7 +262,6 @@ def with_default_date(c: RunConstraints, now: datetime) -> RunConstraints:
 
 
 _ENGINE_LATER = (  # (key, test): Phase 3 fields the engine can't build yet, in the order a caller reports them
-    ("hills", lambda c: resolve_preferences(c).values["hills"] != "dont_mind"),  # step 9
     ("reuse_route_id", lambda c: c.reuse_route_id is not None),  # step 10
     ("planned", lambda c: c.planned is not None),  # step 10
 )

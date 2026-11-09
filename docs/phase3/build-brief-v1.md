@@ -81,7 +81,7 @@ Add a small command-line client that prints the events, for testing without the 
 
 **8b. "Along" avoids (added by Jared, 2026-11-06).** Make running along a named street, or a named stretch such as "1st Ave, E 26th–E 34th St", costly in the router, while crossings stay cheap. Done: R07 and P23 work end to end, with a route eval for each. Built (decision 036): `api/along.py`; route evals in `evals/routes/test_along.py`.
 
-**9. Hills.** A `hills` preference scored from the elevation every 0.1 mi (measured), with a provisional weight. Done: P33, and R11 after its answer; a route eval where "flat" changes #1 on a hilly start.
+**9. Hills.** A `hills` preference scored from the elevation every 0.1 mi (measured), with a provisional weight. Done: P33, and R11 after its answer; a route eval where "flat" changes #1 on a hilly start. Built (decision 037): `api/hills.py`; labeled `estimate`, like decision 014's climb (same elevation tiles); route evals in `evals/routes/test_hills.py` (Fort Tryon Park is the hilly start).
 
 **10. Past routes and planned runs.** `reuse_route_id` (rebuild the stored route's request for now), `reverse`, "longer" (ask how much), and `planned` (D6: build the second run for its day, store it, send it after `final`). A part of a past route ("skip the ferry part") is matched in code against the `pulse_sources` ferry landings along the reused route, not by the model (Jared, 2026-11-08). Done: H01–H05 and P45.
 

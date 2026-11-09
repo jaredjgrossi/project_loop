@@ -161,7 +161,6 @@ TEMPLATES: dict[str, str] = {
     "cant.bike_lanes": "Can't avoid bike lanes yet",
     # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
     "cant.later.reuse_route_id": "Can't rebuild a past route yet, so no routes were built",
-    "cant.later.hills": "Can't score hills yet; these routes ignore them",
     "cant.later.planned": "Can't plan the second run yet; only the first was built",
     "cant.avoid_unknown": "Can't avoid {name} yet: it isn't on the list of places Loop can avoid",
     "cant.lap_unrouted": "Can't run laps of {name} yet: it isn't in Loop's path data. These routes go to it",

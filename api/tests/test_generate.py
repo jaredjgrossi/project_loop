@@ -738,3 +738,26 @@ def test_the_streamed_top3_ends_as_the_final_top3_and_is_sent_only_when_it_chang
     assert result.timing["provisional_s"] is not None and result.timing["provisional_s"] <= result.timing["total_s"]
     assert result.timing["number1_changes_after_provisional"] >= 0
     assert [c.label for c in result.provisional] == [c.label for c in next(e for e in events if e["event"] == "provisional")["candidates"]]
+
+
+def test_a_failing_stream_callback_raises_instead_of_hanging():
+    """A callback that raises used to kill its worker thread, so the queue never drained and the build hung."""
+    import threading
+
+    from api.tests.test_a_to_b import GRID, KIPS, straight_route
+
+    def boom(c, elapsed):
+        raise KeyError("source")
+    outcome = {}
+
+    def run():
+        try:
+            generate_loops(KIPS[0], KIPS[1], 3.0, GRID, route_fn=straight_route, round_trip_fn=None, top_n=3,
+                           on_candidate=boom)
+        except KeyError as exc:
+            outcome["raised"] = exc
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout=60)
+    assert not t.is_alive(), "the build hung"
+    assert "raised" in outcome

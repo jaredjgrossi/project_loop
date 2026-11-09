@@ -252,11 +252,11 @@ def test_an_along_avoid_builds():  # step 8b (decision 036)
     assert evs[0]["cant"] == [] and len(eng.calls) == 1
 
 
-def test_hills_are_built_with_a_cant_line():
+def test_flat_is_built_with_no_cant_line():  # step 10 scores hills (decision 037)
     eng = FakeEngine()
     c, _ = client_for({"6 mi, flat": IDEAL["P33"]}, engine=eng)
     evs = post(c, body("P33", text="6 mi, flat"))
-    assert evs[0]["cant"][-1]["text"].startswith("Can't score hills yet") and evs[-1]["event"] == "done"
+    assert evs[0]["cant"] == [] and evs[-1]["event"] == "done"
     assert len(eng.calls) == 1
 
 

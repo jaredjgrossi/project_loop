@@ -43,8 +43,10 @@ def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
     a_to_b = rc(end_place={"kind": "place", "name": "McCarren Park", "borough": "Brooklyn", "lat": 40.7204,
                            "lon": -73.9512})
     assert before_build(a_to_b, zones=[]) == ([], False)  # step 8 builds it
-    lines, blocked = before_build(rc(hills="avoid"), zones=[])
-    assert [x["key"] for x in lines] == ["hills"] and not blocked
+    assert before_build(rc(hills="avoid"), zones=[]) == ([], False)  # step 10 scores hills
+    lines, blocked = before_build(rc(planned={"use_my_location": True, "distance_mi": 3,
+                                              "start_date": "2026-11-12"}), zones=[])
+    assert [x["key"] for x in lines] == ["planned"] and not blocked
     assert before_build(rc(avoid_places=[{"name": "1st Ave", "how": "along"}]), zones=[]) == ([], False)  # step 8b
     assert before_build(rc(), zones=[]) == ([], False)
 

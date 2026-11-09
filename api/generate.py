@@ -32,6 +32,7 @@ from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
 from api.along import runs_along
+from api.hills import hill_metrics
 from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
@@ -294,7 +295,8 @@ def _evaluate(
             return Rejection(method, label, "too_thin")
     miss = percent_off(rules.miles, meters_to_miles(route.distance_m))
     context = rules.context_fn(route.coordinates) if rules.context_fn else None
-    ranking = rank(kind, shape, rules.prefs, context)
+    hills = hill_metrics(route.coordinates, route.elevation) if rules.prefs.get("hills") == "avoid" else None
+    ranking = rank(kind, shape, rules.prefs, context, hills)
     return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking,
                      context)
 
@@ -393,6 +395,7 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
     outcomes: list[tuple[tuple, object, float]] = []
     by_tier: Counter = Counter()
     tier_fired = [tier_max is None or on_tier_done is None]
+    callback_errors: list[Exception] = []
 
     def put(priority: int, key: tuple, job: Callable) -> None:
         with lock:
@@ -420,7 +423,12 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
                     with lock:
                         outcomes.append((key, result, elapsed))
                     if on_candidate is not None and isinstance(result, Candidate):
-                        on_candidate(result, elapsed, key)
+                        try:
+                            on_candidate(result, elapsed, key)
+                        except Exception as exc:  # a streaming callback failing: kept for the caller, and the
+                            with lock:            # thread lives on, so the queue still drains (a dead worker hung
+                                callback_errors.append(exc)  # the build, 2026-11-09)
+
             finally:
                 fire = False
                 with lock:
@@ -431,7 +439,11 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
                     if pending[0] == 0:
                         all_done.set()
                 if fire:
-                    on_tier_done(time.perf_counter() - t0)
+                    try:
+                        on_tier_done(time.perf_counter() - t0)
+                    except Exception as exc:
+                        with lock:
+                            callback_errors.append(exc)
 
     if not jobs:
         return []
@@ -445,6 +457,8 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
         tasks.put((math.inf, next(order), (), None))
     for th in threads:
         th.join()
+    if callback_errors:
+        raise callback_errors[0]
     return [(result, elapsed) for _, result, elapsed in sorted(outcomes, key=lambda o: o[0])]
 
 

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from api.constraints import Lights
+from api.hills import HillMetrics
 from api.route_context import ContextScores
 from api.shape import ShapeMetrics
 
@@ -32,6 +33,11 @@ BASE_WEIGHTS = {"turns": 40.0, "straight": 25.0, "loop_shape": 25.0, "retrace": 
                 "park_water": 30.0, "signals": 25.0, "familiar": 20.0,
                 "crowds": 25.0}  # decision 016: new, provisional; no other weight changed
 SIGNALS_WORST_PER_MILE = 20.0  # a Manhattan avenue sidewalk: a signal every short block
+# Hills (decision 037), only for a runner who asks for flat. Provisional, from the candidates of a 5 mi run from Grand
+# Army Plaza (5.8 to 24 m of climb per mile, median 10) and Kips Bay (2.1 to 10.5, median 4.8).
+HILLS_WEIGHT = 60.0
+HILLS_FLAT_M_PER_MI = 3.0  # this little climb counts as flat
+HILLS_WORST_M_PER_MI = 20.0
 
 
 @dataclass(frozen=True)
@@ -105,7 +111,19 @@ def _context_dimensions(context: ContextScores | None, prefs: dict, w: dict) -> 
     return dims
 
 
-def rank(kind: Kind, shape: ShapeMetrics, prefs: dict, context: ContextScores | None = None) -> Ranking:
+def _hills_dimension(hills: HillMetrics | None) -> Dimension:
+    if hills is None:  # no elevation on this route: listed, never treated as flat
+        return Dimension("hills", "Hills", "not_scored", "", None, 0.0)
+    fit = 1 - (hills.climb_m_per_mi - HILLS_FLAT_M_PER_MI) / (HILLS_WORST_M_PER_MI - HILLS_FLAT_M_PER_MI)
+    # An estimate, like the route's climb (decision 014): the elevation tiles are a smoothed ground model.
+    return Dimension("hills", "Hills", "estimate",
+                     f"{hills.climb_m_per_mi:.0f} m of climb per mile; steepest 0.1 mi {hills.steepest_pct:.0f}%",
+                     _clamp(fit), HILLS_WEIGHT)
+
+
+def rank(kind: Kind, shape: ShapeMetrics, prefs: dict, context: ContextScores | None = None,
+         hills: HillMetrics | None = None) -> Ranking:
+    """`hills` counts only when the runner asked for flat (prefs["hills"] == "avoid")."""
     w = weights_for(prefs)
     dims = [
         Dimension("turns", "Turns", "measured", f"{shape.turns_per_mile:.1f} per mile",
@@ -122,6 +140,8 @@ def rank(kind: Kind, shape: ShapeMetrics, prefs: dict, context: ContextScores | 
         dims.append(Dimension("retrace", "Retracing", "measured", f"{shape.retraced_pct:.0f}% retraced",
                               1 - _clamp(shape.retraced_pct / 15), w["retrace"]))
     dims += _context_dimensions(context, prefs, w)
+    if prefs.get("hills") == "avoid":
+        dims.append(_hills_dimension(hills))
     dims += [Dimension(k, label, "not_scored", "", None, 0.0) for k, label in NOT_YET_SCORED.items()]
     total_w = sum(d.weight for d in dims)
     score = 100 * sum(d.fit * d.weight for d in dims if d.fit is not None) / total_w
