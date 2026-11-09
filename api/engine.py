@@ -25,13 +25,14 @@ from api.geocoding import GeocodeError, geocode
 from api.geometry import outline
 from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
 from api.units import meters_to_miles
+from api.via import Via, features_on_vias, through_rules, tour, via_jobs
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url
 from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
-BLOCKING = ("via_places", "avoid_along", "reuse_route_id")
+BLOCKING = ("avoid_along", "reuse_route_id")
 # These leave a buildable run: hills aren't scored (step 9) and the second run isn't planned (step 10). The first run
 # is built, with a can't-do line.
 TOP_N = 3
@@ -97,6 +98,44 @@ def start_for(rc: RunConstraints, location: dict | None, saved: dict, geocode_fn
             raise BadStart(str(exc)) from exc
         return Start(g.lat, g.lon, g.label)
     raise BadStart("no start")
+
+
+def via_far_question(vias, shortest_m: float) -> EngineQuestion:
+    """'Going through Hudson River Greenway takes at least 3.9 mi. Make it 3.9 mi?' (brief, step 9; rule 3)."""
+    miles = ask_miles(shortest_m)
+    shown = f"{miles:g}"
+    q = {"id": "q_1", "about": "distance", "from": "engine",
+         "text": render("question.engine.via_far", name=" and ".join(v.name for v in vias), miles=shown),
+         "options": [{"id": "a", "text": render("option.miles", miles=shown)}], "allow_text": True}
+    return EngineQuestion(q, {"options": {"a": {"distance": miles}}, "typed": {"kind": "miles"}})
+
+
+VIA_SHAPE_REACH_M = 3000  # a via's shape: the parts of the named place within this of the point the parse chose
+
+
+def db_vias(refs) -> list[Via]:
+    """Each via place with its shape from the places table: a park's or a lake's outline, a path's or a street's
+    lines near the chosen point, or the point itself when the place has no shape there."""
+    import json
+
+    from api.places import lookup
+    from etl.load import database_url
+
+    out = []
+    with psycopg.connect(database_url()) as conn:
+        for r in refs:
+            shape = {"type": "Point", "coordinates": [r.lon, r.lat]}
+            found = lookup(r.name, near=(r.lat, r.lon), conn=conn)
+            if found:
+                row = conn.execute(
+                    """SELECT ST_AsGeoJSON(ST_Collect(coalesce(outline, geom))) FROM places
+                       WHERE id = ANY(%(ids)s) AND ST_DWithin(coalesce(outline, geom)::geography,
+                             ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326)::geography, %(reach)s)""",
+                    {"ids": list(found[0].ids), "lon": r.lon, "lat": r.lat, "reach": VIA_SHAPE_REACH_M}).fetchone()
+                if row and row[0]:
+                    shape = json.loads(row[0])
+            out.append(Via(r.lat, r.lon, r.name, shape))
+    return out
 
 
 def end_for(rc: RunConstraints, saved: dict) -> tuple[float, float] | None:
@@ -176,6 +215,7 @@ class Engine:
     use_prior: bool = True
     ready_fn: Callable[[], bool] = graphhopper_ready
     routers_fn: Callable = ml.routers_for  # (zones, lights, closures) -> route, round-trip and area routers
+    vias_fn: Callable = db_vias  # via PlaceRefs -> [Via] with their shapes
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
@@ -201,14 +241,21 @@ class Engine:
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
         route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures)
+        try:
+            vias = self.vias_fn(rc.via_places) if rc.via_places else []
+        except psycopg.Error as exc:
+            raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        through = through_rules(vias)
+        here = (start.lat, start.lon)
         shortest = None
-        if end is not None:
+        if end is not None or vias:  # the shortest way there, or round through the vias, comes first (rule 3)
             try:
-                shortest = route_fn([(start.lat, start.lon), end])
+                shortest = route_fn(tour(here, vias, end))
             except RoutingError as exc:
                 raise EngineUnavailable(f"GraphHopper: {exc}") from exc
             if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest.distance_m):
-                raise shortest_way_question(shortest.distance_m)
+                raise (via_far_question(vias, shortest.distance_m) if vias
+                       else shortest_way_question(shortest.distance_m))
             if miles is None:
                 miles = round(meters_to_miles(shortest.distance_m), 2)
 
@@ -233,10 +280,20 @@ class Engine:
         try:
             if end is not None:
                 result = self.a_to_b_fn(
-                    (start.lat, start.lon), end, miles, grid, route_fn=route_fn, shortest=shortest, top_n=TOP_N,
+                    here, end, miles, grid, route_fn=route_fn, shortest=shortest, top_n=TOP_N,
                     prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn, anchor_fn=self.anchor_fn,
                     feature_anchor_fn=self.feature_anchor_fn, area_route_fn=area_fn if self.feature_anchor_fn else None,
-                    on_top3=on_top3, on_candidate=on_candidate)
+                    on_top3=on_top3, on_candidate=on_candidate, vias=[v.point for v in vias], through=through)
+            elif vias:  # through or along named places, back to the start (step 9)
+                sources = self.feature_anchor_fn or []
+                sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
+                result = self.generate_fn(
+                    start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
+                    shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
+                    anchor_fn=None, feature_anchor_fn=[features_on_vias(f, vias) for f in sources],
+                    area_route_fn=area_fn if sources else None, on_top3=on_top3, on_candidate=on_candidate,
+                    only_anchored=True, extra_jobs=via_jobs(here, vias, miles, route_fn, shortest, rc.shape),
+                    through=through)
             else:
                 result = self.generate_fn(
                     start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,

@@ -31,6 +31,7 @@ from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
+from api.geometry import passes_through
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
 from api.route_context import ContextScores
@@ -234,6 +235,7 @@ class _Rules:
     avoid: tuple[NoGoZone, ...]
     context_fn: ContextFn | None = None
     closures: tuple[Closure, ...] = ()
+    through: tuple[tuple[dict, float], ...] = ()  # step 9: (GeoJSON shape, meters) the route must pass, each one
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -256,6 +258,8 @@ def _evaluate(
         return Rejection(method, label, "no_go_zone")
     if passed(route.coordinates, rules.closures):  # decision 017: a hard rule, like a no-go zone
         return Rejection(method, label, "closure")
+    if rules.through and not all(passes_through(route.coordinates, shape, tol) for shape, tol in rules.through):
+        return Rejection(method, label, "misses_via")  # step 9: through or along every via place
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
@@ -475,10 +479,15 @@ def generate_loops(
     # Streaming the top N (decision 018): {"event": "top3" | "provisional" | "final", "elapsed_s", "provisional",
     # "candidates"}. "top3" whenever it changes, "provisional" once the anchored tiers are done, "final" at the end.
     on_top3: Callable[[dict], None] | None = None,
+    # Step 9 (via places): only the anchored jobs (the features the vias are on), plus jobs built from the rules by
+    # extra_jobs, and every route must pass each `through` shape.
+    only_anchored: bool = False,
+    extra_jobs: Callable[["_Rules"], list[tuple[int, Callable]]] | None = None,
+    through: Sequence[tuple[dict, float]] = (),
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures))
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through))
     notes: list[str] = []
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:
@@ -654,9 +663,11 @@ def generate_loops(
         jobs.append((PRIORITY["anchors"], lambda fetch=fetch: [
             (PRIORITY["anchored" if a.placement == "along" else "anchored_straight"], j)
             for a in fetch(lat, lon, radius) for j in anchored_jobs([a], radius)]))
-    if shape in ("out_and_back", "any"):
+    if extra_jobs is not None:
+        jobs += extra_jobs(rules)
+    if shape in ("out_and_back", "any") and not only_anchored:
         jobs += [(PRIORITY["out_and_back"], out_and_back_job(h)) for h in OUT_AND_BACK_HEADINGS]
-    if shape in ("loop", "any"):
+    if shape in ("loop", "any") and not only_anchored:
         # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good loop.
         # Round trips are tried everywhere too (decision 012): the one generator not tied to the grid.
         jobs += [(PRIORITY["rectangle"], rectangle_job(s)) for s in _rectangle_specs()]

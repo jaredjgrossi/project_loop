@@ -141,6 +141,7 @@ TEMPLATES: dict[str, str] = {
     "question.reuse.none": "No recent run matches that. Which one did you mean?",
     # From the engine (contract: the question event, from "engine")
     "question.engine.shortest": "The shortest way there is {miles} mi. Make it {miles} mi?",
+    "question.engine.via_far": "Going through {name} takes at least {miles} mi. Make it {miles} mi?",
     "option.miles": "{miles} mi",
     "option.plus_miles": "+{miles} mi",
     "option.place": "{name}, {borough}",
@@ -156,7 +157,6 @@ TEMPLATES: dict[str, str] = {
     "cant.G9": "Can't plan around street lighting or safety yet",
     "cant.bike_lanes": "Can't avoid bike lanes yet",
     # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
-    "cant.later.via_places": "Can't route through named places yet, so no routes were built",
     "cant.later.avoid_along": "Can't avoid running along a street yet, so no routes were built",
     "cant.later.reuse_route_id": "Can't rebuild a past route yet, so no routes were built",
     "cant.later.hills": "Can't score hills yet; these routes ignore them",

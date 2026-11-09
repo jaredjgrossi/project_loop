@@ -83,24 +83,29 @@ def generate_a_to_b(
     area_route_fn: AreaRouteFn | None = None,
     on_candidate: Callable[[Candidate, float], None] | None = None,
     on_top3: Callable[[dict], None] | None = None,
+    vias: Sequence[tuple[float, float]] = (),  # step 9: places to pass on the way, in order
+    through: Sequence[tuple[dict, float]] = (),  # their shapes, which every route must pass
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures))
-    straight = max(_meters(start, end), 1.0)
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through))
+    legs = [start, *vias, end]
+    last = legs[-2]  # the detour goes between the last via (or the start) and the end
+    straight = max(sum(_meters(a, b) for a, b in zip(legs, legs[1:])), 1.0)
     factor = min(max(shortest.distance_m / straight, STREET_FACTOR_RANGE[0]), STREET_FACTOR_RANGE[1])
     extra_m = max(target_m - shortest.distance_m, 0.0)  # what the detour has to add, routed
     notes: list[str] = []
 
     def direct_job():
-        return _evaluate("direct", KIND, "the shortest way", shortest, rules)
+        label = "the shortest way" if not vias else "the shortest way through the places you named"
+        return _evaluate("direct", KIND, label, shortest, rules)
 
     def detour_job(angle: float):
         label = f"a detour {'left' if angle < 180 else 'right'} of the straight way, {angle:.0f} degrees"
 
         def job():
             def make_route(scale: float) -> Route:
-                total = straight + extra_m * scale / factor  # straight-line sum through the waypoint
-                return route_fn([start, ellipse_waypoint(start, end, total, angle), end])
+                total = _meters(last, end) + extra_m * scale / factor  # straight-line sum through the waypoint
+                return route_fn([start, *vias, ellipse_waypoint(last, end, total, angle), end])
 
             if extra_m < 0.05 * target_m:
                 return Rejection("detour", label, "no_room")  # the direct route already fits
@@ -167,12 +172,13 @@ def generate_a_to_b(
     jobs: list[tuple[int, Callable]] = []
     if abs(shortest.distance_m - target_m) <= 0.05 * target_m:  # the shortest way fits (or no distance was given)
         jobs.append((PRIORITY["anchors"], direct_job))
-    if extra_m > 0.05 * target_m:  # room for a detour
+    if extra_m > 0.05 * target_m and not vias:  # with vias, only waypoint detours pass them
         for fetch in sources:
             jobs.append((PRIORITY["anchors"], lookup(fetch, at_start=True)))
             jobs.append((PRIORITY["anchors"], lookup(fetch, at_start=False)))
         if anchor_fn is not None:
             jobs.append((PRIORITY["anchors"], lookup(anchor_fn, at_start=True)))
+    if extra_m > 0.05 * target_m:
         # Ellipse detours fit any distance, so they run with the first anchored tier: a route that fits arrives
         # early while the waterfront and park detours are still routing.
         jobs += [(PRIORITY["anchored"], detour_job(a)) for a in ELLIPSE_ANGLES]

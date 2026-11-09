@@ -77,7 +77,7 @@ Add a small command-line client that prints the events, for testing without the 
 
 **7. A to B.** A generator for start → end that still reaches water, parks and corridors. Check the requested distance against the shortest way. If it's shorter, the engine asks with `from: "engine"` ("The shortest way is 4.2 mi. Make it 4.2?"). Distance is optional when an end is given. Done: R01 end to end, plus new route evals (Kips Bay → McCarren Park at 8 mi; an end that's too far for the distance asks). Built (decision 032): `api/a_to_b.py`; route evals in `evals/routes/test_a_to_b.py`.
 
-**8. Via.** Route through or along `via_places`, reusing the corridor-anchored generators. "The whole way" stays a can't-do line. If a via point is too far for the distance, the engine asks. Done: R02 (after its answer), R03 (the engine asks), R09 (after its answer), P49.
+**8. Via.** Route through or along `via_places`, reusing the corridor-anchored generators. "The whole way" stays a can't-do line. If a via point is too far for the distance, the engine asks. Done: R02 (after its answer), R03 (the engine asks), R09 (after its answer), P49. Built (decision 034): `api/via.py`; route evals in `evals/routes/test_via.py`.
 
 **8b. "Along" avoids (added by Jared, 2026-11-06).** Make running along a named street, or a named stretch such as "1st Ave, E 26th–E 34th St", costly in the router, while crossings stay cheap. Done: R07 and P23 work end to end, with a route eval for each.
 

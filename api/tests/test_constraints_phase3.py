@@ -172,5 +172,5 @@ def test_unsupported_lists_every_phase3_field_the_engine_cannot_build_yet():
     c = here(distance_mi=8, end_place=MCCARREN, via_places=[PENN], hills="avoid",
              avoid_places=[{"name": "42nd St", "how": "along"}], reuse_route_id="rt_a",
              planned={"start_place": HOME, "distance_mi": 10, "start_date": date(2026, 11, 7)})
-    # end_place is built from step 8 (A to B), so it is no longer listed
-    assert unsupported(c) == ["via_places", "hills", "avoid_along", "reuse_route_id", "planned"]
+    # end_place (step 8, A to B) and via_places (step 9) are built, so they are no longer listed
+    assert unsupported(c) == ["hills", "avoid_along", "reuse_route_id", "planned"]

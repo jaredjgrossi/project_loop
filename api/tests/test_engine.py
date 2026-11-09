@@ -35,9 +35,11 @@ def test_the_start_comes_from_the_phone_a_place_or_the_profile():
 
 
 def test_what_the_engine_cant_build_yet_is_said_and_blocks_only_when_it_must():
-    lines, blocked = before_build(rc(via_places=[{"kind": "place", "name": "McCarren Park", "borough": "Brooklyn",
-                                                  "lat": 40.7204, "lon": -73.9512}]), zones=[])
-    assert [x["key"] for x in lines] == ["via_places"] and blocked
+    lines, blocked = before_build(rc(reuse_route_id="rt_a"), zones=[])
+    assert [x["key"] for x in lines] == ["reuse_route_id"] and blocked
+    via = rc(via_places=[{"kind": "place", "name": "McCarren Park", "borough": "Brooklyn", "lat": 40.7204,
+                          "lon": -73.9512}])
+    assert before_build(via, zones=[]) == ([], False)  # step 9 builds it
     a_to_b = rc(end_place={"kind": "place", "name": "McCarren Park", "borough": "Brooklyn", "lat": 40.7204,
                            "lon": -73.9512})
     assert before_build(a_to_b, zones=[]) == ([], False)  # step 8 builds it
@@ -186,3 +188,47 @@ def test_an_a_to_b_run_at_a_longer_distance_detours_to_fit():
     final = a_to_b_engine().build(rc(distance_mi=4.0), Start(*KIPS_POINT, "x"), lambda e: None, "r_3", end=EAST)
     assert final["routes"] and all(abs(r["distance"]["value"] - 4.0) <= 0.2 for r in final["routes"])
     assert final["notes"] == []
+
+
+
+# ---- via places (step 9) -------------------------------------------------------------------------------------------
+
+from api.engine import via_far_question  # noqa: E402
+from api.via import Via  # noqa: E402
+from api.tests.test_a_to_b import M_LAT  # noqa: E402
+
+FAR_NORTH = (KIPS_POINT[0] + 3000 / M_LAT, KIPS_POINT[1])
+
+
+def via_ref(at, name="Test Station"):
+    return {"kind": "place", "name": name, "borough": "Manhattan", "lat": at[0], "lon": at[1]}
+
+
+def via_engine(**kw) -> Engine:
+    from api.generate import generate_loops
+    return engine(generate_loops, routers_fn=lambda zones, lights, closures: (straight_route, None, area_route),
+                  vias_fn=lambda refs: [Via(r.lat, r.lon, r.name, {"type": "Point", "coordinates": [r.lon, r.lat]})
+                                        for r in refs], **kw)
+
+
+def test_a_via_too_far_for_the_distance_asks_with_its_name():
+    with pytest.raises(EngineQuestion) as asked:
+        via_engine().build(rc(distance_mi=2.0, via_places=[via_ref(FAR_NORTH)]), Start(*KIPS_POINT, "x"),
+                           lambda e: None, "r_v")
+    q = asked.value.question
+    assert q["text"].startswith("Going through Test Station takes at least 3.8 mi")
+    assert asked.value.answer_map["options"]["a"] == {"distance": 3.8}
+
+
+def test_a_loop_through_a_via_passes_it():
+    final = via_engine().build(rc(distance_mi=5.0, via_places=[via_ref(FAR_NORTH)]), Start(*KIPS_POINT, "x"),
+                               lambda e: None, "r_v2")
+    assert final["routes"] and final["notes"] == []
+    for r in final["routes"]:
+        lat_min = min(abs(lat - FAR_NORTH[0]) * M_LAT for lon, lat in r["geometry"]["coordinates"])
+        assert lat_min < 150
+
+
+def test_via_far_question_names_two_places():
+    two = [Via(0, 0, "A", {}), Via(0, 0, "B", {})]
+    assert via_far_question(two, 6000).question["text"].startswith("Going through A and B takes at least 3.8 mi")

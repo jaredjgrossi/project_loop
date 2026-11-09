@@ -76,3 +76,37 @@ def test_corners_survive():
 def test_a_short_route_is_kept_whole_and_rounded():
     coords = [[-73.979912345, 40.743812345, 12.0], [-73.97, 40.75, 13.0]]  # elevation is dropped
     assert outline(coords) == [[-73.97991, 40.74381], [-73.97, 40.75]]
+
+
+# ---- passing through a via (step 9, decision 034) -----------------------------------------------------------------
+
+from api.geometry import passes_through
+
+M_LAT = 110_574
+KX = 111_320 * math.cos(math.radians(40.7438))
+
+
+def _east(m, lat=40.7438, lon=-73.9799):
+    return [lon + m / KX, lat]
+
+
+def test_a_route_passes_a_point_within_the_tolerance():
+    route = [_east(0), _east(1000)]
+    near = {"type": "Point", "coordinates": [-73.9799 + 500 / KX, 40.7438 + 100 / M_LAT]}  # 100 m off the line
+    far = {"type": "Point", "coordinates": [-73.9799 + 500 / KX, 40.7438 + 300 / M_LAT]}
+    assert passes_through(route, near, 150) and not passes_through(route, far, 150)
+
+
+def test_a_route_touching_a_park_passes_it():
+    ring = [[-73.975, 40.746], [-73.970, 40.746], [-73.970, 40.750], [-73.975, 40.750], [-73.975, 40.746]]
+    park = {"type": "Polygon", "coordinates": [ring]}
+    inside = [[-73.9799, 40.748], [-73.972, 40.748]]
+    beside = [[-73.9799, 40.7458], [-73.972, 40.7458]]  # 22 m south of the edge
+    away = [[-73.9799, 40.744], [-73.972, 40.744]]  # 220 m south
+    assert passes_through(inside, park, 30) and passes_through(beside, park, 30) and not passes_through(away, park, 30)
+
+
+def test_a_route_along_part_of_a_path_passes_it():
+    path = {"type": "MultiLineString", "coordinates": [[_east(2000), _east(3000)], [_east(5000), _east(6000)]]}
+    assert passes_through([_east(0), _east(2500)], path, 60)
+    assert not passes_through([[-73.9799, 40.70], [-73.97, 40.70]], path, 60)

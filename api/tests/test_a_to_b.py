@@ -136,3 +136,16 @@ def test_a_feature_that_cant_fit_the_distance_isnt_routed():
                    name="Tiny Park", area={"type": "Polygon", "coordinates": []})
     result = run(6.0, top_n=10, feature_anchor_fn=[lambda lat, lon, r: [tiny]], area_route_fn=counting)
     assert result.rejected["feature_too_short"] >= 1 and calls == []
+
+
+
+def test_an_a_to_b_run_through_a_via_passes_it_and_fits():
+    from api.via import Via, through_rules
+    north = (KIPS[0] + 800 / M_LAT, KIPS[1] + 1500 / (111_320 * math.cos(math.radians(KIPS[0]))))
+    v = Via(north[0], north[1], "Test Station", {"type": "Point", "coordinates": [north[1], north[0]]})
+    shortest = straight_route([KIPS, north, EAST])
+    result = generate_a_to_b(KIPS, EAST, 4.0, GRID, route_fn=straight_route, shortest=shortest, top_n=10,
+                             vias=[north], through=through_rules([v]))
+    assert result.candidates and result.within_tolerance
+    for c in result.candidates:
+        assert min(meters(north, (lat, lon)) for lon, lat in c.route.coordinates) < 150
