@@ -107,3 +107,29 @@ def test_pick_asks_when_two_are_within_3_km_or_none_is():
 def test_pick_applies_nearest_inside_the_reference_borough():
     found = [_m("Manhattan", 500, "a"), _m("Manhattan", 4000, "b"), _m("Brooklyn", 300, "c")]
     assert pick_by_borough(found, "Manhattan").name == "a"
+
+
+# ---- names as people say them (phone test, 2026-11-09) -------------------------------------------------------------
+
+def test_library_variants():
+    from api.places import name_variants
+    v = name_variants("NYPL: Kips Bay Library", "amenity", "amenity=library")
+    assert {"Kips Bay Library", "Kips Bay Branch", "Kips Bay Branch Library", "nypl Kips Bay Branch",
+            "new york public library Kips Bay Branch"} <= set(v)
+    assert "Kips Bay Library" in name_variants("New York Public Library - Kips Bay Branch", "amenity", "amenity=library")
+    assert "Macomb's Bridge Library" in name_variants("Macomb's Bridge Branch", "amenity", "amenity=library")
+
+
+def test_station_and_park_variants():
+    from api.places import name_variants
+    assert name_variants("Bedford Av", "subway_station", "railway=station") == ["Bedford Av Station"]
+    assert name_variants("New York Penn Station", "station", "railway=station") == ["New York Penn"]
+    assert name_variants("McCarren Park", "park", "leisure=park") == ["McCarren"]
+    assert name_variants("Stuyvesant Cove", "park", "leisure=park") == ["Stuyvesant Cove Park"]
+    assert name_variants("Joe's Deli", "shop", "shop=deli") == []
+
+
+def test_word_order_and_the_dont_matter():
+    from api.places import normalize, token_key
+    assert token_key(normalize("Library Kips Bay")) == token_key(normalize("the Kips Bay Library"))
+    assert token_key(normalize("Kips Bay Library")) != token_key(normalize("Kips Bay"))

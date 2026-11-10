@@ -502,6 +502,12 @@ def _saved_ref(b: _Build, saved_id: str) -> dict:
     return PlaceRef(**ref).model_dump(exclude_none=True)
 
 
+def _park_options(parks, target: str) -> list[tuple[str, dict, dict]]:
+    """'Which park?': runnable places, nearest first, each with how far it is ("Central Park · 1.8 mi")."""
+    return [("option.place.distance", {"name": p.name, "miles": f"{(p.distance_m or 0) / METERS_PER_MILE:.1f}"},
+             {f"place:{target}": p}) for p in parks]
+
+
 def _options(matches, target: str) -> list[tuple[str, dict, dict]]:
     with_at = [m for m in matches if getattr(m, "at", None)]
     if len(with_at) == len(matches) == 2:  # "86th St" at Central Park: by side, then the crossing street
@@ -543,8 +549,7 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
         major = b.places.major_parks_near(*point) if point else []
         if major:
             return _ref(major[0])
-        options = [("option.place", {"name": p.name, "borough": p.borough}, {f"place:{target}": p})
-                   for p in (b.places.parks_near(*point) if point else [])]
+        options = _park_options(b.places.parks_near(*point) if point else [], target)
         b.ask(about, "places", "question.place.which_park", options, allow_text=True, typed=typed)
     if kind == "address":
         b.lookups.append({"name": name, "role": role, "via": "geocoder"})
@@ -678,8 +683,7 @@ def _vias(b: _Build, ext: dict) -> list:
         if v["kind"] == "the_park":
             major = b.places.major_parks_near(*point) if point else []
             if not major:
-                opts = [("option.place", {"name": p.name, "borough": p.borough}, {f"place:{target}": p})
-                        for p in (b.places.parks_near(*point) if point else [])]
+                opts = _park_options(b.places.parks_near(*point) if point else [], target)
                 b.ask("via", "places", "question.place.which_park", opts, typed=typed)
             out.append((v, major[0]))
             b.via_from.append(i + 1)

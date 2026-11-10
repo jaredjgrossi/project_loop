@@ -29,7 +29,7 @@ from pathlib import Path
 
 import psycopg
 
-from api.places import display_name, normalize, street_base
+from api.places import display_name, name_variants, normalize, street_base
 from etl.load import database_url
 from etl.load_osm import NYC_PBF, STATE_PBF, WORK_DIR, export_ways, snapshot_time
 
@@ -48,7 +48,7 @@ CROSSING_CLUSTER_M = 60  # the shared nodes of one crossing (dual carriageways, 
 NODE_FILTER = ["n/railway=station,halt,subway_entrance", "n/public_transport=station", "n/place=square",
                "n/place=neighbourhood,suburb,quarter", "n/amenity",
                "n/shop", "n/tourism", "n/leisure"]
-AREA_FILTER = ["a/place=square", "a/highway=pedestrian", "a/natural=water", "a/railway=station",
+AREA_FILTER = ["a/place=square", "a/highway=pedestrian", "a/natural=water", "a/railway=station", "a/amenity=library",
                "a/public_transport=station", "a/man_made=bridge"]
 ALIAS_TAGS = ("alt_name", "official_name", "short_name")
 FT_PER_M = 3.28084
@@ -82,6 +82,7 @@ CREATE TABLE places (
     geom               geometry(Point, 4326) NOT NULL,
     outline            geometry(Geometry, 4326),  -- area or line, when the place has one
     area_ha            double precision,
+    waterfront_share   double precision,       -- named paths LONG_PATH_M and longer: the share within WATERFRONT_M of the shore
     trust              text NOT NULL DEFAULT 'listed' CHECK (trust IN ('verified', 'listed', 'seasonal_or_closed')),
     source             text NOT NULL,
     source_dataset_id  text NOT NULL,
@@ -136,6 +137,8 @@ def area_kind(p: dict) -> tuple[str, str] | None:
         return ("subway_station" if p.get("station") == "subway" else "station"), "railway=station"
     if p.get("man_made") == "bridge":
         return "bridge", "man_made=bridge"
+    if p.get("amenity") == "library":  # libraries are often mapped as their building ("NYPL: Kips Bay Library")
+        return "amenity", "amenity=library"
     return None
 
 
@@ -317,18 +320,40 @@ def apply_curated_aliases(conn) -> int:
 
 def fill_names(conn) -> None:
     """Normalized names for matching, computed in Python with the same code lookups use."""
-    rows = conn.execute("SELECT id, name, aliases, redirects, streets FROM places").fetchall()
+    rows = conn.execute("SELECT id, name, aliases, redirects, streets, kind, category FROM places").fetchall()
     conn.execute("CREATE TEMP TABLE names_in (id int, norm text, base text, alias_norms text[], redirect_norms text[], "
                  "street_norms text[], street_bases text[])")
     with conn.cursor().copy("COPY names_in FROM STDIN") as copy:
-        for pid, name, als, redirects, streets in rows:
+        for pid, name, als, redirects, streets, kind, category in rows:
             norm = normalize(name)
             sn = [normalize(s) for s in streets] if streets else None
-            copy.write_row((pid, norm, street_base(norm), [normalize(a) for a in als],
+            variants = [v for v in dict.fromkeys(normalize(a) for a in [*als, *name_variants(name, kind, category)])
+                        if v and v != norm]  # "Kips Bay Library" for "NYPL: Kips Bay Library" (phone test, 2026-11-09)
+            copy.write_row((pid, norm, street_base(norm), variants,
                             [normalize(r) for r in redirects], sn, [street_base(s) for s in sn] if sn else None))
     conn.execute("""UPDATE places p SET norm = n.norm, base = n.base, alias_norms = n.alias_norms,
                     redirect_norms = n.redirect_norms, street_norms = n.street_norms, street_bases = n.street_bases
                     FROM names_in n WHERE p.id = n.id""")
+
+
+def fill_waterfront(conn) -> int:
+    """For named paths long enough to run on: the share of each within WATERFRONT_M of the shoreline, so "Which
+    park?" can offer waterfront paths without measuring them per request. Needs osm_coastline (etl.load_osm)."""
+    from api.places import LONG_PATH_M, WATERFRONT_M
+    if not conn.execute("SELECT to_regclass('osm_coastline') IS NOT NULL").fetchone()[0]:
+        print("  osm_coastline not loaded: no waterfront paths (run etl.load_osm first)", file=sys.stderr)
+        return 0
+    conn.execute(
+        """WITH long AS (SELECT id, ST_Transform(outline, 2263) o FROM places
+                         WHERE kind = 'path' AND name IS NOT NULL AND outline IS NOT NULL
+                           AND ST_Length(outline::geography) >= %(long)s),
+                share AS (SELECT l.id, coalesce(ST_Length(ST_Intersection(l.o, ST_Buffer(ST_Union(ST_Transform(c.geom, 2263)),
+                                 %(water)s))) / nullif(ST_Length(l.o), 0), 0) s
+                          FROM long l LEFT JOIN osm_coastline c ON ST_DWithin(ST_Transform(c.geom, 2263), l.o, %(water)s)
+                          GROUP BY l.id, l.o)
+           UPDATE places p SET waterfront_share = share.s FROM share WHERE p.id = share.id""",
+        {"long": LONG_PATH_M, "water": WATERFRONT_M * FT_PER_M})
+    return conn.execute("SELECT count(*) FROM places WHERE waterfront_share >= 0.5").fetchone()[0]
 
 
 def assign_boroughs(conn) -> int:
@@ -368,6 +393,7 @@ def main() -> int:
             dropped = assign_boroughs(conn)
             curated = apply_curated_aliases(conn)
             fill_names(conn)
+            waterfront = fill_waterfront(conn)
             conn.execute(INDEXES)
             counts = conn.execute("SELECT kind, count(*) FROM places GROUP BY 1 ORDER BY 2 DESC").fetchall()
             (total,) = conn.execute("SELECT count(*) FROM places").fetchone()
@@ -375,7 +401,7 @@ def main() -> int:
     for kind, n in counts:
         print(f"  {kind:<16} {n:7d}")
     print(f"  nodes read {len(nodes)}, areas read {len(areas)}; crossings {crossings}; MTA stations {stations}; "
-          f"corridors {corridors}; curated aliases {curated}")
+          f"corridors {corridors}; curated aliases {curated}; long paths by the water {waterfront}")
     print(f"  dropped {dropped} rows outside the five boroughs (New Jersey features in the extract)")
     return 0
 

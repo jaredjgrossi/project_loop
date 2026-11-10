@@ -85,7 +85,7 @@ def test_a_typed_place_replaces_the_one_that_was_asked_about():
 def test_picking_a_park():
     out, ctx = asked("P20")  # no major park near Kips Bay: which park?
     after = answer(out, ctx, option_id="a", case_id="P20")
-    assert after["parsed"]["constraints"]["start_place"]["name"] == "Bellevue South Park"
+    assert after["parsed"]["constraints"]["start_place"]["name"] == "East River Esplanade"
 
 
 def test_the_typo_question_takes_its_option():

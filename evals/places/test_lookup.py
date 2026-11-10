@@ -143,3 +143,52 @@ def test_r19_grand_army_plaza_from_brooklyn_is_the_brooklyn_one(conn):
     found = lookup("Grand Army Plaza", near=GRAND_ARMY_PLAZA, conn=conn)
     assert pick_by_borough(found, "Brooklyn").borough == "Brooklyn"
     assert pick_by_borough(found, "Queens").borough == "Brooklyn"  # nearest within 3 km, the other is 11 km off
+
+
+# ---- names as people say them (phone test, 2026-11-09) -------------------------------------------------------------
+
+@pytest.mark.parametrize("said", ["Kips Bay Library", "kips bay library", "the Kips Bay library", "Library Kips Bay",
+                                  "Kips Bay Branch", "NYPL Kips Bay Branch", "New York Public Library Kips Bay Branch"])
+def test_kips_bay_library_by_any_name_people_use(conn, said):
+    m = one(conn, said, near=KIPS_BAY)
+    assert m.name == "NYPL: Kips Bay Library" and m.borough == "Manhattan"
+    assert abs(m.lat - KIPS_BAY[0]) < 0.001 and abs(m.lon - KIPS_BAY[1]) < 0.001  # the stand-in's own spot
+
+
+@pytest.mark.parametrize("said, name, kind", [
+    ("McCarren", "McCarren Park", "park"),  # "X" is X Park
+    ("Stuyvesant Cove", "Stuyvesant Cove Park", "park"),
+    ("Bedford Av station", "Bedford Ave", "subway_station"),  # with and without "station"
+    ("the Central Park", "Central Park", "park"),  # "the" anywhere is ignored
+])
+def test_parks_and_stations_with_or_without_the_generic_word(conn, said, name, kind):
+    m = lookup(said, near=KIPS_BAY, conn=conn)[0]
+    assert (m.name, m.kind) == (name, kind)
+
+
+# ---- "Which park?": runnable places only, nearest first (phone test, 2026-11-09) ------------------------------------
+
+def _runnable(conn, m) -> bool:
+    if m.kind == "park":
+        return (m.area_ha or 0) >= 10 or m.name == "Battery Park"
+    share = conn.execute("SELECT waterfront_share FROM places WHERE id = %s", (m.ids[0],)).fetchone()[0]
+    length = conn.execute("SELECT ST_Length(outline::geography) FROM places WHERE id = %s", (m.ids[0],)).fetchone()[0]
+    return m.kind == "path" and share >= 0.5 and length >= 2000
+
+
+@pytest.mark.parametrize("start", [KIPS_BAY, GRAND_ARMY_PLAZA, BEDFORD_AV, BOWLING_GREEN, (40.7355, -73.9906)])
+def test_which_park_options_are_runnable_and_nearest_first(conn, start):
+    from api.places import parks_near
+    options = parks_near(*start, conn=conn)
+    assert 1 <= len(options) <= 4
+    assert all(_runnable(conn, m) for m in options), [(m.name, m.kind, m.area_ha) for m in options]
+    assert [m.distance_m for m in options] == sorted(m.distance_m for m in options)
+    assert not any(w in m.name.casefold() for m in options for w in ("playground", "court", "field", "garden"))
+
+
+def test_which_park_from_kips_bay_offers_the_esplanade_then_parks_past_a_mile(conn):
+    from api.places import parks_near
+    names = [(m.name, round(m.distance_m / 1609.344, 1)) for m in parks_near(*KIPS_BAY, conn=conn)]
+    assert names[0][0] == "East River Esplanade" and names[0][1] < 0.6
+    assert ("Central Park", 1.5) in names
+    assert "Bellevue South Park" not in [n for n, _ in names]  # the old list's nearest small park

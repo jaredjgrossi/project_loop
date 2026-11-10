@@ -58,7 +58,11 @@ New: `start_place`, `end_place`, `via_places` (place refs: places like `place:"P
 
 **Places** (D2, D3)
 - **R12. Lookup, never invention.** Claude normalizes the name ("penn" → "Penn Station"). The places table (built from our OSM extract) resolves it. One match: use it, trust listed. Several: pick by borough (R19), otherwise ask with the options. None: ask for an address. Claude never outputs coordinates.
-- **R13. "The park"** means the nearest major park within about 1 mi, shown on the chip. If there's none, ask "Which park?" (Code proposes the major-park list.)
+- **R13. "The park"** means the nearest major park within about 1 mi, shown on the chip. If there's none, ask "Which park?". The options are only places to run (phone test, 2026-11-09; decision 041):
+  - major parks (10 ha and up, plus Battery Park);
+  - named waterfront paths at least 2 km long, at least half of them within 60 m of the shore.
+
+  Up to 8 km away, nearest first, at most four, each with its distance: "Central Park · 1.5 mi". Never playgrounds, courts or small squares.
 - **R14. Subjective picks** ("best Italian spot", "a good coffee place") ask for the specific place. Loop doesn't rank businesses.
 - **R15. Streets in avoids** mean don't run *along* them. Crossing is allowed.
 - **R16. Start default:** a run today starts from the current location. A later day starts from `saved:home`, otherwise ask. Location off or outside NYC: `saved:home`, otherwise ask. "From home" or "from the office" means that saved place, otherwise ask.
@@ -160,7 +164,7 @@ ASK (start, places) · "Loop only covers New York City. Where should it start?"
 Must not: start in New Jersey.
 
 **P20** · C1 · `start at the park, 3 mi`
-ASK (start, places) · "Which park?" with the nearest parks as options (no major park within about 1 mi of Kips Bay, R13)
+ASK (start, places) · "Which park?" with the nearest runnable places as options (no major park within about 1 mi of Kips Bay, R13): East River Esplanade · 0.4 mi first, then parks past a mile (Central Park · 1.5 mi)
 
 **P46** · C1 · `run to work, 5 mi, office is 120 broadway` · [lookup]
 PARSE · `end_place=address:"120 Broadway" (Manhattan, said)` · `distance_mi=5 (said)` · `use_my_location (default)`

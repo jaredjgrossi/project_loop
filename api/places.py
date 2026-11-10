@@ -24,6 +24,7 @@ kept, and a street that touches it in several spots is one match per spot, label
 Every match is from the table, so trust is "listed" and the source is named.
 """
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -87,6 +88,43 @@ def normalize(name: str) -> str:
             t = _ordinal(t)
         out.append(t)
     return " ".join(out)
+
+
+_LIB_SYSTEMS = (("nypl", "new york public library"), ("bpl", "brooklyn public library"),
+                ("qpl", "queens public library"))
+_LIB_PREFIX = re.compile(r"^(?:nypl|new york public library|bpl|brooklyn public library|qpl|queens public library)"
+                         r"\s*[:\-–—]?\s*(?:at\s+)?", re.I)
+_LIB_SUFFIX = re.compile(r"\s*(?:branch library|public library|library|branch)\.?$", re.I)
+
+
+def name_variants(name: str, kind: str | None, category: str | None) -> list[str]:
+    """Other names people use for a library, station or park (phone test, 2026-11-09: "Kips Bay Library" is
+    "NYPL: Kips Bay Library" in OSM). Stored as aliases by etl.load_places; normalize() is applied there.
+    - a library: "X Library", "X Branch", "X Branch Library", and "NYPL X Branch" style names for its system;
+    - a station: with and without "Station";
+    - a park: with and without "Park" ("McCarren" is McCarren Park)."""
+    out: list[str] = []
+    if category == "amenity=library":
+        system = next((s for s in _LIB_SYSTEMS if name.casefold().startswith(s)), None)
+        core = _LIB_SUFFIX.sub("", _LIB_PREFIX.sub("", name.strip())).strip(" -–—:")
+        if core:
+            out += [f"{core} Library", f"{core} Branch", f"{core} Branch Library"]
+            if system:
+                out += [f"{system[0]} {core} Branch", f"{system[1]} {core} Branch", f"{system[1]} {core}"]
+    elif kind in ("station", "subway_station"):
+        out.append(name[: -len(" station")] if name.casefold().endswith(" station") else f"{name} Station")
+    elif kind == "park" and (category or "").startswith("leisure=park"):
+        if name.casefold().endswith(" park"):
+            if len(name.split()) > 1:
+                out.append(name[: -len(" park")])
+        else:
+            out.append(f"{name} Park")
+    return [v for v in out if v.strip() and v.casefold() != name.casefold()]
+
+
+def token_key(norm: str) -> str:
+    """A normalized name's words in order, without "the": "library kips bay" and "the kips bay library" match."""
+    return " ".join(sorted(w for w in norm.split() if w != "the"))
 
 
 def street_base(norm: str) -> str:
@@ -227,13 +265,16 @@ def _name_rows(conn, q: str) -> tuple[list[_Row], bool]:
         {"q": q, "dir": has_dir}).fetchall()
     if rows:
         return [_Row(*r) for r in rows], True
-    words = q.split()
+    words = [w for w in q.split() if w != "the"]
     if not words:
         return [], False
-    pattern = " AND ".join(["norm ~ %s"] * len(words))
+    pattern = " AND ".join(["(norm ~ %s OR array_to_string(alias_norms, ' | ') ~ %s)"] * len(words))
     rows = conn.execute(f"SELECT {_ROW} FROM places WHERE kind <> 'crossing' AND {pattern} LIMIT {PARTIAL_LIMIT}",
-                        [rf"\m{re.escape(w)}\M" for w in words]).fetchall()
-    return [_Row(*r) for r in rows], False
+                        [p for w in words for p in (rf"\m{re.escape(w)}\M",) * 2]).fetchall()
+    found = [_Row(*r) for r in rows]
+    key = token_key(q)  # the same words in another order, or with "the": as good as exact (phone test, 2026-11-09)
+    same = [r for r in found if token_key(r.norm) == key or any(token_key(a) == key for a in r.alias_norms or [])]
+    return (same, True) if same else (found, False)
 
 
 def _groups(conn, rows: list[_Row], q: str) -> list[list[_Row]]:
@@ -477,7 +518,53 @@ def park_around(place: PlaceMatch, conn=None) -> PlaceMatch | None:
             conn.close()
 
 
-def parks_near(lat: float, lon: float, limit: int = 4, radius_m: float = MAJOR_PARK_RADIUS_M,
+RUNNABLE_RADIUS_M = 8000  # "Which park?" offers runnable places this far away, nearest first (Jared, 2026-11-09)
+LONG_PATH_M = 2000  # a named path at least this long, by the water, counts as a place to run
+WATERFRONT_M = 60  # by the water: within this of the shoreline (decision 014's waterfront distance) ...
+WATERFRONT_SHARE = 0.5  # ... for at least this share of the path (the High Line touches the water at one end only).
+# etl.load_places measures it once per long path (places.waterfront_share).
+SAME_OPTION_M = 150  # two options whose nearest points are this close are one place to run
+
+
+def parks_near(lat: float, lon: float, limit: int = 4, radius_m: float = RUNNABLE_RADIUS_M,
                conn=None) -> list[PlaceMatch]:
-    """The nearest named parks of any size, one per name: the options when 'the park' needs a question (R13)."""
-    return major_parks_near(lat, lon, radius_m=radius_m, min_ha=0, conn=conn)[:limit]
+    """The options when 'the park' needs a question (R13): only places a runner can run in, nearest first, even past
+    1 mi. Major parks (MAJOR_PARK_HA and up, or MAJOR_PARK_ALSO) and named waterfront paths at least LONG_PATH_M long,
+    one per name, each with its distance to its nearest edge. Never playgrounds, courts or small squares (phone
+    test, 2026-11-09: the old list offered the nearest parks of any size)."""
+    parks = major_parks_near(lat, lon, radius_m=radius_m, conn=conn)
+    conn, own = _connect(conn)
+    try:
+        rows = conn.execute(
+            f"""WITH p AS (SELECT ST_Transform(ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326), 2263) p)
+                SELECT DISTINCT ON (name) {_ROW}, ST_X(c), ST_Y(c), d FROM (
+                  SELECT places.*, ST_Distance(ST_Transform(outline, 2263), p.p) / %(f)s d,
+                         ST_ClosestPoint(outline, ST_Transform(p.p, 4326)) c
+                  FROM places, p
+                  WHERE kind = 'path' AND waterfront_share >= %(share)s
+                    AND ST_DWithin(ST_Transform(outline, 2263), p.p, %(ft)s)) places
+                ORDER BY name, d""",
+            {"lat": lat, "lon": lon, "ft": radius_m * FT_PER_M, "f": FT_PER_M, "share": WATERFRONT_SHARE}).fetchall()
+        nearest = {r[0]: (r[-2], r[-3]) for r in rows}
+        if parks:
+            nearest |= {r[0]: (r[2], r[1]) for r in conn.execute(
+                """SELECT id, ST_X(c), ST_Y(c) FROM (SELECT id, ST_ClosestPoint(outline, ST_SetSRID(ST_Point(%s, %s), 4326)) c
+                   FROM places WHERE id = ANY(%s)) x""", (lon, lat, [m.ids[0] for m in parks])).fetchall()}
+    finally:
+        if own:
+            conn.close()
+    paths = [PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
+                        ids=(r[0],), area_ha=r[11], distance_m=round(r[-1], 1)) for r in rows]
+    out = []
+    for m in sorted([*parks, *paths], key=lambda m: m.distance_m):
+        here = nearest.get(m.ids[0])
+        same = any(normalize(m.name) == normalize(o.name) or (here and nearest.get(o.ids[0]) and
+                   _meters(here, nearest[o.ids[0]]) <= SAME_OPTION_M) for o in out)
+        if not same:  # the Hudson River Park, its greenway and its esplanade are one place to run: the nearest
+            out.append(m)
+    return out[:limit]
+
+
+def _meters(a: tuple[float, float], b: tuple[float, float]) -> float:
+    kx = 111_320 * math.cos(math.radians(a[0]))
+    return math.hypot((a[1] - b[1]) * kx, (a[0] - b[0]) * 110_574)

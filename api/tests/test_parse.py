@@ -87,8 +87,9 @@ class FakePlaces:
         return [pm("Prospect Park", "park", "Brooklyn", 40.6602, -73.9690, distance_m=150)] if lat < 40.70 else []
 
     def parks_near(self, lat, lon):
-        return [pm("Bellevue South Park", "park", "Manhattan", 40.7410, -73.9772, distance_m=385),
-                pm("Saint Vartan Park", "park", "Manhattan", 40.7451, -73.9748, distance_m=441)]
+        # Runnable places only, nearest first (phone test, 2026-11-09): a long waterfront path, then a major park
+        return [pm("East River Esplanade", "path", "Manhattan", 40.7449, -73.9705, distance_m=657),
+                pm("Central Park", "park", "Manhattan", 40.7826, -73.9656, distance_m=2900)]
 
     def geocode(self, address, borough):
         known = {"11 madison ave": ["Manhattan", "Staten Island"], "120 broadway": ["Manhattan", "Brooklyn", "Queens"]}
@@ -457,3 +458,10 @@ def test_a_sparse_tool_input_reads_as_the_full_one():  # step 5b: the model leav
     assert full["via"] == [{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": ""}]
     assert full["said"] == [{"chip": "distance", "item": 0, "words": "5 miles"}]
     assert TOOL["input_schema"]["required"] == []
+
+
+def test_which_park_offers_runnable_places_nearest_first_with_their_distance():  # P20; phone test 2026-11-09
+    out = _built("P20")
+    q = out["parsed"]["question"]
+    assert q["text"] == "Which park?"
+    assert [o["text"] for o in q["options"]] == ["East River Esplanade · 0.4 mi", "Central Park · 1.8 mi"]

@@ -148,6 +148,7 @@ TEMPLATES: dict[str, str] = {
     "option.miles": "{miles} mi",
     "option.plus_miles": "+{miles} mi",
     "option.place": "{name}, {borough}",
+    "option.place.distance": "{name} · {miles} mi",
     "option.side": "{side} side ({at})",
     "option.borough": "{borough}",
     "option.route": "{weekday} · {name}",

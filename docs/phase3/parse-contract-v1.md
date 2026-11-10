@@ -85,6 +85,7 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 - `about` is one of: `distance`, `start`, `end`, `via`, `time`, `reuse`, `amount`.
 - `from` is one of: `parser`, `places`, `engine`.
 - `options`: 0–4 tap answers. `allow_text`: whether typing is offered.
+- "Which park?" options (decision 041) are runnable places only, nearest first, each with how far it is: `{"id": "a", "text": "East River Esplanade · 0.4 mi"}`.
 - `chip_id` (2026-11-09): the chip the question is about, so the app can mark its words in the sentence; null when the runner said nothing about it ("How far?" after "what do you suggest"). When nothing was built for it yet ("Which 86th St?"), the event carries a chip for it made from the runner's own words, with its span.
 - While a question is open, no routes stream.
 
