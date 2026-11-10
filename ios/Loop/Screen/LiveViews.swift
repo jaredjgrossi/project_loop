@@ -99,11 +99,20 @@ struct QuestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(question.text)
-                .typeStyle(.body)
-                .foregroundStyle(Palette.ink.color)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .top, spacing: 12) {
+                Text(question.text)
+                    .typeStyle(.body)
+                    .foregroundStyle(Palette.ink.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                // Never forced to pick or type: × goes back to editing the sentence.
+                CloseCardButton { model.cancelQuestion() }
+                    .padding(.top, -10)
+                    .padding(.trailing, -10)
+                    .accessibilityLabel("Close question")
+                    .accessibilityHint("Goes back to editing your sentence")
+            }
             if !question.options.isEmpty {
                 FlowLayout(spacing: 8) {
                     ForEach(question.options, id: \.id) { o in

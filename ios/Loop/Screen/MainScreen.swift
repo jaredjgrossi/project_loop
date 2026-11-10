@@ -64,6 +64,7 @@ struct MainScreen: View {
                 })
 
             BetterRouteLayer(model: model)
+            FitRouteLayer(model: model)
 
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-LoopPinchTarget") {
@@ -170,7 +171,10 @@ struct MainScreen: View {
     /// Launch: the logo fades into the map and the bar types an example. Debug launch arguments
     /// that need a finished route (-LoopSettled, -LoopMile, -LoopZoomAt ...) skip straight to it.
     private func start() async {
-        if LoopAPI.baseURL != nil { model.locationProvider.start() }
+        if LoopAPI.baseURL != nil {
+            model.locationProvider.start()
+            model.checkHealth()
+        }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
@@ -331,6 +335,44 @@ private struct BetterRouteLayer: View {
         .padding(.bottom, model.sheet.height + 10)
         .ignoresSafeArea(edges: .bottom)
         .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
+    }
+}
+
+/// "Fit route": once the runner has panned or zoomed after the route appeared, the camera stops
+/// fitting it on its own; this small button, 10 pt above the sheet at the right, brings it back.
+private struct FitRouteLayer: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let shows = model.routeCameraFree && model.sheetShown && model.shown != nil && model.sheet.readProgress == 0
+        ZStack {
+            if shows {
+                Button { model.fitRoute() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11, weight: .semibold))
+                        Text("Fit route").typeStyle(.label)
+                    }
+                    .foregroundStyle(Palette.ink.color)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Capsule().fill(Palette.surfaceSheet.color))
+                    .overlay(Capsule().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
+                    .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.10), radius: 7, y: 4)
+                    .frame(height: Metrics.minTap)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Frames the whole route again")
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 16)
+        // Above the Mapbox attribution button, which rides 8 pt above the sheet at the right.
+        .padding(.bottom, model.sheet.height + 36)
+        .ignoresSafeArea(edges: .bottom)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: shows)
     }
 }
 

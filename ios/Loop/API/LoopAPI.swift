@@ -12,6 +12,9 @@ struct LoopAPI {
         #if DEBUG
         // UI tests and screenshots run on the bundled route file.
         if ProcessInfo.processInfo.arguments.contains("-LoopOffline") { return nil }
+        // Debug: `-LoopUnreachable` points at an address that never answers (TEST-NET-1), to
+        // check the health line and the 8 s watchdog.
+        if ProcessInfo.processInfo.arguments.contains("-LoopUnreachable") { return URL(string: "https://192.0.2.1") }
         // Debug: `-LoopFakeToken` saves a made-up token, to check the 401 path end to end.
         if ProcessInfo.processInfo.arguments.contains("-LoopFakeToken"), TokenStore.load() == nil {
             TokenStore.save("not-a-real-token")
@@ -36,6 +39,18 @@ struct LoopAPI {
         case unreachable
     }
 
+    /// `GET /v1/health` (no token): true when the server answers and says it's ready.
+    static func health(base: URL, timeout: TimeInterval = 6) async -> Bool {
+        var req = URLRequest(url: base.appending(path: "v1/health"))
+        req.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: req),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let h = try? decoder.decode(Health.self, from: data) else { return false }
+        return h.ok
+    }
+
+    private struct Health: Decodable { let ok: Bool }
+
     /// `POST /v1/runs`, streamed. Each `data:` line is one event's JSON.
     func run(_ body: RunRequest) -> AsyncThrowingStream<ServerEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -54,7 +69,8 @@ struct LoopAPI {
                     guard status == 200 else { throw Failure.unreachable }
                     var ended = false
                     for try await line in bytes.lines {
-                        guard line.hasPrefix("data:") else { continue }
+                        // Pings and event names count as signs of life (the watchdog), nothing more.
+                        guard line.hasPrefix("data:") else { continuation.yield(.other); continue }
                         let event = ServerEvent.decode(Data(line.dropFirst(5).utf8))
                         continuation.yield(event)
                         if case .done = event { ended = true; break }

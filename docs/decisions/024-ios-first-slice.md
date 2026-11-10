@@ -145,6 +145,18 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   routes (a live route keeps the server's id). Chip and can't-do text is shown as the server sends
   it. Without an address or a token the app runs on the bundled file as before. Chip edits
   (resending constraints) are the next step; until then the editor's Done only closes when live.
+- **Framing the route (device review, 2026-11-09).** When the leader starts drawing, the camera
+  glides to fit the whole route (line, start, turnaround and mile marks) between the header and
+  the card's top: 24 pt in, 16 pt more for the marks, at least 40 pt above the card. It refits at
+  a new leader, at the provisional flag, at a final that changed the route, and follows the card's
+  height frame by frame. A new camera move cancels any running one (a leftover reading drift used
+  to pull the camera back to the start on live builds). After the runner pans or zooms, nothing
+  refits on its own; "Fit route" above the sheet does. START, TURN and every mile mark sit beside
+  their marker on the side with room, never on the line, flipping when that side is taken.
+- **Never wait forever.** No `parsed` within 8 s, or 20 s with no line from the stream after it,
+  stops the wait with "Can't reach Loop right now." and Try again; `/v1/health` is checked at
+  launch and the landing sheet shows the same line if it fails. The question card has a × that
+  goes back to editing the sentence. Rows in "How Loop read it" open only on a clean tap.
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).

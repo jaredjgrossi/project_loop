@@ -42,6 +42,22 @@ struct LandingSheet: View {
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
 
+            // The launch health check failed: one plain line, never a spinner.
+            if model.serverDown {
+                HStack(spacing: 10) {
+                    Text(MainModel.LiveCopy.unreachable)
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.inkSoft.color)
+                    Spacer(minLength: 8)
+                    Button("Try again") { model.checkHealth() }
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.action.color)
+                        .frame(minHeight: Metrics.minTap)
+                }
+                .padding(.top, 2)
+                .transition(.opacity)
+            }
+
             // Runs and Recent, or the typing list: both in place under the field, crossfading (200 ms).
             ZStack(alignment: .top) {
                 if searching {

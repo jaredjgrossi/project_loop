@@ -161,6 +161,7 @@ extension MainModel {
         guard !sentence.isEmpty else { return }
         // Leave typing first, so nothing reacting to the cleared field thinks the runner is still typing.
         stage = .reading
+        routeCameraFree = false
         flow?.cancel()
         playbackCancel()
         clearSelection()
@@ -293,6 +294,7 @@ extension MainModel {
         }
         data = fixtureData
         liveMode = false
+        routeCameraFree = false
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
         flow?.cancel()
         playbackCancel()

@@ -268,7 +268,8 @@ struct ReadItSection: View {
                 if !r.filled.isEmpty {
                     // What Loop filled in, in plain words: no heading, no source words.
                     ForEach(r.filled) { f in
-                        Button { model.openEditor(.filled(f.field)) } label: {
+                        // A clean tap only: a scroll or drag that starts on a row never opens it.
+                        CleanTap(hint: "Opens the editor") { model.openEditor(.filled(f.field)) } label: {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(f.main).typeStyle(.body).foregroundStyle(Palette.ink.color)
@@ -284,8 +285,6 @@ struct ReadItSection: View {
                             .contentShape(Rectangle())
                             .overlay(alignment: .bottom) { Rectangle().fill(Palette.lineHairline.color).frame(height: 1) }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Opens the editor")
                     }
                 }
                 if !r.notes.isEmpty {
@@ -329,6 +328,24 @@ struct StatRow: View {
     }
 }
 
+/// A tap that only fires when the finger lifts without moving: unlike a Button, a scroll or a
+/// sheet drag that starts on it never triggers it. VoiceOver still sees a button.
+struct CleanTap<Label: View>: View {
+    var hint: String = ""
+    let action: () -> Void
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        label
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(hint)
+            .accessibilityAction { action() }
+    }
+}
+
 /// Trust words are hidden by default (UI review, 2026-11-09): tapping a number, or a crowd or note
 /// line, shows its trust word and the file's source in a small popover.
 struct TrustTap<Content: View>: View {
@@ -339,8 +356,7 @@ struct TrustTap<Content: View>: View {
 
     var body: some View {
         if let trust {
-            Button { shown = true } label: { content.contentShape(Rectangle()) }
-                .buttonStyle(.plain)
+            CleanTap(hint: "Shows how this was worked out") { shown = true } label: { content }
                 .popover(isPresented: $shown, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(trust.text.prefix(1).uppercased() + trust.text.dropFirst())
@@ -356,9 +372,6 @@ struct TrustTap<Content: View>: View {
                     .presentationCompactAdaptation(.popover)
                     .presentationBackground(Palette.surfaceSheet.color)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Shows how this was worked out")
         } else {
             content
         }

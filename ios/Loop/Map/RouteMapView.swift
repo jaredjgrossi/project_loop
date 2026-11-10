@@ -118,7 +118,9 @@ struct RouteMapView: UIViewRepresentable {
                 guard let model, model.sheetShown else { return }
                 self?.setBottomInset(h)
                 self?.setOrnamentAlpha(RouteMapView.ornamentAlpha(model))
+                self?.bindRouteFit(sheetHeight: h)
             }
+            mapView.gestures.delegate = self
             model.landing.onHeightChange = { [weak self, weak model] h in
                 guard let model, !model.sheetShown else { return }
                 self?.setBottomInset(RouteMapView.ornamentInset(model))
@@ -457,6 +459,29 @@ struct RouteMapView: UIViewRepresentable {
             map.setCamera(to: CameraOptions(padding: padding))
         }
 
+        /// The route fit: the whole route with its start, turnaround and mile marks between the
+        /// header and the sheet's top, 24 pt in from each edge plus 16 pt for the marks and labels
+        /// that sit beside the line, and at least 40 pt above the sheet.
+        private func routeFit(_ map: MapboxMap, sheetHeight: CGFloat) -> CameraOptions? {
+            let coords = model.overviewCoordinates.map(\.coordinate)
+            guard coords.count >= 2 else { return nil }
+            let marks: CGFloat = 16
+            let padding = UIEdgeInsets(top: model.headerBottom + 24 + marks, left: 24 + marks,
+                                       bottom: sheetHeight + 40 + marks, right: 24 + marks)
+            return try? map.camera(for: coords, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
+                                   maxZoom: 16.5, offset: nil)
+        }
+
+        /// While the route card moves (drag or settle), the fit follows its height every frame, so
+        /// the route stays framed above it in one motion. Not after the runner moved the map.
+        private func bindRouteFit(sheetHeight: CGFloat) {
+            guard styleReady, let mapView, let map = mapView.mapboxMap, !model.routeCameraFree,
+                  model.shown != nil, [.building, .settled].contains(model.stage),
+                  let target = routeFit(map, sheetHeight: sheetHeight) else { return }
+            mapView.camera.cancelAnimations()
+            map.setCamera(to: target)
+        }
+
         func setOrnamentAlpha(_ alpha: CGFloat) {
             guard let mapView, mapView.ornaments.logoView.alpha != alpha else { return }
             mapView.ornaments.logoView.alpha = alpha
@@ -514,11 +539,8 @@ struct RouteMapView: UIViewRepresentable {
             case .overview:
                 // Clear of the header (START sits above the dot), and the route at least 40 pt
                 // above the sheet's top (TURN hangs below the ring), in whichever state the sheet rests.
-                let coords = model.overviewCoordinates.map(\.coordinate)
-                let padding = UIEdgeInsets(top: model.headerBottom + 28, left: 44,
-                                           bottom: model.sheet.restingHeight + 40 + 22, right: 44)
-                target = try? map.camera(for: coords, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
-                                         maxZoom: 16, offset: nil)
+                // Before the card rises, fit above where it will rest (its collapsed height).
+                target = routeFit(map, sheetHeight: model.sheet.restingHeight)
             case let .focus(point):
                 // Pan only if the point is outside the band between the header and the sheet.
                 let now = map.point(for: point.coordinate)
@@ -541,6 +563,9 @@ struct RouteMapView: UIViewRepresentable {
                 target = CameraOptions(center: point.coordinate, padding: padding, zoom: zoom.map { CGFloat($0) })
             }
             guard let target else { return }
+            // A new move replaces any running one (an unfinished drift would otherwise pull the
+            // camera back to where it was heading).
+            mapView.camera.cancelAnimations()
             if request.animated && !reduceMotion {
                 mapView.camera.ease(to: target, duration: request.duration, curve: .easeInOut)
             } else {
@@ -548,4 +573,18 @@ struct RouteMapView: UIViewRepresentable {
             }
         }
     }
+}
+
+/// The runner panned, pinched, rotated or double-tapped the map after the route appeared: stop
+/// fitting it automatically and offer "Fit route". A single tap (selecting the route) doesn't count.
+extension RouteMapView.Coordinator: GestureManagerDelegate {
+    nonisolated func gestureManager(_ gestureManager: GestureManager, didBegin gestureType: GestureType) {
+        MainActor.assumeIsolated {
+            guard gestureType != .singleTap, model.shown != nil,
+                  [.building, .settled].contains(model.stage) else { return }
+            model.routeCameraFree = true
+        }
+    }
+    nonisolated func gestureManager(_ gestureManager: GestureManager, didEnd gestureType: GestureType, willAnimate: Bool) {}
+    nonisolated func gestureManager(_ gestureManager: GestureManager, didEndAnimatingFor gestureType: GestureType) {}
 }

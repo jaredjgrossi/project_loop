@@ -135,6 +135,24 @@ enum RouteHit {
 /// that scale removed (Douglas–Peucker over the whole line at once), plus a map from along-route
 /// metres on the full line to along-route metres on the drawn line, so runs and dashes are cut
 /// from the drawn line at the right places. Display only; the full line stays the source of truth.
+/// A lon/lat box, to tell whether a route fit would change.
+struct GeoBounds: Equatable {
+    let minLon, minLat, maxLon, maxLat: Double
+
+    init(_ pts: [GeoPoint]) {
+        minLon = pts.map(\.lon).min() ?? 0; maxLon = pts.map(\.lon).max() ?? 0
+        minLat = pts.map(\.lat).min() ?? 0; maxLat = pts.map(\.lat).max() ?? 0
+    }
+
+    /// Any edge moved by more than 2% of the box (or there was no box before).
+    func differs(from other: GeoBounds?) -> Bool {
+        guard let o = other else { return true }
+        let w = max(maxLon - minLon, 1e-6), h = max(maxLat - minLat, 1e-6)
+        return abs(minLon - o.minLon) > 0.02 * w || abs(maxLon - o.maxLon) > 0.02 * w
+            || abs(minLat - o.minLat) > 0.02 * h || abs(maxLat - o.maxLat) > 0.02 * h
+    }
+}
+
 struct DisplayLine {
     let line: Polyline
     /// For each drawn vertex, its along-route metres on the full line.

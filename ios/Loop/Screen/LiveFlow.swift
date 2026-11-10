@@ -21,6 +21,43 @@ extension MainModel {
         static let noRoute = "No route came back for that."
     }
 
+    /// No `parsed` within this long after sending (the parse is 1.7 s median, 3.1 s p90): give up.
+    static let parsedTimeout: TimeInterval = 8
+    /// After `parsed`, this long with no line at all (the server pings every 15 s): give up.
+    static let silenceTimeout: TimeInterval = 20
+
+    /// GET /v1/health at launch (and on Try again): the landing sheet says when it fails.
+    func checkHealth() {
+        guard let base = LoopAPI.baseURL else { return }
+        Task { @MainActor [weak self] in
+            let ok = await LoopAPI.health(base: base)
+            self?.serverDown = !ok
+        }
+    }
+
+    /// Never wait forever: no `parsed` in 8 s, or 20 s of silence later, stops the wait with a
+    /// plain line and Try again.
+    private func armWatchdog() {
+        liveWatchdog?.cancel()
+        liveWatchdog = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(0.5))
+                guard let self, !Task.isCancelled else { return }
+                guard self.liveMode, self.pendingQuestion == nil, self.liveNotice == nil,
+                      [.reading, .building].contains(self.stage) else { return }
+                let now = CACurrentMediaTime()
+                let stalled = self.liveParsedAt == nil
+                    ? now - self.liveSentAt > Self.parsedTimeout
+                    : now - self.liveLastActivity > Self.silenceTimeout
+                if stalled {
+                    self.liveTask?.cancel()
+                    self.showNotice(LiveNotice(text: LiveCopy.unreachable, canRetry: true))
+                    return
+                }
+            }
+        }
+    }
+
     /// The camera while Loop reads: the push-in has started (send); drift in slowly until `parsed`
     /// arrives (1.7 s median, 3.1 s p90). The pull-back waits for the push-in to finish (1.2 s), so
     /// a fast parse never cuts it off and a slow one still has the map moving.
@@ -54,10 +91,13 @@ extension MainModel {
 
     private func runLive(api: LoopAPI, body: RunRequest, shown: String, reduceMotion: Bool) {
         liveTask?.cancel()
+        liveLastActivity = CACurrentMediaTime()
+        armWatchdog()
         liveTask = Task { @MainActor [weak self] in
             do {
                 for try await event in api.run(body) {
                     guard let self, !Task.isCancelled else { return }
+                    self.liveLastActivity = CACurrentMediaTime()
                     await self.handleLive(event, shown: shown, reduceMotion: reduceMotion)
                 }
             } catch LoopAPI.Failure.unauthorized {
@@ -236,6 +276,20 @@ extension MainModel {
                                                options: q.options, allowText: q.allowText, chipId: q.chipId)
     }
 
+    /// × on the question: no answer is forced. The build stops and the sentence opens for editing
+    /// (go sends it again; the wordmark goes home).
+    func cancelQuestion() {
+        pendingQuestion = nil
+        liveTask?.cancel()
+        flow?.cancel()
+        locationPulsing = false
+        if reachStart != nil { reachFadeStart = CACurrentMediaTime() }
+        frameVersion += 1
+        stage = .settled
+        editMode = true
+        editingText = true
+    }
+
     /// A tapped option or typed text: a new request with `answer`; the stream picks up at `parsed`.
     func answerQuestion(optionId: String?, text: String?) {
         guard let q = pendingQuestion, let parseId = q.parseId, let api = LoopAPI.live else { return }
@@ -263,6 +317,7 @@ extension MainModel {
     /// "Try again": the same request from the start.
     func retryLive() {
         liveNotice = nil
+        serverDown = false
         if needsToken { return }
         liveExpiredRetried = false
         send(liveSentence, reduceMotion: UIAccessibility.isReduceMotionEnabled)

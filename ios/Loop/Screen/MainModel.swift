@@ -133,6 +133,11 @@ final class MainModel {
     /// A stable integer key per server route id, so morphs and the build state work by key.
     @ObservationIgnored var liveKeys: [String: Int] = [:]
     @ObservationIgnored var liveSentAt: CFTimeInterval = 0
+    /// The last line from the stream (an event or a ping), for the watchdog.
+    @ObservationIgnored var liveLastActivity: CFTimeInterval = 0
+    @ObservationIgnored var liveWatchdog: Task<Void, Never>?
+    /// The launch health check failed: the landing sheet says so, with Try again.
+    var serverDown = false
     @ObservationIgnored var liveParsedAt: CFTimeInterval?
     @ObservationIgnored var liveSentence = ""
     @ObservationIgnored var liveParseId: String?
@@ -173,7 +178,36 @@ final class MainModel {
 
     /// The overview frames the shown route only: it is the hero. The faint #2 and #3 may run off
     /// screen or under the header fade (framing all three made the hero too small).
-    var overviewCoordinates: [GeoPoint] { (data.candidate(rank: 1) ?? shown)?.line.points ?? [] }
+    var overviewCoordinates: [GeoPoint] {
+        guard let c = shown ?? data.candidates.first else { return [] }
+        return Self.fitPoints(c)
+    }
+
+    /// What a route fit frames: the line (simplified), its start, turnaround and every mile mark.
+    static func fitPoints(_ c: Candidate) -> [GeoPoint] {
+        var pts = DisplayLine.simplify(c.line.points, tolerance: 4).map { c.line.points[$0] }
+        if let d = c.detail {
+            pts.append(d.start)
+            if let t = d.turnaround { pts.append(t.point) }
+            pts += d.miles.map(\.point)
+        }
+        return pts
+    }
+
+    /// The runner panned or zoomed after the route appeared: no automatic refits until "Fit route".
+    var routeCameraFree = false
+
+    /// Glide to fit the route above the sheet, unless the runner has moved the map.
+    func autoFitRoute(duration: TimeInterval) {
+        guard !routeCameraFree, shown != nil else { return }
+        requestCamera(.overview, animated: true, duration: duration)
+    }
+
+    /// "Fit route": back to the framed route, and automatic fits resume.
+    func fitRoute() {
+        routeCameraFree = false
+        requestCamera(.overview, animated: true, duration: 0.5)
+    }
 
     var eyebrowText: String {
         CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
@@ -215,8 +249,20 @@ final class MainModel {
 
     private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
         let wasSettled = build.settleAt
+        let wasShown = build.shownRank
+        let wasBounds = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
         build.apply(event, at: t)
         frameVersion += 1
+        // A new leader, the flag, or a final that changed the route: glide to fit it again.
+        switch event {
+        case .top3:
+            if wasShown != nil, build.shownRank != wasShown { autoFitRoute(duration: 0.6) }
+        case .provisional:
+            autoFitRoute(duration: SheetState.settleDuration)
+        case .final:
+            let now = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
+            if build.shownRank != wasShown || now?.differs(from: wasBounds) == true { autoFitRoute(duration: 0.5) }
+        }
         if build.settleAt != nil, wasSettled == nil {
             pulseID += 1
             Haptics.settle()
@@ -280,11 +326,8 @@ final class MainModel {
     // MARK: Sheet
 
     func setSheet(open: Bool, animated: Bool) {
-        let changed = sheet.restingOpen != open || sheet.height != (open ? SheetState.open : SheetState.collapsed)
-        sheet.settle(open: open, animated: animated) { [weak self] in
-            // Refit the route to the space the sheet leaves, only once it has settled.
-            if changed { self?.requestCamera(.overview, animated: animated) }
-        }
+        // The route fit follows the sheet's height frame by frame (RouteMapView), so no refit here.
+        sheet.settle(open: open, animated: animated)
         sheetOpened(open)
     }
 
@@ -294,10 +337,7 @@ final class MainModel {
             goHome()
             return
         }
-        let wasOpen = sheet.restingOpen
-        sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { [weak self] open in
-            if open != wasOpen { self?.requestCamera(.overview, animated: animated) }
-        }
+        sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { _ in }
         sheetOpened(sheet.restingOpen)
     }
 
