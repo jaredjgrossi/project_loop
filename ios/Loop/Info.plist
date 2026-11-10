@@ -22,8 +22,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LoopAPIBase</key>
+	<string>$(LOOP_API_BASE)</string>
 	<key>MBXAccessToken</key>
 	<string>$(MAPBOX_ACCESS_TOKEN)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Loop starts your run from where you are.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fraunces.ttf</string>

@@ -103,6 +103,21 @@ struct MainScreen: View {
                     .onTapGesture { model.exitEditMode() }
             }
 
+            // A question from the server, or a plain message (no spinners): at the bottom, like a sheet.
+            Group {
+                if let q = model.pendingQuestion {
+                    QuestionCard(model: model, question: q)
+                        .id(q.id + (q.parseId ?? ""))
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                } else if let n = model.liveNotice {
+                    NoticeCard(model: model, notice: n)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
+
             if let target = model.editing {
                 EditorPanel(model: model, target: target)
                     .padding(.top, target.isUnderstood ? model.headerBottom + 10 : 0)
@@ -120,6 +135,18 @@ struct MainScreen: View {
         .background(Palette.mapLand.color)
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
+        }
+        .overlay {
+            // One-time token paste (and again after a 401). Covers everything until saved or skipped.
+            if model.needsToken {
+                TokenScreen(model: model).transition(.opacity)
+            }
+        }
+        // The first location fix: put it in the space above the landing sheet.
+        .onChange(of: model.locationProvider.here == nil) { _, missing in
+            guard !missing, [.logo, .landing, .typing].contains(model.stage) else { return }
+            model.requestCamera(.above(model.location, bottom: model.landing.height, zoom: nil),
+                                animated: !reduceMotion, duration: 0.6)
         }
         .task { await start() }
         // The keyboard's height, so the landing sheet sits on it and the map re-centres above both.
@@ -143,6 +170,7 @@ struct MainScreen: View {
     /// Launch: the logo fades into the map and the bar types an example. Debug launch arguments
     /// that need a finished route (-LoopSettled, -LoopMile, -LoopZoomAt ...) skip straight to it.
     private func start() async {
+        if LoopAPI.baseURL != nil { model.locationProvider.start() }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]

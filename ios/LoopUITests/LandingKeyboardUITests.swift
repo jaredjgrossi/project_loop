@@ -4,6 +4,7 @@ import XCTest
 final class LandingKeyboardUITests: XCTestCase {
     func testCancelMatchesTapAwayAndDrag() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-LoopOffline")
         app.launch()   // seeded store: "Usual" and one recent
         let field = app.textFields["Describe your run"]
         XCTAssertTrue(field.waitForExistence(timeout: 40))

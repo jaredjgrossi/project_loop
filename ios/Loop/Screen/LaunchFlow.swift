@@ -182,9 +182,21 @@ extension MainModel {
         sheet.settle(open: false, animated: false)
         Haptics.prepareSettle()
 
+        liveTask?.cancel()
+        pendingQuestion = nil
+        liveNotice = nil
         let z0 = zoom
         // Push in on the start while Loop reads, then keep drifting in slowly.
         requestCamera(.at(location, zoom: z0 + 1.4), animated: true, duration: 1.2)
+
+        // With the server, its events drive the rest (LiveFlow.swift).
+        if let api = LoopAPI.live {
+            startLive(sentence: sentence, shown: shown, api: api, z0: z0, reduceMotion: reduceMotion)
+            return
+        }
+        liveMode = false
+        liveReachM = nil
+        data = fixtureData
         flow = Task { @MainActor [weak self] in
             func wait(_ t: TimeInterval) async -> Bool { try? await Task.sleep(for: .seconds(t)); return !Task.isCancelled }
             guard await wait(1.2), let self else { return }
@@ -234,8 +246,12 @@ extension MainModel {
         guard stage != .logo, stage != .landing, stage != .typing else { return }
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
         if let text = requestText, let route = shown, cardRevealed {
-            runs.addRecent(request: text, distanceMi: route.distanceMi, line: route.line, countsAsRun: false)
+            runs.addRecent(request: text, distanceMi: route.distanceMi, line: route.line, countsAsRun: false,
+                           serverId: liveMode ? liveRouteId : nil)
         }
+        liveTask?.cancel()
+        pendingQuestion = nil
+        liveNotice = nil
         flow?.cancel()
         playbackCancel()
         clearSelection()
@@ -270,6 +286,13 @@ extension MainModel {
     func openRun(request: String) {
         let sentence = request.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sentence.isEmpty, stage == .landing || stage == .typing else { return }
+        // With the server, a saved run or recent is built again for now (closures, crowds, time).
+        if LoopAPI.live != nil {
+            send(sentence, reduceMotion: UIAccessibility.isReduceMotionEnabled)
+            return
+        }
+        data = fixtureData
+        liveMode = false
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
         flow?.cancel()
         playbackCancel()
@@ -313,6 +336,18 @@ extension MainModel {
             if fade == 0 { return ([], 0) }
         }
         // Until the engine streams `candidates`, the file's top 3 outlines stand in.
+        if liveMode {
+            // Live: the engine's outlines as they arrive, each drawn in over 0.7 s.
+            let lines: [[GeoPoint]] = liveOutlines.suffix(60).compactMap { o in
+                let t = (now - max(start, o.at)) / Timing.candidateDraw
+                let p = 1 - pow(1 - min(1, max(0, t)), 2)
+                guard p > 0 else { return nil }
+                let line = Polyline(o.points)
+                let pts = line.slice(from: 0, to: line.length * p)
+                return pts.count >= 2 ? pts : nil
+            }
+            return (lines, 0.3 * fade)
+        }
         let lines: [[GeoPoint]] = data.candidates.enumerated().compactMap { i, c in
             let t = (now - start - Double(i) * Timing.candidateStagger) / Timing.candidateDraw
             let p = 1 - pow(1 - min(1, max(0, t)), 2)
@@ -326,6 +361,11 @@ extension MainModel {
     func waitIsMoving(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
         guard let start = reachStart else { return false }
         if let f = reachFadeStart { return now - f < Timing.reachFade + 0.05 }
+        if liveMode {
+            // Live: moving while the ring opens or an outline is still drawing in.
+            let lastOutline = liveOutlines.last?.at ?? 0
+            return now - start < Timing.reachOpen + 0.05 || now - lastOutline < Timing.candidateDraw + 0.05
+        }
         let candidatesDone = (candidatesStart.map { now - $0 } ?? 0) > Timing.candidateDraw + Double(data.candidates.count) * Timing.candidateStagger
         return now - start < Timing.reachOpen + 0.05 || !candidatesDone
     }

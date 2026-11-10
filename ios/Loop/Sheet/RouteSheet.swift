@@ -166,7 +166,7 @@ struct OpenSection: View {
                     .accessibilityLabel("\(crowd) \(trust.text)")
                 }
             }
-        } else if model.cardRevealed {
+        } else if model.cardRevealed, !model.liveMode {
             Text("Details for this route aren't in the saved file.")
                 .typeStyle(.label)
                 .foregroundStyle(Palette.inkMuted.color)

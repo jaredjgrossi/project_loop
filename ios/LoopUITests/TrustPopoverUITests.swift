@@ -5,6 +5,7 @@ final class TrustPopoverUITests: XCTestCase {
     func testTappingTheClimbShowsEstimateAndSource() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LoopMile", "1"]   // the open sheet
+        app.launchArguments.append("-LoopOffline")
         app.launch()
 
         let climb = app.buttons["8 m climb, estimate"]

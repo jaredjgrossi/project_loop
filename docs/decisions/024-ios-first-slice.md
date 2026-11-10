@@ -132,6 +132,19 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   live height every frame (no camera animations started on height changes), so the location
   glides with the sheet. Runs and the typing list crossfade in place (200 ms); "Cancel" fades in
   beside the field; contents are clipped to the sheet's shape.
+- **Wired to the Phase 3 server (2026-11-09).** With `LOOP_API_BASE` in the git-ignored
+  Secrets.xcconfig and a token in the Keychain (pasted once on a token screen), a request streams
+  `parsed → candidates → top3 → provisional → final → done` into the existing wait: the push-in
+  until `parsed` (never cut short before 1.2 s; it drifts on for a slow parse), the reach ring from
+  `reach_m`, the engine's outlines as they arrive, the route draw and the settle at `provisional`.
+  The card rises at provisional with the distance; the reason, stats and "Best of N" fill in with
+  `final`. Routes are keyed by the server's ids, so a new leader morphs. Questions (parser or
+  engine) show in a card at the bottom; answering continues the build. Unreachable or an error
+  shows a plain message with "Try again" where it can help; a 401 brings the token screen back.
+  The request sends the real location (when-in-use; null if denied), a fixed profile, and recent
+  routes (a live route keeps the server's id). Chip and can't-do text is shown as the server sends
+  it. Without an address or a token the app runs on the bundled file as before. Chip edits
+  (resending constraints) are the next step; until then the editor's Done only closes when live.
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).
@@ -177,3 +190,6 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - WeatherKit and its required Apple Weather attribution, once the paid program is in place.
 - Mapbox's terms ask for the logo wherever the map shows. It's hidden only while "How Loop read
   it" covers the map; check this with Mapbox before any public release.
+- The token screen's and the unreachable message's wording is the app's own until the UI chat
+  writes it ("Paste your Loop token", "Can't reach Loop right now.").
+- `planned` events are received but not saved or shown yet (no planned list).

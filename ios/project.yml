@@ -42,6 +42,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MBXAccessToken: $(MAPBOX_ACCESS_TOKEN)
+        LoopAPIBase: $(LOOP_API_BASE)
+        NSLocationWhenInUseUsageDescription: Loop starts your run from where you are.
         UIAppFonts:
           - Fraunces.ttf
           - InstrumentSans.ttf

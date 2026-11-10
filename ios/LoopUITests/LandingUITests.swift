@@ -4,6 +4,7 @@ import XCTest
 final class LandingUITests: XCTestCase {
     func testUsualTileOpensItsCard() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-LoopOffline")
         app.launch()   // the launch sequence: logo, landing sheet
 
         let usual = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Usual, '")).firstMatch
@@ -18,6 +19,7 @@ final class LandingUITests: XCTestCase {
     func testLandingCollapsesToTheBarAndReopens() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LoopNewUser"]
+        app.launchArguments.append("-LoopOffline")
         app.launch()
 
         let water = app.buttons["By the water"]
@@ -43,6 +45,7 @@ final class LandingUITests: XCTestCase {
     func testCloseSwipeAndWordmarkGoHome() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-LoopNewUser"]
+        app.launchArguments.append("-LoopOffline")
         app.launch()
         let field = app.descendants(matching: .any)["Describe your run"]
         let water = app.buttons["By the water"]

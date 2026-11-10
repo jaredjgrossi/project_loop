@@ -31,6 +31,43 @@ struct ReadOut: Equatable {
 
     var hasReadIt: Bool { !cant.isEmpty || !filled.isEmpty || !notes.isEmpty }
 
+    /// From the server's `parsed` event. Every string is shown as sent (server templates). Words the
+    /// runner said carry a span in Unicode scalars; here they become NSString (UTF-16) offsets.
+    init(parsed: ServerEvent.Parsed, sentence: String) {
+        for chip in parsed.chips {
+            if chip.source == "said", let span = chip.span,
+               let range = Self.utf16Range(of: span, in: sentence) {
+                understood.append(Understood(start: range.location, length: range.length, field: chip.field,
+                                             title: Self.title(chip.field), value: chip.text))
+            } else if chip.source != "said" {
+                filled.append(Filled(field: chip.field, main: chip.text, detail: "", source: chip.source))
+            }
+        }
+        cant = parsed.cant.map { Cant(gap: $0.gap, text: $0.text) }
+        notes = parsed.notes.map { Note(key: $0.key, text: $0.text, trust: $0.trust ?? "") }
+    }
+
+    init() {}
+
+    /// A span's scalar positions as an NSRange in the sentence; nil if it doesn't fit.
+    static func utf16Range(of span: ServerEvent.Span, in text: String) -> NSRange? {
+        let scalars = text.unicodeScalars
+        guard span.start >= 0, span.end > span.start, span.end <= scalars.count else { return nil }
+        let a = scalars.index(scalars.startIndex, offsetBy: span.start)
+        let b = scalars.index(scalars.startIndex, offsetBy: span.end)
+        return NSRange(a..<b, in: text)
+    }
+
+    /// The editor's title for a chip field ("DISTANCE · YOU SAID").
+    static func title(_ field: String) -> String {
+        switch field {
+        case "time": return "Start time"
+        case "via": return "Through"
+        case "avoid": return "Avoid"
+        default: return field.prefix(1).uppercased() + field.dropFirst()
+        }
+    }
+
     /// Stand-in for the server's parse (simulation only; the real one is Claude + templates).
     static func simulated(_ sentence: String, data: LoopData, file: RouteFile.Summary?) -> ReadOut {
         var r = ReadOut()

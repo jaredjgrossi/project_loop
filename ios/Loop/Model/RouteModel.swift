@@ -225,6 +225,13 @@ struct LoopData {
 
     func candidate(rank: Int) -> Candidate? { candidates.first { $0.rank == rank } }
 
+    /// A live build's routes before `final` (outlines and distances only), or after it.
+    init(request: RequestCard, candidates: [Candidate], bestOf: Int) {
+        self.request = request
+        self.candidates = candidates
+        self.bestOf = bestOf
+    }
+
     init(file: RouteFile) throws {
         guard let routeFeature = file.route.features.first,
               let routeCoords = routeFeature.geometry.lineString,

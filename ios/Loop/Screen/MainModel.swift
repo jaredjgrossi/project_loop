@@ -8,7 +8,10 @@ import SwiftUI
 @Observable
 @MainActor
 final class MainModel {
-    let data: LoopData
+    /// The routes on screen: the bundled file, or a live build's (replaced as events arrive).
+    var data: LoopData { didSet { resampled = [:] } }
+    /// The bundled route file, for builds without the server and the debug replays.
+    let fixtureData: LoopData
 
     // Route: the build replay decides what is shown.
     var build: BuildState
@@ -106,11 +109,46 @@ final class MainModel {
     @ObservationIgnored var reachFadeStart: CFTimeInterval?
     @ObservationIgnored var candidatesStart: CFTimeInterval?
     @ObservationIgnored var flow: Task<Void, Never>?
-    /// The runner's location. A public stand-in (the fixture's start) until location is wired.
-    var location: GeoPoint { data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0] }
-    /// How far the runner can go from the start: half the distance, out and back. Until the server
-    /// sends parsed.reach_m.
-    var reachMetres: Double { (data.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile }
+    /// The runner's location: Core Location (when-in-use) when this build talks to the server;
+    /// otherwise, and until a fix arrives, the bundled file's public start (Kips Bay Library).
+    var location: GeoPoint {
+        if LoopAPI.baseURL != nil, let h = locationProvider.here {
+            return GeoPoint(lon: h.coordinate.longitude, lat: h.coordinate.latitude)
+        }
+        return fixtureStart
+    }
+    @ObservationIgnored let fixtureStart: GeoPoint
+    let locationProvider = LocationProvider()
+    /// How far the runner can go from the start: the server's `reach_m` on a live build, else half
+    /// the bundled route's distance (out and back).
+    var reachMetres: Double {
+        liveReachM ?? (fixtureData.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile
+    }
+
+    // Live builds (Phase 3 server; LiveFlow.swift).
+    @ObservationIgnored var liveTask: Task<Void, Never>?
+    /// This build streams from the server.
+    var liveMode = false
+    @ObservationIgnored var liveReachM: Double?
+    /// A stable integer key per server route id, so morphs and the build state work by key.
+    @ObservationIgnored var liveKeys: [String: Int] = [:]
+    @ObservationIgnored var liveSentAt: CFTimeInterval = 0
+    @ObservationIgnored var liveParsedAt: CFTimeInterval?
+    @ObservationIgnored var liveSentence = ""
+    @ObservationIgnored var liveParseId: String?
+    @ObservationIgnored var liveExpiredRetried = false
+    /// The automatic resend after `expired` is under way (it mustn't reset the once-only guard).
+    @ObservationIgnored var liveResending = false
+    @ObservationIgnored var liveRouteId: String?
+    /// Outlines of the routes the engine tries, with when each arrived (drawn in over 0.7 s).
+    @ObservationIgnored var liveOutlines: [(points: [GeoPoint], at: CFTimeInterval)] = []
+    /// A question from the parser or the engine, waiting for the runner.
+    var pendingQuestion: ServerEvent.Question?
+    /// A plain message instead of a spinner: the server is unreachable, or an error event.
+    var liveNotice: LiveNotice?
+    /// The token screen is up (no token yet, or the server said it's wrong).
+    var needsToken = false
+    var tokenMessage: String?
 
     // Camera and projection (set by the map)
     var cameraRequest = CameraRequest()
@@ -122,6 +160,9 @@ final class MainModel {
 
     init(data: LoopData, runs: RunStore) {
         self.data = data
+        self.fixtureData = data
+        self.fixtureStart = data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0]
+        self.needsToken = LoopAPI.baseURL != nil && TokenStore.load() == nil
         self.runs = runs
         build = .settled(top3: data.candidates.map(\.rank))
         landing.slide(to: 0, animated: false)
@@ -215,6 +256,8 @@ final class MainModel {
     /// Done in the editor. Until the app is wired to the server this updates the sentence and the
     /// list locally; with the server it resends the constraints (no Claude) and rebuilds.
     func applyEdit(field: String, value: String, phrase: String?) {
+        // Live: chip edits will resend constraints (next step); until then Done only closes.
+        if liveMode { editing = nil; return }
         guard var r = readOut else { editing = nil; return }
         if let i = r.understood.firstIndex(where: { $0.field == field }) {
             let u = r.understood[i]
