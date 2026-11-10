@@ -61,7 +61,8 @@ extension MainModel {
     /// The camera while Loop reads: the push-in has started (send); drift in slowly until `parsed`
     /// arrives (1.7 s median, 3.1 s p90). The pull-back waits for the push-in to finish (1.2 s), so
     /// a fast parse never cuts it off and a slow one still has the map moving.
-    func startLive(sentence: String, shown: String, api: LoopAPI, z0: Double, reduceMotion: Bool) {
+    func startLive(sentence: String, shown: String, api: LoopAPI, z0: Double, reduceMotion: Bool,
+                   body: RunRequest? = nil) {
         liveMode = true
         if !liveResending { liveExpiredRetried = false }
         liveResending = false
@@ -79,11 +80,62 @@ extension MainModel {
             guard let self, !Task.isCancelled, self.liveParsedAt == nil else { return }
             self.requestCamera(.at(self.location, zoom: z0 + 1.7), animated: true, duration: 3.3)
         }
-        runLive(api: api, body: makeRequest(text: sentence, answer: nil), shown: shown, reduceMotion: reduceMotion)
+        if body?.constraints != nil {
+            // A chip edit: no Claude, `parsed` comes back at once, so there's no push-in to wait for.
+            flow?.cancel()
+            liveSentAt = CACurrentMediaTime() - 1.2
+        }
+        runLive(api: api, body: body ?? makeRequest(text: sentence, answer: nil), shown: shown, reduceMotion: reduceMotion)
     }
 
-    private func makeRequest(text: String?, answer: RunRequest.Answer?) -> RunRequest {
-        RunRequest(text: text, answer: answer,
+    /// A chip edit (decision: resend `constraints`): set the field, drop the chip's span and its
+    /// source (an edited value is said, but not in the sentence), and rebuild from `parsed`.
+    @discardableResult
+    func rebuildLive(field: String, key: String, value: JSONValue) -> Bool {
+        guard let api = LoopAPI.live, let parsed = liveConstraints else { return false }
+        let chipId = readOut?.understood.first { $0.field == field }?.chipId
+            ?? readOut?.filled.first { $0.field == field }?.chipId
+        let c = Self.edited(parsed, key: key, value: value, chipId: chipId)
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        exitEditMode()
+        clearSelection()
+        playbackCancel()
+        flow?.cancel()
+        pendingQuestion = nil
+        liveNotice = nil
+        build = BuildState()
+        drawnFraction = 0
+        frameVersion += 1
+        reachStart = nil; reachFadeStart = nil; candidatesStart = nil
+        withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.4)) { sheetShown = false }
+        sheet.settle(open: false, animated: false)
+        stage = .reading
+        locationPulsing = !reduceMotion
+        routeCameraFree = false
+        recordOnSettle = requestText.map { RunStore.sentence($0) }
+        let shown = requestText ?? liveSentence
+        startLive(sentence: liveSentence, shown: shown, api: api, z0: zoom, reduceMotion: reduceMotion,
+                  body: makeRequest(text: nil, answer: nil, constraints: c))
+        return true
+    }
+
+    /// The parse's constraints with one field changed, the chip's span and the field's source gone.
+    nonisolated static func edited(_ constraints: JSONValue, key: String, value: JSONValue, chipId: String?) -> JSONValue {
+        var c = constraints
+        c[key] = value
+        if let chipId, case var .object(spans)? = c["spans"] {
+            spans[chipId] = nil
+            c["spans"] = .object(spans)
+        }
+        if case var .object(sources)? = c["sources"] {
+            sources[key] = nil
+            c["sources"] = .object(sources)
+        }
+        return c
+    }
+
+    private func makeRequest(text: String?, answer: RunRequest.Answer?, constraints: JSONValue? = nil) -> RunRequest {
+        RunRequest(text: text, answer: answer, constraints: constraints,
                    client: RunRequest.client(location: LoopAPI.baseURL != nil ? locationProvider.requestLocation : nil),
                    profile: RunRequest.Profile(),
                    recentRoutes: RunRequest.recents(runs.recents))
@@ -91,6 +143,7 @@ extension MainModel {
 
     private func runLive(api: LoopAPI, body: RunRequest, shown: String, reduceMotion: Bool) {
         liveTask?.cancel()
+        liveLastBody = body
         liveLastActivity = CACurrentMediaTime()
         armWatchdog()
         liveTask = Task { @MainActor [weak self] in
@@ -117,6 +170,7 @@ extension MainModel {
         switch event {
         case let .parsed(p):
             liveParseId = p.parseId
+            if let c = p.constraints { liveConstraints = c }
             liveReachM = p.reachM
             data = LoopData(request: liveRequestCard(chips: p.chips, startHour: ""), candidates: data.candidates, bestOf: 0)
             // Let the push-in finish before pulling back.
@@ -314,12 +368,19 @@ extension MainModel {
         liveNotice = n
     }
 
-    /// "Try again": the same request from the start.
+    /// "Try again": the same request again (a chip edit's constraints, or the text).
     func retryLive() {
         liveNotice = nil
         serverDown = false
         if needsToken { return }
         liveExpiredRetried = false
+        if let body = liveLastBody, body.constraints != nil, let api = LoopAPI.live {
+            stage = .reading
+            locationPulsing = !UIAccessibility.isReduceMotionEnabled
+            startLive(sentence: liveSentence, shown: requestText ?? liveSentence, api: api, z0: zoom,
+                      reduceMotion: UIAccessibility.isReduceMotionEnabled, body: body)
+            return
+        }
         send(liveSentence, reduceMotion: UIAccessibility.isReduceMotionEnabled)
     }
 

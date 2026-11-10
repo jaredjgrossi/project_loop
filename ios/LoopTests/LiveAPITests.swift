@@ -90,4 +90,49 @@ final class LiveAPITests: XCTestCase {
         XCTAssertTrue(c.now.contains("T"))
         XCTAssertFalse(c.tz.isEmpty)
     }
+
+    func testChipEditResendsConstraintsWithKeysAsSent() throws {
+        let e = event(#"""
+        {"event":"parsed","v":1,"parse_id":"p_2","reach_m":2600,
+         "chips":[{"id":"c_shape","field":"shape","text":"Any shape","source":"default","editable":true,"span":null},
+                  {"id":"c_distance","field":"distance","text":"3 mi","source":"said","editable":true,
+                   "span":{"text":"3 miles","start":0,"end":7}}],
+         "question":null,"cant":[],"notes":[],
+         "constraints":{"use_my_location":true,"distance_mi":3,"shape":"any","tolerance_pct":5,
+                        "sources":{"shape":"default","mode":"preset"},
+                        "spans":{"c_distance":{"text":"3 miles","start":0,"end":7}}}}
+        """#)
+        guard case let .parsed(p) = e, let c = p.constraints else { return XCTFail("no constraints") }
+        XCTAssertEqual(c["use_my_location"], .bool(true), "keys stay snake case")
+        XCTAssertEqual(c["shape"], .string("any"))
+
+        // Shape to out and back: the field changes, its source goes, other spans stay.
+        let shape = MainModel.edited(c, key: "shape", value: .string("out_and_back"), chipId: "c_shape")
+        XCTAssertEqual(shape["shape"], .string("out_and_back"))
+        XCTAssertNil(shape["sources"]?["shape"])
+        XCTAssertEqual(shape["sources"]?["mode"], .string("preset"))
+        XCTAssertNotNil(shape["spans"]?["c_distance"])
+
+        // Distance: its span goes too (an edited value is said, but not in the sentence).
+        let distance = MainModel.edited(c, key: "distance_mi", value: .number(4.5), chipId: "c_distance")
+        XCTAssertEqual(distance["distance_mi"], .number(4.5))
+        XCTAssertNil(distance["spans"]?["c_distance"])
+
+        // The request carries the constraints as sent, no text, and the usual shape.
+        let body = RunRequest(text: nil, answer: nil, constraints: shape, client: RunRequest.client(location: nil),
+                              profile: .init(usualShape: "loop"), recentRoutes: [])
+        let json = try XCTUnwrap(String(data: LoopAPI.encoder.encode(body), encoding: .utf8))
+        XCTAssertTrue(json.contains(#""use_my_location":true"#))
+        XCTAssertTrue(json.contains(#""shape":"out_and_back""#))
+        XCTAssertTrue(json.contains(#""tolerance_pct":5"#))
+        XCTAssertTrue(json.contains(#""usual_shape":"loop""#))
+        let top = try XCTUnwrap(JSONSerialization.jsonObject(with: LoopAPI.encoder.encode(body)) as? [String: Any])
+        XCTAssertNil(top["text"], "constraints instead of text")
+        XCTAssertNotNil(top["constraints"])
+
+        // An edited chip comes back said with no span: still listed, so it can be edited again.
+        let r = ReadOut(parsed: p, sentence: "3 miles by the water.")
+        XCTAssertEqual(r.filled.map(\.chipId), ["c_shape"])
+        XCTAssertEqual(r.understood.first?.chipId, "c_distance")
+    }
 }

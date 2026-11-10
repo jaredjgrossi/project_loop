@@ -180,8 +180,10 @@ struct FlowLayout: Layout {
 
 /// The 44 pt round preferences button. Preferences are out of scope for this slice; it does nothing.
 struct PreferencesButton: View {
+    @State private var showing = false
+
     var body: some View {
-        Button {} label: {
+        Button { showing = true } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(Palette.ink.color)
@@ -190,7 +192,7 @@ struct PreferencesButton: View {
                 .overlay(Circle().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Preferences and layers")
-        .accessibilityHint("Not available yet")
+        .accessibilityLabel("Settings")
+        .sheet(isPresented: $showing) { SettingsSheet() }
     }
 }

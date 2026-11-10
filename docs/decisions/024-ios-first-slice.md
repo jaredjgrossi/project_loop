@@ -144,7 +144,7 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   The request sends the real location (when-in-use; null if denied), a fixed profile, and recent
   routes (a live route keeps the server's id). Chip and can't-do text is shown as the server sends
   it. Without an address or a token the app runs on the bundled file as before. Chip edits
-  (resending constraints) are the next step; until then the editor's Done only closes when live.
+  are wired too (below).
 - **Framing the route (device review, 2026-11-09).** When the leader starts drawing, the camera
   glides to fit the whole route (line, start, turnaround and mile marks) between the header and
   the card's top: 24 pt in, 16 pt more for the marks, at least 40 pt above the card. It refits at
@@ -153,6 +153,15 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   to pull the camera back to the start on live builds). After the runner pans or zooms, nothing
   refits on its own; "Fit route" above the sheet does. START, TURN and every mile mark sit beside
   their marker on the side with room, never on the line, flipping when that side is taken.
+- **Chip edits rebuild (2026-11-10).** The app keeps each `parsed` event's `constraints` as raw
+  JSON (keys as sent). Done in the editor sets the field (`shape`, `distance_mi`, `start_time`,
+  `mode`, `scenery`, `tolerance_pct`, as in `api/constraints.py`), drops the chip's entry from
+  `spans` and the field's from `sources`, and sends `constraints` instead of text; the stream
+  redraws the route through the same wait. An edited chip comes back said with no span, so it stays
+  listed in "How Loop read it". Try again repeats an edit, not just the text.
+- **Usual route type** (Any / Loop / Out and back), a plain setting behind the settings button,
+  kept on the phone and sent as `profile.usual_shape` (`any`, `loop`, `out_and_back`). The server's
+  profile ignores fields it doesn't know yet, so it's safe before Phase 3 reads it.
 - **Never wait forever.** No `parsed` within 8 s, or 20 s with no line from the stream after it,
   stops the wait with "Can't reach Loop right now." and Try again; `/v1/health` is checked at
   launch and the landing sheet shows the same line if it fails. The question card has a × that

@@ -12,6 +12,8 @@ struct ReadOut: Equatable {
         let field: String
         let title: String
         var value: String
+        /// The server chip it came from (a chip edit drops this id's span).
+        var chipId: String? = nil
         var id: String { field }
     }
     struct Filled: Equatable, Identifiable {
@@ -19,6 +21,7 @@ struct ReadOut: Equatable {
         let main: String
         let detail: String
         let source: String
+        var chipId: String? = nil
         var id: String { field }
     }
     struct Cant: Equatable { let gap: String; let text: String }
@@ -38,9 +41,11 @@ struct ReadOut: Equatable {
             if chip.source == "said", let span = chip.span,
                let range = Self.utf16Range(of: span, in: sentence) {
                 understood.append(Understood(start: range.location, length: range.length, field: chip.field,
-                                             title: Self.title(chip.field), value: chip.text))
-            } else if chip.source != "said" {
-                filled.append(Filled(field: chip.field, main: chip.text, detail: "", source: chip.source))
+                                             title: Self.title(chip.field), value: chip.text, chipId: chip.id))
+            } else {
+                // Preset, default and usual values, and edited ones (said, but not in the sentence):
+                // listed in "How Loop read it", each opening the editor.
+                filled.append(Filled(field: chip.field, main: chip.text, detail: "", source: chip.source, chipId: chip.id))
             }
         }
         cant = parsed.cant.map { Cant(gap: $0.gap, text: $0.text) }

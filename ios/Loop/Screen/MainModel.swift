@@ -145,6 +145,10 @@ final class MainModel {
     /// The automatic resend after `expired` is under way (it mustn't reset the once-only guard).
     @ObservationIgnored var liveResending = false
     @ObservationIgnored var liveRouteId: String?
+    /// The latest parse's constraints: a chip edit changes one field and sends them back.
+    @ObservationIgnored var liveConstraints: JSONValue?
+    /// The last request body, so Try again repeats a chip edit too, not just the text.
+    @ObservationIgnored var liveLastBody: RunRequest?
     /// Outlines of the routes the engine tries, with when each arrived (drawn in over 0.7 s).
     @ObservationIgnored var liveOutlines: [(points: [GeoPoint], at: CFTimeInterval)] = []
     /// A question from the parser or the engine, waiting for the runner.
@@ -301,9 +305,20 @@ final class MainModel {
 
     /// Done in the editor. Until the app is wired to the server this updates the sentence and the
     /// list locally; with the server it resends the constraints (no Claude) and rebuilds.
-    func applyEdit(field: String, value: String, phrase: String?) {
-        // Live: chip edits will resend constraints (next step); until then Done only closes.
-        if liveMode { editing = nil; return }
+    func applyEdit(field: String, value: String, phrase: String?, constraint: (key: String, value: JSONValue)? = nil) {
+        // Live: resend the parse's constraints with this one change; the route rebuilds.
+        if liveMode {
+            editing = nil
+            if let constraint, rebuildLive(field: field, key: constraint.key, value: constraint.value) {
+                updateSentence(field: field, value: value, phrase: phrase)
+            }
+            return
+        }
+        updateSentence(field: field, value: value, phrase: phrase)
+    }
+
+    /// The sentence and the read-out after an edit: the edited words replace the runner's.
+    private func updateSentence(field: String, value: String, phrase: String?) {
         guard var r = readOut else { editing = nil; return }
         if let i = r.understood.firstIndex(where: { $0.field == field }) {
             let u = r.understood[i]

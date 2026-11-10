@@ -110,6 +110,8 @@ struct RunRequest: Encodable {
     var v = 1
     var text: String?
     var answer: Answer?
+    /// A chip edit: the parse's constraints with the edit, sent instead of text (no Claude call).
+    var constraints: JSONValue?
     var client: Client
     var profile: Profile
     var recentRoutes: [Recent]
@@ -154,6 +156,8 @@ struct RunRequest: Encodable {
         var usualDistanceMi: Double = 3.1
         var usualTime: String = "07:00"
         var savedPlaces: [String] = []
+        /// The "Usual route type" setting: "any", "loop" or "out_and_back".
+        var usualShape: String = UsualShape.current.rawValue
     }
 
     struct Recent: Encodable {
@@ -169,11 +173,12 @@ struct RunRequest: Encodable {
         try c.encode(v, forKey: .v)
         try c.encodeIfPresent(text, forKey: .text)
         try c.encodeIfPresent(answer, forKey: .answer)
+        try c.encodeIfPresent(constraints, forKey: .constraints)
         try c.encode(client, forKey: .client)
         try c.encode(profile, forKey: .profile)
         try c.encode(recentRoutes, forKey: .recentRoutes)
     }
-    private enum CodingKeys: String, CodingKey { case v, text, answer, client, profile, recentRoutes }
+    private enum CodingKeys: String, CodingKey { case v, text, answer, constraints, client, profile, recentRoutes }
 
     static func client(location: Location?, now: Date = Date()) -> Client {
         let f = ISO8601DateFormatter()
@@ -210,7 +215,11 @@ enum ServerEvent {
         let d = LoopAPI.decoder
         guard let kind = try? d.decode(Kind.self, from: data) else { return .other }
         switch kind.event {
-        case "parsed": return (try? d.decode(Parsed.self, from: data)).map(ServerEvent.parsed) ?? .other
+        case "parsed":
+            guard var p = try? d.decode(Parsed.self, from: data) else { return .other }
+            // Constraints keep their own keys (a plain decoder): they go back as sent, with edits.
+            p.constraints = (try? JSONDecoder().decode(ConstraintsBox.self, from: data))?.constraints
+            return .parsed(p)
         case "candidates": return (try? d.decode(Candidates.self, from: data)).map(ServerEvent.candidates) ?? .other
         case "top3": return (try? d.decode(Routes.self, from: data)).map(ServerEvent.top3) ?? .other
         case "provisional": return (try? d.decode(Routes.self, from: data)).map(ServerEvent.provisional) ?? .other
@@ -227,6 +236,7 @@ enum ServerEvent {
     }
 
     private struct Kind: Decodable { let event: String }
+    private struct ConstraintsBox: Decodable { let constraints: JSONValue? }
     private struct ErrorEvent: Decodable { let code: String; let text: String? }
 
     struct Span: Decodable, Equatable {
@@ -269,6 +279,10 @@ enum ServerEvent {
         let cant: [Cant]
         let notes: [Note]
         let reachM: Double?
+        /// The RunConstraints this parse produced, for chip edits (decoded separately, keys as sent).
+        var constraints: JSONValue? = nil
+
+        private enum CodingKeys: String, CodingKey { case parseId, chips, question, cant, notes, reachM }
     }
 
     struct Outline: Decodable { let id: String; let kind: String?; let points: [[Double]] }
