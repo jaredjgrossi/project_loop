@@ -97,7 +97,10 @@ for try await line in bytes.lines {
    Each chip also has `span`: `{text, start, end}`, the runner's words behind it, counted in Unicode scalars
    (`text.unicodeScalars`), end exclusive; null for preset, default and usual values. Light those words up in the
    sentence. `question.chip_id` names the chip a question is about. When the runner edits a chip, drop that chip's
-   entry from `constraints.spans` and `constraints.sources` before sending the constraints back.
+   entry from `constraints.spans` and `constraints.sources` before sending the constraints back, with `route_id` set
+   to the `final.route_id` the edit started from. A shape-only edit then answers from that build at once
+   (`parsed`, `top3`, `final`, `done`, about 0.1 s).
+   `profile.usual_shape` (`any`, `loop` or `out_and_back`), when the runner has one, applies when they say no shape.
    Show every string as sent; they all come from the server's templates. Since step 11 every Phase 3 request builds,
    so `gap: "later"` lines no longer come; a can't-do line now only says what Loop can't avoid or run.
    `parsed.reach_m` is how far the run can get from the start, in meters (null with no distance yet, or an A-to-B run).

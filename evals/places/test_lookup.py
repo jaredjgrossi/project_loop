@@ -192,3 +192,23 @@ def test_which_park_from_kips_bay_offers_the_esplanade_then_parks_past_a_mile(co
     assert names[0][0] == "East River Esplanade" and names[0][1] < 0.6
     assert ("Central Park", 1.5) in names
     assert "Bellevue South Park" not in [n for n, _ in names]  # the old list's nearest small park
+
+
+# ---- phone test round 2 (2026-11-10) -------------------------------------------------------------------------------
+
+def test_williamsburg_is_one_place_the_neighborhood(conn):
+    m = one(conn, "Williamsburg", near=KIPS_BAY)  # was the neighborhood and a liquor store, both "Williamsburg, Brooklyn"
+    assert (m.kind, m.borough) == ("neighborhood", "Brooklyn")
+
+
+def test_which_park_shows_one_option_for_shapes_that_mostly_overlap(conn):
+    from api.places import parks_near
+    names = [m.name for m in parks_near(40.7355, -73.9906, conn=conn)]  # Union Square
+    assert "Hudson River Park" in names and "Hudson River Greenway" not in names  # the greenway runs through the park
+
+
+def test_every_neighborhood_point_has_an_area(conn):
+    missing = conn.execute("""SELECT count(*) FROM places p WHERE p.kind = 'neighborhood' AND NOT EXISTS
+                              (SELECT 1 FROM neighborhood_areas n WHERE ST_Intersects(n.geom, p.geom))""").fetchone()[0]
+    total = conn.execute("SELECT count(*) FROM places WHERE kind = 'neighborhood'").fetchone()[0]
+    assert missing <= 0.05 * total, f"{missing} of {total} neighborhoods have no NTA"

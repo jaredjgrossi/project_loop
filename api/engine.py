@@ -33,6 +33,8 @@ from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
+POOLS_KEPT = 8  # builds whose candidates a shape edit can reuse; about 5 MB each
+_POOLS_LOCK = threading.Lock()
 BLOCKING: tuple[str, ...] = ()  # step 11 builds the last of them (past routes)
 # Nothing in Phase 3 is left for later: a planned second run is built after the first (step 11, the server).
 TOP_N = 3
@@ -201,6 +203,47 @@ def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
             "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
 
 
+AREA_DEPTH_M = 300  # an end in a neighborhood: this far inside it
+
+
+def db_area(point: tuple[float, float]) -> tuple[dict, dict] | None:
+    """A neighborhood's area (the 2020 NTA holding its point) and that area AREA_DEPTH_M inside its edge, as GeoJSON;
+    None when there's no area for it."""
+    import json
+
+    from etl.load import database_url
+    with psycopg.connect(database_url()) as conn:
+        if not conn.execute("SELECT to_regclass('neighborhood_areas') IS NOT NULL").fetchone()[0]:
+            return None
+        row = conn.execute(
+            """SELECT ST_AsGeoJSON(geom), ST_AsGeoJSON(ST_Transform(coalesce(
+                        nullif(ST_Buffer(ST_Transform(geom, 2263), -%(depth)s), 'POLYGON EMPTY'::geometry),
+                        ST_Transform(geom, 2263)), 4326))
+               FROM neighborhood_areas WHERE ST_Intersects(geom, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326))
+               LIMIT 1""", {"lat": point[0], "lon": point[1], "depth": AREA_DEPTH_M * 3.28084}).fetchone()
+    return (json.loads(row[0]), json.loads(row[1])) if row else None
+
+
+def area_end(start: tuple[float, float], point: tuple[float, float], area: tuple[dict, dict],
+             route_fn: Callable) -> tuple[float, float]:
+    """Where a run to a neighborhood finishes: on the shortest way toward its point, the first place that is
+    AREA_DEPTH_M inside the area. The way in decides, not the nearest edge as the crow flies (Williamsburg's is on
+    the north side; the way from Manhattan comes over the bridge from the south). The point itself when the run starts
+    inside the area, or the way never gets that far in."""
+    from shapely.geometry import Point, shape
+    whole, inner = (shape(g) for g in area)
+    if whole.contains(Point(start[1], start[0])):
+        return point
+    try:
+        way = route_fn([start, point])
+    except RoutingError:
+        return point
+    for lon, lat, *_ in way.coordinates:
+        if inner.contains(Point(lon, lat)):
+            return lat, lon
+    return point
+
+
 def db_past_route(route_id: str):
     """A past route's line from saved_routes (step 11)."""
     from api.past_routes import load
@@ -303,6 +346,43 @@ class Engine:
     alongs_fn: Callable = None  # (names, (lat, lon)) -> ([along.Along], names not found); default db_alongs_near
     context_for_fn: Callable = ml.context_for  # (lights, grid, use_prior=, start=) -> a route scorer (Postgres)
     past_route_fn: Callable = None  # route id -> past_routes.PastRoute | None; default saved_routes (step 11)
+    pools: dict = None  # route id -> every candidate that passed, for the last POOLS_KEPT builds (shape edits)
+    area_fn: Callable = None  # a neighborhood's point -> (its area, the area AREA_DEPTH_M inside), GeoJSON; db_area
+
+    def remember_pool(self, route_id: str, candidates: list) -> None:
+        with _POOLS_LOCK:
+            if self.pools is None:
+                self.pools = {}
+            self.pools[route_id] = candidates
+            while len(self.pools) > POOLS_KEPT:
+                self.pools.pop(next(iter(self.pools)))
+
+    def from_pool(self, rc: RunConstraints, start: Start, old_route_id: str, send: Callable[[dict], None],
+                  route_id: str) -> dict | None:
+        """A shape-only edit: the best routes of the new kind from an earlier build's candidates, with no routing
+        (phone test, 2026-11-10). None when that build is gone or none of its routes is of the new kind within the
+        distance limit; the caller then builds as usual."""
+        from api.generate import select_from_pool
+        t0 = time.perf_counter()
+        with _POOLS_LOCK:
+            pool = (self.pools or {}).get(old_route_id)
+        if not pool or rc.distance_mi is None:
+            return None
+        chosen, best_of = select_from_pool(pool, TOP_N, rc.shape)
+        if not chosen:
+            return None
+        keys = {id(c): f"{route_id}.{i}" for i, c in enumerate(chosen, 1)}
+        routes = [entry(r, c, keys[id(c)]) for r, c in enumerate(chosen, 1)]
+        send({"event": "top3", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
+              "provisional": False, "routes": routes})
+        route = ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, rc.distance_mi, rc, best_of,
+                              self.stretch_fn)
+        self.remember_pool(route_id, pool)  # another edit can start from this one
+        return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
+                "provisional": False, "routes": routes, "route": route, "pool_size": best_of,
+                "pool": {"candidates": len(pool), "best_of": best_of},
+                "notes": distance_notes(rc, chosen, chosen[0].within_tolerance),
+                "timing": {"from_pool": old_route_id}}
 
     def __post_init__(self):
         if self.feature_anchor_fn is None:
@@ -350,6 +430,13 @@ class Engine:
         route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures,
                                                            **({"alongs": alongs} if alongs else {}))
         along_kw = {"along": alongs} if alongs else {}  # step 8b: crossing is fine, running along isn't
+        if end is not None and rc.end_place is not None and rc.end_place.area == "neighborhood":
+            try:  # "3 miles to Williamsburg": finish once the route is a few hundred meters inside it (decision 042)
+                area = (self.area_fn or db_area)(end)
+            except psycopg.Error as exc:
+                raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+            if area is not None:
+                end = area_end((start.lat, start.lon), end, area, route_fn)
         try:
             vias = self.vias_fn(rc.via_places) if rc.via_places else []
         except psycopg.Error as exc:
@@ -383,7 +470,10 @@ class Engine:
                       "provisional": ev["provisional"],
                       "routes": [entry(r, c, key(c)) for r, c in enumerate(ev["candidates"], 1)]})
 
+        passed: list[Candidate] = []
+
         def on_candidate(c: Candidate, elapsed: float) -> None:  # every route that passes the rules, as it does
+            passed.append(c)
             send({"event": "candidates", "v": 1, "route_id": route_id, "elapsed_s": round(elapsed, 3),
                   "candidates": [{"id": key(c), "kind": c.kind, "points": outline(c.route.coordinates)}]})
 
@@ -419,6 +509,8 @@ class Engine:
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
         chosen = result.candidates
+        if end is None:  # a shape edit can reuse these (not an A-to-B build: its kind doesn't change with shape)
+            self.remember_pool(route_id, passed)
         route = (ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, miles, rc, result.best_of,
                                self.stretch_fn) if chosen else None)
         return {"event": "final", "v": 1, "route_id": route_id,

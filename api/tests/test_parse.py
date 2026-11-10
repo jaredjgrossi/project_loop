@@ -465,3 +465,20 @@ def test_which_park_offers_runnable_places_nearest_first_with_their_distance(): 
     q = out["parsed"]["question"]
     assert q["text"] == "Which park?"
     assert [o["text"] for o in q["options"]] == ["East River Esplanade · 0.4 mi", "Central Park · 1.8 mi"]
+
+
+def test_the_usual_shape_applies_when_none_is_said():  # profile.usual_shape (phone test, 2026-11-10)
+    req = build_request(CASES["P01"], CONTEXTS)
+    req["profile"] = {**req["profile"], "usual_shape": "out_and_back"}
+    out = build(IDEAL["P01"], Context.from_request(req), FakePlaces())
+    c = out["parsed"]["constraints"]
+    assert c["shape"] == "out_and_back" and c["sources"]["shape"] == "usual"
+    chip = next(ch for ch in out["parsed"]["chips"] if ch["field"] == "shape")
+    assert chip["text"] == "Out and back" and chip["source"] == "usual" and chip["span"] is None
+
+
+def test_a_said_shape_beats_the_usual_one():
+    req = build_request(CASES["P05"], CONTEXTS)  # "3 mile loop": the plain word loop is said, and means any
+    req["profile"] = {**req["profile"], "usual_shape": "out_and_back"}
+    out = build(IDEAL["P05"], Context.from_request(req), FakePlaces())
+    assert out["parsed"]["constraints"]["shape"] == "any"

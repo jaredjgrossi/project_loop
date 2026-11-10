@@ -76,6 +76,7 @@ class SavedPlace(_Loose):
 class Profile(_Loose):
     usual_distance_mi: float | None = None
     usual_time: str | None = None
+    usual_shape: Literal["any", "loop", "out_and_back"] | None = None  # when the runner says no shape (source usual)
     saved_places: list[SavedPlace] = []
 
 
@@ -99,6 +100,7 @@ class RunRequest(_Loose):
     text: str | None = Field(default=None, max_length=MAX_TEXT)
     answer: Answer | None = None
     constraints: dict | None = None
+    route_id: str | None = None  # with constraints: the build the chip edit started from (a shape edit reuses it)
     client: ClientInfo
     profile: Profile = Profile()
     recent_routes: list[RecentRoute] = []
@@ -254,6 +256,23 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         client, profile = raw.get("client") or {}, raw.get("profile") or {}
         return client.get("location"), {p["id"]: p for p in profile.get("saved_places") or []}
 
+    built: OrderedDict[str, dict] = OrderedDict()  # route id -> the constraints it was built from (shape edits)
+
+    def shape_only_edit(req: RunRequest, constraints: dict) -> bool:
+        """A chip edit that changed only the shape of a build this server still has (phone test, 2026-11-10)."""
+        if req.constraints is None or not req.route_id or not hasattr(engine, "from_pool"):
+            return False
+        old = built.get(req.route_id)
+        if old is None:
+            return False
+        try:  # compared as RunConstraints, so the same request written two ways is the same
+            a, b = RunConstraints.model_validate(old), RunConstraints.model_validate(constraints)
+        except ValidationError:
+            return False
+        ignore = {"shape", "sources", "spans"}
+        return a.shape != b.shape and a.model_dump(mode="json", exclude=ignore) == b.model_dump(mode="json",
+                                                                                               exclude=ignore)
+
     def build_planned(rc: RunConstraints, planned: dict, kept: dict, location, saved) -> dict:
         """The `planned` event (contract; D6): the second run built for its day, from its own start (home on a
         later day, R16), stored like any build so its route_id works later. Built quietly: only `planned` is
@@ -327,7 +346,14 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
 
         def work() -> None:
             try:
-                final = engine.build(rc, start, send, route_id, end=end)
+                final = None
+                if shape_only_edit(req, parsed["constraints"]):  # same request, another shape: from the old pool
+                    final = engine.from_pool(rc, start, req.route_id, send, route_id)
+                if final is None:
+                    final = engine.build(rc, start, send, route_id, end=end)
+                built[route_id] = parsed["constraints"]
+                while len(built) > 50:
+                    built.pop(next(iter(built)))
                 keep_route(final)  # kept even if the phone has gone, for GET /v1/routes/{id}
                 # Stored before the phone gets final, so the id it holds always works, after a restart too.
                 # No text and no location (decision 030); a few ms for the insert.

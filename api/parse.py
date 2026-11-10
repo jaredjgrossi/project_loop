@@ -308,6 +308,9 @@ class DbPlaces:
 # ---- the request's context --------------------------------------------------------------------------------------
 
 
+SHAPES = ("any", "loop", "out_and_back")
+
+
 @dataclass
 class Context:
     text: str
@@ -318,6 +321,7 @@ class Context:
     saved: dict  # id -> {"label", "lat", "lon"}
     recent: list[dict]
     raw: str = ""  # the request text exactly as sent: span positions count from its first character
+    usual_shape: str | None = None  # "any", "loop" or "out_and_back": when no shape is said (phone test, 2026-11-10)
 
     @classmethod
     def from_request(cls, req: dict) -> "Context":
@@ -330,6 +334,7 @@ class Context:
         return cls(text=(req.get("text") or "").strip(), raw=req.get("text") or "", now=now,
                    location=(loc["lat"], loc["lon"]) if loc else None,
                    usual_mi=profile.get("usual_distance_mi"), usual_time=profile.get("usual_time"),
+                   usual_shape=profile.get("usual_shape") if profile.get("usual_shape") in SHAPES else None,
                    saved={p["id"]: p for p in profile.get("saved_places") or []},
                    recent=list(req.get("recent_routes") or []))
 
@@ -491,7 +496,9 @@ def _time_and_day(b: _Build, t: dict | None, d: dict | None, prefix: str = "") -
 
 def _ref(m, source="OpenStreetMap") -> dict:
     return PlaceRef(kind="place", name=m.matched, borough=m.borough, lat=m.lat, lon=m.lon,
-                    source=getattr(m, "source", source), trust="listed").model_dump(exclude_none=True)
+                    source=getattr(m, "source", source), trust="listed",
+                    area="neighborhood" if getattr(m, "kind", None) == "neighborhood" else None
+                    ).model_dump(exclude_none=True)
 
 
 def _saved_ref(b: _Build, saved_id: str) -> dict:
@@ -602,6 +609,8 @@ def _prefs(b: _Build, ext: dict) -> None:
     shape = {"loop_word": "any", "real_loop": "loop", "out_and_back": "out_and_back"}.get(ext.get("shape") or "")
     if shape:  # D1, R10: a plain "loop" is any route back to the start
         b.set("shape", shape, "said")
+    elif b.ctx.usual_shape:  # the profile's usual shape, when none is said
+        b.set("shape", b.ctx.usual_shape, "usual")
     else:
         b.set("shape", "any", "default")
 

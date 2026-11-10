@@ -72,6 +72,7 @@ class PlaceRef(BaseModel):
     lon: float | None = Field(default=None, ge=-74.3, le=-73.6)
     source: str | None = None  # "OpenStreetMap", "NYC GeoSearch", "profile"
     trust: Trust | None = None
+    area: Literal["neighborhood"] | None = None  # a place that's an area: an end there finishes inside it (decision 042)
 
     @model_validator(mode="after")
     def _check(self) -> "PlaceRef":

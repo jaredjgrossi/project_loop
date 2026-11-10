@@ -413,9 +413,10 @@ def lookup(name: str, near: tuple[float, float] | PlaceMatch | None = None, near
             return [m for g in groups for m in _near_area(conn, g, q, near, **kw)]
         if near is not None:
             found = sorted((_near_point(conn, g, q, *near, **kw) for g in groups), key=lambda m: m.distance_m)
-            return [m for m in found if near_m is None or m.distance_m <= near_m]
+            return one_per_name([m for m in found if near_m is None or m.distance_m <= near_m])
         found = [_match(g, q, **kw) for g in groups]
-        return sorted(found, key=lambda m: (KIND_PRIORITY.index(m.kind) if m.kind in KIND_PRIORITY else 99, m.borough))
+        return one_per_name(sorted(found, key=lambda m: (KIND_PRIORITY.index(m.kind) if m.kind in KIND_PRIORITY
+                                                         else 99, m.borough)))
     finally:
         if own:
             conn.close()
@@ -468,6 +469,27 @@ def major_parks_near(lat: float, lon: float, radius_m: float = MAJOR_PARK_RADIUS
         if own:
             conn.close()
 
+
+# Which of two same-name places in one borough a runner means: the place, not the shop named after it (phone test,
+# 2026-11-10: "Which Williamsburg?" offered the neighborhood and a liquor store, both "Williamsburg, Brooklyn").
+SAME_NAME_ORDER = ("park", "water", "neighborhood", "square", "plaza", "bridge", "station", "subway_station", "path",
+                   "corridor", "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance")
+
+
+def one_per_name(matches: list[PlaceMatch]) -> list[PlaceMatch]:
+    """One match per (name, borough): the most place-like kind, keeping the list's order. Streets and paths aren't
+    merged here: a street's separate stretches are already one match (_groups), and two different ones stay two."""
+    def rank(m):
+        return SAME_NAME_ORDER.index(m.kind) if m.kind in SAME_NAME_ORDER else len(SAME_NAME_ORDER)
+    best: dict[tuple, PlaceMatch] = {}
+    for m in matches:
+        if m.kind in LINE_KINDS:
+            continue
+        key = (normalize(m.name), m.borough)
+        if key not in best or rank(m) < rank(best[key]):
+            best[key] = m
+    keep = {id(m) for m in best.values()}
+    return [m for m in matches if m.kind in LINE_KINDS or id(m) in keep]
 
 def borough_at(lat: float, lon: float, conn=None) -> str | None:
     """The borough holding the point, or None outside New York City."""
@@ -523,7 +545,8 @@ LONG_PATH_M = 2000  # a named path at least this long, by the water, counts as a
 WATERFRONT_M = 60  # by the water: within this of the shoreline (decision 014's waterfront distance) ...
 WATERFRONT_SHARE = 0.5  # ... for at least this share of the path (the High Line touches the water at one end only).
 # etl.load_places measures it once per long path (places.waterfront_share).
-SAME_OPTION_M = 150  # two options whose nearest points are this close are one place to run
+SAME_OPTION_SHARE = 0.5  # two options are one place to run when either lies mostly within SAME_OPTION_NEAR_M of the other
+SAME_OPTION_NEAR_M = 60
 
 
 def parks_near(lat: float, lon: float, limit: int = 4, radius_m: float = RUNNABLE_RADIUS_M,
@@ -537,32 +560,46 @@ def parks_near(lat: float, lon: float, limit: int = 4, radius_m: float = RUNNABL
     try:
         rows = conn.execute(
             f"""WITH p AS (SELECT ST_Transform(ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326), 2263) p)
-                SELECT DISTINCT ON (name) {_ROW}, ST_X(c), ST_Y(c), d FROM (
-                  SELECT places.*, ST_Distance(ST_Transform(outline, 2263), p.p) / %(f)s d,
-                         ST_ClosestPoint(outline, ST_Transform(p.p, 4326)) c
+                SELECT DISTINCT ON (name) {_ROW}, d FROM (
+                  SELECT places.*, ST_Distance(ST_Transform(outline, 2263), p.p) / %(f)s d
                   FROM places, p
                   WHERE kind = 'path' AND waterfront_share >= %(share)s
                     AND ST_DWithin(ST_Transform(outline, 2263), p.p, %(ft)s)) places
                 ORDER BY name, d""",
             {"lat": lat, "lon": lon, "ft": radius_m * FT_PER_M, "f": FT_PER_M, "share": WATERFRONT_SHARE}).fetchall()
-        nearest = {r[0]: (r[-2], r[-3]) for r in rows}
-        if parks:
-            nearest |= {r[0]: (r[2], r[1]) for r in conn.execute(
-                """SELECT id, ST_X(c), ST_Y(c) FROM (SELECT id, ST_ClosestPoint(outline, ST_SetSRID(ST_Point(%s, %s), 4326)) c
-                   FROM places WHERE id = ANY(%s)) x""", (lon, lat, [m.ids[0] for m in parks])).fetchall()}
+        paths = [PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
+                            ids=(r[0],), area_ha=r[11], distance_m=round(r[-1], 1)) for r in rows]
+        out: list[PlaceMatch] = []
+        for m in sorted([*parks, *paths], key=lambda m: m.distance_m):
+            if any(normalize(m.name) == normalize(o.name) or _overlap(conn, m.ids[0], o.ids[0]) >= SAME_OPTION_SHARE
+                   for o in out):
+                continue  # Hudson River Park and its greenway are one place to run: the nearer one stands for both
+            out.append(m)
+            if len(out) == limit:
+                break
     finally:
         if own:
             conn.close()
-    paths = [PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
-                        ids=(r[0],), area_ha=r[11], distance_m=round(r[-1], 1)) for r in rows]
-    out = []
-    for m in sorted([*parks, *paths], key=lambda m: m.distance_m):
-        here = nearest.get(m.ids[0])
-        same = any(normalize(m.name) == normalize(o.name) or (here and nearest.get(o.ids[0]) and
-                   _meters(here, nearest[o.ids[0]]) <= SAME_OPTION_M) for o in out)
-        if not same:  # the Hudson River Park, its greenway and its esplanade are one place to run: the nearest
-            out.append(m)
-    return out[:limit]
+    return out
+
+
+_OVERLAP = """
+WITH a AS (SELECT ST_Transform(outline, 2263) g FROM places WHERE id = %(a)s),
+     b AS (SELECT ST_Transform(outline, 2263) g FROM places WHERE id = %(b)s)
+SELECT CASE WHEN NOT ST_DWithin(a.g, b.g, %(near)s) THEN 0 ELSE greatest(
+         CASE WHEN GeometryType(a.g) LIKE '%%POLYGON' THEN ST_Area(ST_Intersection(a.g, ST_Buffer(b.g, %(near)s))) / nullif(ST_Area(a.g), 0)
+              ELSE ST_Length(ST_Intersection(a.g, ST_Buffer(b.g, %(near)s))) / nullif(ST_Length(a.g), 0) END,
+         CASE WHEN GeometryType(b.g) LIKE '%%POLYGON' THEN ST_Area(ST_Intersection(b.g, ST_Buffer(a.g, %(near)s))) / nullif(ST_Area(b.g), 0)
+              ELSE ST_Length(ST_Intersection(b.g, ST_Buffer(a.g, %(near)s))) / nullif(ST_Length(b.g), 0) END) END
+FROM a, b
+"""
+
+
+def _overlap(conn, a: int, b: int) -> float:
+    """How much two places' shapes overlap: the larger of the share of each (by area for a park, by length for a
+    path) that lies within SAME_OPTION_NEAR_M of the other."""
+    row = conn.execute(_OVERLAP, {"a": a, "b": b, "near": SAME_OPTION_NEAR_M * FT_PER_M}).fetchone()
+    return float(row[0] or 0) if row else 0.0
 
 
 def _meters(a: tuple[float, float], b: tuple[float, float]) -> float:

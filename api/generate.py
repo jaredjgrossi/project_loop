@@ -333,6 +333,17 @@ def _select(candidates: list[Candidate], top_n: int, shape: str) -> list[Candida
     return _offer_both_kinds(chosen, in_tolerance) if shape == "any" else chosen
 
 
+def select_from_pool(candidates: list[Candidate], top_n: int, shape: str) -> tuple[list[Candidate], int | None]:
+    """A shape-only edit (phone test, 2026-11-10): the top N of the kinds `shape` accepts, from a finished build's
+    candidates, and how many distinct ones that was ("Best of N"). Nothing when none of those kinds came within the
+    distance limit: then the caller builds again."""
+    kinds = SHAPE_KINDS[shape]
+    fitting = sorted((c for c in candidates if c.kind in kinds and c.within_tolerance), key=lambda c: -c.score)
+    if not fitting:
+        return [], None
+    return _select(fitting, top_n, shape), len(_dedupe(fitting, len(fitting)))
+
+
 PRIORITY = {"anchors": 0, "anchored": 1, "anchored_straight": 2, "out_and_back": 3, "rectangle": 4, "round_trip": 5}
 # The top 3 is flagged provisional once every anchor lookup and anchored job (along the feature and straight-line) has
 # finished: anchored routes are #1 at most review starts (decision 014). Later tiers keep streaming in (decision 018).

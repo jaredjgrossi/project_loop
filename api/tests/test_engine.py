@@ -341,3 +341,57 @@ def test_an_avoid_with_coordinates_is_a_no_go_circle():
     assert all(abs(math.hypot((x + 73.9707) * kx, (y - 40.7439) * M_LAT) - PIER_RADIUS_M) < 1 for x, y in ring)
     lines, blocked = before_build(rc(avoid_places=[pier.model_dump()]), zones=[])
     assert lines == [] and not blocked  # not "can't avoid": it has coordinates
+
+
+# ---- shape edits from the pool; ends in a neighborhood (phone test round 2, decision 042) ---------------------------
+
+def pool_engine(**kw) -> Engine:
+    from api.generate import generate_loops
+    return engine(generate_loops, routers_fn=lambda zones, lights, closures: (straight_route, None, area_route), **kw)
+
+
+def test_a_shape_edit_takes_the_best_of_the_new_kind_from_the_pool():
+    e = pool_engine()
+    first = e.build(rc(distance_mi=3.0), Start(*KIPS_POINT, "x"), lambda ev: None, "r_any")
+    assert {r["kind"] for r in first["routes"]} >= {"out_and_back"}
+    sent = []
+    again = e.from_pool(rc(distance_mi=3.0, shape="out_and_back"), Start(*KIPS_POINT, "x"), "r_any", sent.append,
+                        "r_edit")
+    assert again is not None and again["timing"] == {"from_pool": "r_any"}
+    assert {r["kind"] for r in again["routes"]} == {"out_and_back"} and again["routes"][0]["id"] == "r_edit.1"
+    assert [ev["event"] for ev in sent] == ["top3"]
+    assert again["route"] is not None
+
+
+def test_a_shape_edit_with_no_route_of_that_kind_says_rebuild():
+    e = pool_engine()
+    e.build(rc(distance_mi=3.0, shape="loop"), Start(*KIPS_POINT, "x"), lambda ev: None, "r_loops")
+    assert e.from_pool(rc(distance_mi=3.0, shape="out_and_back"), Start(*KIPS_POINT, "x"), "r_loops",
+                       lambda ev: None, "r_e") is None  # a loop-only build has no out-and-backs: build again
+    assert e.from_pool(rc(distance_mi=3.0, shape="loop"), Start(*KIPS_POINT, "x"), "r_gone", lambda ev: None,
+                       "r_e") is None
+
+
+def test_an_end_in_a_neighborhood_finishes_where_the_way_in_is_deep_enough():
+    from api.engine import area_end
+    from api.tests.test_via import square
+    hood_point = (EAST[0], EAST[1])
+    whole = square(hood_point, 600)  # a 1.2 km square area around the neighborhood's point
+    inner = square(hood_point, 300)  # ... and 300 m inside its edge
+    end = area_end(KIPS_POINT, hood_point, (whole, inner), straight_route)
+    # on the straight way in from the west, the first point 300 m inside is the inner square's west edge
+    assert end != hood_point
+    assert abs(end[0] - hood_point[0]) < 1e-3
+    assert end[1] < hood_point[1]
+    inside = (hood_point[0], hood_point[1] - 0.001)
+    assert area_end(inside, hood_point, (whole, inner), straight_route) == hood_point  # starts inside: its point
+
+
+def test_an_a_to_b_run_to_a_neighborhood_uses_its_area():
+    from api.tests.test_via import square
+    hood = {"kind": "place", "name": "Williamsburg", "borough": "Brooklyn", "lat": EAST[0], "lon": EAST[1],
+            "area": "neighborhood"}
+    final = a_to_b_engine(area_fn=lambda p: (square(p, 600), square(p, 300))).build(
+        rc(distance_mi=None, end_place=hood), Start(*KIPS_POINT, "x"), lambda e: None, "r_w", end=EAST)
+    last = final["routes"][0]["geometry"]["coordinates"][-1]
+    assert last[0] < EAST[1] - 0.001  # finished on the way in, short of the neighborhood's point

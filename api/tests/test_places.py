@@ -133,3 +133,15 @@ def test_word_order_and_the_dont_matter():
     from api.places import normalize, token_key
     assert token_key(normalize("Library Kips Bay")) == token_key(normalize("the Kips Bay Library"))
     assert token_key(normalize("Kips Bay Library")) != token_key(normalize("Kips Bay"))
+
+
+def test_one_place_per_name_and_borough_the_place_not_the_shop():  # phone test, 2026-11-10: "Which Williamsburg?"
+    from api.places import PlaceMatch, one_per_name
+
+    def m(kind, borough="Brooklyn", name="Williamsburg"):
+        return PlaceMatch(name=name, kind=kind, borough=borough, lat=40.71, lon=-73.95, matched=name, source="OSM")
+    hood, shop, queens = m("neighborhood"), m("shop"), m("neighborhood", "Queens")
+    assert one_per_name([shop, hood]) == [hood]
+    assert one_per_name([hood, shop, queens]) == [hood, queens]  # another borough stays: R19 picks between them
+    street_a, street_b = m("street", name="42nd St"), m("street", name="42nd St")
+    assert one_per_name([street_a, street_b]) == [street_a, street_b]  # streets are grouped by _groups, not here

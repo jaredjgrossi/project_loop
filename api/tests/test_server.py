@@ -381,3 +381,59 @@ def test_an_engine_question_on_a_chip_edit_edits_the_constraints():
     assert q["event"] == "question"
     second = post(c, body("R01", answer={"parse_id": q["parse_id"], "question_id": "q_1", "text": "5 miles"}))
     assert second[0]["constraints"]["distance_mi"] == 5 and second[-1]["event"] == "done"
+
+
+# ---- shape edits reuse the pool (phone test round 2, decision 042) ---------------------------------------------------
+
+class PoolEngine(FakeEngine):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.pool_calls = []
+
+    def from_pool(self, rc, start, old_route_id, send, route_id):
+        self.pool_calls.append((rc.shape, old_route_id))
+        send({"event": "top3", "v": 1, "route_id": route_id, "elapsed_s": 0.0, "provisional": False, "routes": []})
+        return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": 0.0, "provisional": False,
+                "routes": [], "route": None, "pool_size": 3, "notes": [], "timing": {"from_pool": old_route_id}}
+
+
+def _first_build(c):
+    evs = post(c, body("P05", text="3 mile loop"))
+    return next(e for e in evs if e["event"] == "parsed"), next(e for e in evs if e["event"] == "final")
+
+
+def test_a_shape_only_edit_comes_from_the_pool_without_building():
+    eng = PoolEngine()
+    c, _ = client_for({"3 mile loop": IDEAL["P05"]}, engine=eng)
+    parsed, final = _first_build(c)
+    edited = {**parsed["constraints"], "shape": "out_and_back"}
+    evs = post(c, body("P05", constraints=edited, route_id=final["route_id"]))
+    assert [e["event"] for e in evs] == ["parsed", "top3", "final", "done"]
+    assert eng.pool_calls == [("out_and_back", final["route_id"])] and len(eng.calls) == 1  # no second build
+    assert evs[2]["timing"] == {"from_pool": final["route_id"]}
+
+
+def test_an_edit_that_changes_more_than_the_shape_builds_again():
+    eng = PoolEngine()
+    c, _ = client_for({"3 mile loop": IDEAL["P05"]}, engine=eng)
+    parsed, final = _first_build(c)
+    edited = {**parsed["constraints"], "shape": "out_and_back", "distance_mi": 4.0}
+    post(c, body("P05", constraints=edited, route_id=final["route_id"]))
+    assert eng.pool_calls == [] and len(eng.calls) == 2
+
+
+def test_a_shape_edit_without_the_route_id_builds_again_and_honors_the_shape():
+    eng = PoolEngine()
+    c, _ = client_for({"3 mile loop": IDEAL["P05"]}, engine=eng)
+    parsed, _ = _first_build(c)
+    post(c, body("P05", constraints={**parsed["constraints"], "shape": "out_and_back"}))
+    assert eng.pool_calls == [] and eng.calls[-1][0].shape == "out_and_back"
+
+
+def test_the_usual_shape_comes_from_the_profile():
+    eng = FakeEngine()
+    c, _ = client_for({"5k": IDEAL["P01"]}, engine=eng)
+    b = body("P01", text="5k")
+    b["profile"] = {**b["profile"], "usual_shape": "loop"}
+    parsed = post(c, b)[0]
+    assert parsed["constraints"]["shape"] == "loop" and eng.calls[0][0].shape == "loop"

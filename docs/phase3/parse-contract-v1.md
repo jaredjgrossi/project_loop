@@ -20,6 +20,7 @@ Exactly one of `text`, `answer` or `constraints`.
   "text": "Chill run on the west side highway, 3 easy miles",
   "answer": {"parse_id": "p_8f2c", "question_id": "q_1", "option_id": "a", "text": null},
   "constraints": { "...": "RunConstraints, from an earlier parsed event, with edits" },
+  "route_id": "r_ab12cd34",
   "client": {
     "now": "2026-11-03T06:40:00-05:00",
     "tz": "America/New_York",
@@ -28,6 +29,7 @@ Exactly one of `text`, `answer` or `constraints`.
   "profile": {
     "usual_distance_mi": 3.1,
     "usual_time": "07:00",
+    "usual_shape": "out_and_back",
     "saved_places": [{"id": "home", "label": "Home", "lat": 40.7438, "lon": -73.9799}]
   },
   "recent_routes": [
@@ -37,6 +39,16 @@ Exactly one of `text`, `answer` or `constraints`.
 ```
 - `location` is null when location is off.
 - `profile` and `recent_routes` live on the phone (minimal storage, no accounts) and are sent with every request.
+- `profile.usual_shape` (2026-11-10): `"any"`, `"loop"` or `"out_and_back"`, optional.
+  - It applies when the runner says no shape: the shape chip shows it with `source: "usual"`.
+  - Any shape word in the request wins over it, even a plain "loop" (which means either shape, R10).
+- `route_id` (2026-11-10), with `constraints` only: the build the chip edit started from (the `route_id` of its
+  `final`).
+  - When the edit changes only `shape`, the server answers from that build's routes at once: `parsed`, one `top3`,
+    `final` (with `timing.from_pool`), then `done`, and no `candidates`.
+  - It builds again when none of those routes is of the new kind (a loop-only build has no out-and-backs), or when
+    the server no longer has that build (it keeps the last 8).
+  - Without `route_id`, or with any other change, it builds as usual.
 - **Privacy:** Claude receives the text, the time, saved-place labels and recent-route names. Coordinates never go to Claude; the server resolves them.
 - Auth: a Loop token in a request header. The Claude API key never leaves the server.
 
@@ -85,7 +97,8 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 - `about` is one of: `distance`, `start`, `end`, `via`, `time`, `reuse`, `amount`.
 - `from` is one of: `parser`, `places`, `engine`.
 - `options`: 0–4 tap answers. `allow_text`: whether typing is offered.
-- "Which park?" options (decision 041) are runnable places only, nearest first, each with how far it is: `{"id": "a", "text": "East River Esplanade · 0.4 mi"}`.
+- "Which park?" options (decision 041) are runnable places only, nearest first, each with how far it is: `{"id": "a", "text": "East River Esplanade · 0.4 mi"}`. Places whose shapes mostly overlap are one option, the nearer one: Hudson River Park, not also the greenway through it (decision 042).
+- A place question never offers two options that read the same: of two places with one name in one borough, the place wins over a shop named after it (decision 042).
 - `chip_id` (2026-11-09): the chip the question is about, so the app can mark its words in the sentence; null when the runner said nothing about it ("How far?" after "what do you suggest"). When nothing was built for it yet ("Which 86th St?"), the event carries a chip for it made from the runner's own words, with its span.
 - While a question is open, no routes stream.
 
@@ -149,6 +162,7 @@ Built in step 11 (decision 038):
 - **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
 - **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
 - **Can't-do lines from the engine:** `gap: "avoid_unknown"` for an area avoid that isn't on the no-go list. Nothing in Phase 3 is left for later: end places (step 8), via places (step 9), along-avoids (step 8b), hills (step 10), past routes and planned runs (step 11) all build, so `gap: "later"` no longer appears.
+- **Ends in a neighborhood (decision 042):** `end_place.area: "neighborhood"` marks an end that is an area. The route finishes on the way in, at the first point 300 m inside the neighborhood's area (its 2020 NTA), not at its middle. "3 miles to Williamsburg" from Kips Bay finishes after 3.6 mi on the Brooklyn side of the Williamsburg Bridge, where going to the middle would take 4.3 mi.
 - **Past routes (step 11, decision 038):**
   - `reuse_route_id` is a recent route's `id`, the id Loop gave it: `r_xxxxxxxx.N`, or a build id for its #1.
   - The server reads the route's line from `saved_routes` and rebuilds it for now, from where it started: closures, no-go zones and avoids as of now, crowds for this start time.
