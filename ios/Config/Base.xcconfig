@@ -3,5 +3,7 @@
 MAPBOX_ACCESS_TOKEN =
 DEVELOPMENT_TEAM =
 LOOP_BUNDLE_ID = com.jaredgrossi.loop
+// The Loop API base URL (Phase 3); empty runs the app on the bundled route file.
+LOOP_API_BASE =
 
 #include? "Secrets.xcconfig"

@@ -73,7 +73,7 @@ struct EditorPanel: View {
             Text(understood?.value ?? filled?.detail ?? "")
                 .typeStyle(.body).foregroundStyle(Palette.ink.color)
             Text("Choosing another start comes with place search.")
-                .typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                .typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
         default:
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(options, id: \.self) { o in
@@ -127,6 +127,11 @@ struct EditorPanel: View {
             if u.field == "scenery" { choice = u.value }
         } else if let f = filled {
             choice = options.first { f.main.lowercased().hasPrefix($0.lowercased().prefix(6)) } ?? options.first ?? ""
+            // Live: start from the value the server holds.
+            let wire: [String: String] = ["any": "Any shape", "loop": "A loop", "out_and_back": "Out and back",
+                                          "training": "Training", "exploring": "Exploring"]
+            let key = ["shape": "shape", "mode": "mode"][f.field]
+            if let key, case let .string(v)? = model.liveConstraints?[key], let o = wire[v] { choice = o }
         }
     }
 
@@ -134,12 +139,32 @@ struct EditorPanel: View {
         switch target.field {
         case "distance":
             let v = CardText.trimmed(miles)
-            model.applyEdit(field: "distance", value: "\(v) mi", phrase: "\(v) mile\(miles == 1 ? "" : "s")")
+            model.applyEdit(field: "distance", value: "\(v) mi", phrase: "\(v) mile\(miles == 1 ? "" : "s")",
+                            constraint: ("distance_mi", .number(miles)))
         case "time":
-            model.applyEdit(field: "time", value: clock(minutes), phrase: "at \(clock(minutes))")
+            let hhmm = String(format: "%02d:%02d", minutes / 60, minutes % 60)
+            model.applyEdit(field: "time", value: clock(minutes), phrase: "at \(clock(minutes))",
+                            constraint: ("start_time", .string(hhmm)))
         case "scenery":
             let phrase = ["By the water": "by the water", "Some": "with some scenery", "Don't mind": "anywhere"][choice] ?? choice
-            model.applyEdit(field: "scenery", value: choice, phrase: phrase)
+            let wire = ["By the water": "park_or_water", "Some": "some", "Don't mind": "dont_mind"][choice] ?? "some"
+            model.applyEdit(field: "scenery", value: choice, phrase: phrase, constraint: ("scenery", .string(wire)))
+        case "shape", "mode", "tolerance":
+            // RunConstraints values (api/constraints.py): shape loop | out_and_back | any;
+            // mode training | exploring; tolerance_pct.
+            let wire: (String, JSONValue)? = {
+                switch target.field {
+                case "shape": return ["Any shape": ("shape", .string("any")), "A loop": ("shape", .string("loop")),
+                                      "Out and back": ("shape", .string("out_and_back"))][choice]
+                case "mode": return ["Training": ("mode", .string("training")), "Exploring": ("mode", .string("exploring"))][choice]
+                default: return ["Within 5%": ("tolerance_pct", .number(5)), "Within 10%": ("tolerance_pct", .number(10))][choice]
+                }
+            }()
+            if model.liveMode, let wire, !choice.isEmpty {
+                model.applyEdit(field: target.field, value: choice, phrase: nil, constraint: wire)
+                return
+            }
+            fallthrough
         default:
             if var r = model.readOut, let i = r.filled.firstIndex(where: { $0.field == target.field }), !choice.isEmpty {
                 let f = r.filled[i]

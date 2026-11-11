@@ -105,7 +105,7 @@ struct SelectionOverlay: View {
 
                     if let mile = layout.mile {
                         Text("\(mile)")
-                            .typeStyle(.dataStrong)
+                            .typeStyle(.stretchName)
                             .foregroundStyle(Palette.surfaceSheet.color)
                             .frame(width: Metrics.selectedMileMarker, height: Metrics.selectedMileMarker)
                             .background(Circle().fill(Palette.ink.color))

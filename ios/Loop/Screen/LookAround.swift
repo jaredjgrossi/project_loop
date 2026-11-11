@@ -52,7 +52,7 @@ struct LookAroundScreen: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(title).typeStyle(.label).foregroundStyle(Palette.ink.color)
-                    Text("Apple Look Around imagery").typeStyle(.data).foregroundStyle(Palette.inkMuted.color)
+                    Text("Apple Look Around imagery").typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
                 }
                 .padding(.horizontal, Metrics.s12)
                 .padding(.vertical, 6)

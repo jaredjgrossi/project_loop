@@ -23,7 +23,7 @@ struct HeaderView: View {
                 Spacer()
                 // Debug replay only once there's a route: the landing has no mono or data styling.
                 if let trailing, model.requestText != nil { trailing }
-                PreferencesButton()
+                YouButton(model: model)
             }
             if model.requestText == nil {
                 WeatherLine()
@@ -179,18 +179,3 @@ struct FlowLayout: Layout {
 }
 
 /// The 44 pt round preferences button. Preferences are out of scope for this slice; it does nothing.
-struct PreferencesButton: View {
-    var body: some View {
-        Button {} label: {
-            Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(Palette.ink.color)
-                .frame(width: Metrics.minTap, height: Metrics.minTap)
-                .background(Circle().fill(Palette.surfaceSheet.color.opacity(0.92)))
-                .overlay(Circle().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Preferences and layers")
-        .accessibilityHint("Not available yet")
-    }
-}

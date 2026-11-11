@@ -9,6 +9,7 @@ final class PinchRecordingTests: XCTestCase {
         }
         let app = XCUIApplication()
         app.launchArguments = ["-LoopZoomAt", "1.1", "16.8", "-LoopPinchTarget"]
+        app.launchArguments.append("-LoopOffline")
         app.launch()
         XCTAssertTrue(app.buttons["Send to watch"].waitForExistence(timeout: 30))
         sleep(5)   // camera on mile 1, tiles loaded

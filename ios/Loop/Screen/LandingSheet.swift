@@ -12,6 +12,8 @@ struct LandingSheet: View {
 
     private var sheet: SheetState { model.landing }
     private var runs: RunStore { model.runs }
+    /// This drag began while typing: it only dismisses the keyboard.
+    @State private var keyboardDrag = false
 
     var body: some View {
         let height = sheet.height
@@ -21,6 +23,7 @@ struct LandingSheet: View {
         let frameHeight = anchor ?? max(height, sheet.collapsedHeight)
         let offset = max(0, (anchor ?? sheet.collapsedHeight) - height)
         let expanded = Double(sheet.progress)
+        let searching = model.searchMode
 
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
@@ -36,40 +39,90 @@ struct LandingSheet: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { toggle() }
 
+            // "Did you run the … route this morning?": once per route, within 24 h, above the field.
+            if let v = model.returnPrompt, !searching {
+                ReturnPrompt(model: model, viewed: v)
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            }
+
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
 
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Your runs")
-                    .typeStyle(.eyebrow)
-                    .foregroundStyle(Palette.inkMuted.color)
-                    .padding(.top, 22)
-                    .accessibilityAddTraits(.isHeader)
+            // The launch health check failed: one plain line, never a spinner.
+            if model.serverDown {
+                HStack(spacing: 10) {
+                    Text(MainModel.LiveCopy.unreachable)
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.inkSoft.color)
+                    Spacer(minLength: 8)
+                    Button("Try again") { model.checkHealth() }
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.action.color)
+                        .frame(minHeight: Metrics.minTap)
+                }
+                .padding(.top, 2)
+                .transition(.opacity)
+            }
 
-                TileRow(model: model)
-                    .padding(.top, 12)
-                    .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+            // Runs and Recent, or the typing list: both in place under the field, crossfading (200 ms).
+            ZStack(alignment: .top) {
+                if searching {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // The route type before sending: preselected from your defaults; a pick here
+                        // beats the words and goes as the request's shape. The sentence stays as typed.
+                        RouteTypeControl(selection: model.pickedShape) { s in
+                            model.pickedShape = s
+                            model.shapeTouched = true
+                        }
+                        .padding(.top, 10)
+                        MatchList(model: model)
+                    }
+                    .background(bottomReader { model.searchListMeasured($0) })
+                    .transition(.opacity)
+                }
 
-                if let first = runs.recents.first {
-                    Text("Recent")
-                        .typeStyle(.eyebrow)
-                        .foregroundStyle(Palette.inkMuted.color)
-                        .padding(.top, 20)
-                        .accessibilityAddTraits(.isHeader)
-                    RecentRow(recent: first) { model.openRun(request: first.request) }
-                        .padding(.top, 4)
-                        .background(bottomReader { setOpen($0) })
+                if !searching {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Your runs")
+                            .typeStyle(.eyebrow)
+                            .foregroundStyle(Palette.inkMuted.color)
+                            .padding(.top, 22)
+                            .accessibilityAddTraits(.isHeader)
+
+                        TileRow(model: model, hidden: searching || expanded < 0.5)
+                            .padding(.top, 12)
+                            .background(bottomReader { if runs.runs.isEmpty { setOpen($0) } })
+
+                        // History (replaces Recent): routes marked as run, newest first.
+                        if let first = runs.runs.first {
+                            Text("History")
+                                .typeStyle(.eyebrow)
+                                .foregroundStyle(Palette.inkMuted.color)
+                                .padding(.top, 20)
+                                .accessibilityAddTraits(.isHeader)
+                            HistoryRow(log: first) { model.openHistory(first) }
+                                .padding(.top, 2)
+                                .accessibilityHidden(expanded < 0.5)
+                                .background(bottomReader { setOpen($0) })
+                        }
+                    }
+                    .opacity(expanded)
+                    .accessibilityHidden(expanded < 0.5 || searching)
+
+                    // The full list, revealed by pulling the sheet up past the open rest.
+                    ForEach(runs.runs.dropFirst()) { log in
+                        HistoryRow(log: log) { model.openHistory(log) }
+                            .opacity(Double(sheet.readProgress))
+                            .accessibilityHidden(sheet.readProgress < 0.5)
+                            .allowsHitTesting(sheet.readProgress > 0.5)
+                    }
+                }
+                .transition(.opacity)
                 }
             }
-            .opacity(expanded)
-            .accessibilityHidden(expanded < 0.5)
-
-            // More rows, revealed by dragging up past the open rest.
-            ForEach(runs.recents.dropFirst()) { recent in
-                RecentRow(recent: recent) { model.openRun(request: recent.request) }
-                    .opacity(Double(sheet.readProgress))
-                    .accessibilityHidden(sheet.readProgress < 0.5)
-            }
+            .animation(reduceMotion ? nil : Motion.crossfade, value: searching)
         }
         // Measured in the content's own space, inside the slide offset (else each measurement
         // would move the sheet and feed the next).
@@ -82,15 +135,19 @@ struct LandingSheet: View {
         })
         .frame(height: frameHeight, alignment: .top)
         .frame(maxWidth: .infinity)
+        // Everything stays inside the sheet's shape while it resizes.
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: Metrics.radiusSheet, topTrailingRadius: Metrics.radiusSheet))
         .background(sheetBackground)
-        .clipped()
         .offset(y: offset)
         .contentShape(Rectangle())
+        // A tap on any part of the sheet that isn't a control ends editing.
+        .onTapGesture { model.endTyping() }
         .gesture(drag)
     }
 
-    /// Tapping the handle: collapsed opens; open (or taller) collapses.
+    /// Tapping the handle: collapsed opens; open (or taller) collapses. While typing it only ends editing.
     private func toggle() {
+        if model.searchMode { model.endTyping(); return }
         sheet.settle(rest: sheet.restingOpen ? .collapsed : .open, animated: !reduceMotion)
     }
 
@@ -104,31 +161,33 @@ struct LandingSheet: View {
 
     /// Collapsed: just the field.
     private func setCollapsed(_ fieldBottom: CGFloat) {
-        update(&sheet.baseCollapsed, (fieldBottom + 12 + Self.bottomInset).rounded())
+        model.landingFieldBottom = fieldBottom
+        let h = (fieldBottom + 12 + Self.bottomInset).rounded()
+        guard abs(sheet.baseCollapsed - h) > 0.5 else { return }
+        sheet.baseCollapsed = h
+        refresh()
     }
 
     /// Open: down to the first recent row (or the tiles, with no recents).
     private func setOpen(_ contentBottom: CGFloat) {
-        update(&sheet.baseOpen, (contentBottom + 14 + Self.bottomInset).rounded())
+        let h = (contentBottom + 14 + Self.bottomInset).rounded()
+        guard abs(sheet.baseOpen - h) > 0.5 else { return }
+        sheet.baseOpen = h
+        refresh()
     }
 
     /// Taller: every recent row, up to three quarters of the screen; none with one recent.
     private func setFull(_ contentHeight: CGFloat) {
+        guard !model.searchMode else { return }
         let full = min((contentHeight + 14 + Self.bottomInset).rounded(), UIScreen.main.bounds.height * 0.75)
-        let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
+        let read: CGFloat? = runs.runs.count > 1 && full > sheet.baseOpen + 1 ? full : nil
         guard read != sheet.readHeight else { return }
         sheet.readHeight = read
         refresh()
     }
 
-    private func update(_ value: inout CGFloat, _ new: CGFloat) {
-        guard abs(value - new) > 0.5 else { return }
-        value = new
-        refresh()
-    }
-
     private func refresh() {
-        if model.landingShown, model.landingAnchor == nil { sheet.refreshRest() }
+        if model.landingShown, model.landingAnchor == nil, !model.searchMode { sheet.refreshRest() }
     }
 
     static var bottomInset: CGFloat {
@@ -147,13 +206,21 @@ struct LandingSheet: View {
     }
 
     /// Same as the route card: 1:1 under the finger, then the 320 ms settle to the nearest rest.
+    /// While typing, a drag down only dismisses the keyboard (the list under the field takes it
+    /// interactively); the next drag moves the sheet.
     private var drag: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { v in
+                if model.searchMode || keyboardDrag {
+                    keyboardDrag = true
+                    if model.searchMode, v.translation.height > 12 { model.endTyping() }
+                    return
+                }
                 guard model.landingAnchor == nil else { return }
                 sheet.drag(translation: v.translation.height)
             }
             .onEnded { v in
+                if keyboardDrag { keyboardDrag = false; return }
                 guard model.landingAnchor == nil else { return }
                 sheet.endDrag(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion) { _ in }
             }
@@ -161,73 +228,131 @@ struct LandingSheet: View {
 }
 
 /// The request field at the top of the landing sheet: sunken, Fraunces placeholder. At launch it
-/// types an example in the placeholder colour; tapped, it takes the runner's words, and go sends.
+/// types an example in the placeholder colour; once the runner focuses it, the example stops and
+/// the field is empty with a static "Describe your run" until they type. While focused, "Cancel"
+/// sits to its right (ends editing, clears the field). Go sends.
 struct RequestField: View {
-    let model: MainModel
-    @State private var draft = ""
+    @Bindable var model: MainModel
     @FocusState private var focused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let style = TypeStyle.field
+    /// "Cancel" in body plus its 14 pt gap.
+    private static let cancelWidth: CGFloat = 72
 
     var body: some View {
         let typing = model.stage == .typing
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Palette.inkMuted.color)
-            ZStack(alignment: .leading) {
-                if !typing || (draft.isEmpty && !model.demoTyping) {
-                    Text(model.fieldExample.isEmpty ? "Describe your run" : model.fieldExample)
+        let editing = model.searchMode
+        HStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Palette.inkMuted.color)
+                ZStack(alignment: .leading) {
+                    if model.fieldText.isEmpty {
+                        // The launch example (placeholder colour) until focused, then the static placeholder.
+                        Text(editing || model.fieldExample.isEmpty ? "Describe your run" : model.fieldExample)
+                            .typeStyle(Self.style)
+                            .foregroundStyle(Palette.inkMuted.color)
+                            .lineLimit(1)
+                            .accessibilityHidden(true)
+                    }
+                    TextField("", text: $model.fieldText)
                         .typeStyle(Self.style)
-                        .foregroundStyle(Palette.inkMuted.color)
-                        .lineLimit(1)
-                        .accessibilityHidden(true)
+                        .foregroundStyle(Palette.ink.color)
+                        .tint(Palette.focusRing.color)
+                        .focused($focused)
+                        .submitLabel(.go)
+                        .onSubmit { model.send(model.fieldText, reduceMotion: reduceMotion) }
+                        .accessibilityLabel("Describe your run")
                 }
-                TextField("", text: $draft)
-                    .typeStyle(Self.style)
-                    .foregroundStyle(Palette.ink.color)
-                    .tint(Palette.focusRing.color)
-                    .focused($focused)
-                    .submitLabel(.go)
-                    .onSubmit { model.send(draft, reduceMotion: reduceMotion); draft = ""; focused = false }
-                    .opacity(typing ? 1 : 0.011)
-                    .accessibilityLabel("Describe your run")
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 50)
+            .background(Capsule().fill(Palette.surfaceSunken.color))
+            .overlay(Capsule().strokeBorder(Palette.focusRing.color, lineWidth: 1.5).opacity(typing ? 1 : 0))
+            .contentShape(Capsule())
+            .onTapGesture { focused = true }
+
+            // Cancel fades in beside the same field (the field narrows to make room); never a copy.
+            ZStack(alignment: .leading) {
+                if editing {
+                    Button("Cancel") { model.cancelTyping() }
+                        .typeStyle(.body)
+                        .foregroundStyle(Palette.ink.color)
+                        .fixedSize()
+                        .frame(minHeight: Metrics.minTap)
+                        .padding(.leading, 14)
+                        .transition(.opacity)
+                }
+            }
+            .frame(width: editing ? Self.cancelWidth : 0, alignment: .leading)
+            .clipped()
+        }
+        .animation(reduceMotion ? nil : Motion.crossfade, value: editing)
+        .onChange(of: focused) { _, isFocused in
+            if isFocused { model.beginTyping() } else if model.searchMode { model.endTyping() }
+        }
+        .onChange(of: model.stage) { _, stage in
+            if stage == .typing, model.demoTyping {
+                // The debug demo "taps and sends" the example itself, without the keyboard.
+                model.fieldText = model.fieldExample
+            } else if stage != .typing {
+                focused = false
             }
         }
-        .padding(.horizontal, 18)
-        .frame(height: 50)
-        .background(Capsule().fill(Palette.surfaceSunken.color))
-        .overlay(Capsule().strokeBorder(Palette.focusRing.color, lineWidth: 1.5).opacity(typing ? 1 : 0))
-        .contentShape(Capsule())
-        .onTapGesture { model.beginTyping(); focused = true }
-        .onChange(of: model.stage) { _, stage in
-            guard stage == .typing else { return }
-            // The debug demo "taps and sends" the example itself, without the keyboard.
-            if model.demoTyping { draft = model.fieldExample } else { focused = true }
+        .onChange(of: model.focusFieldRequest) { _, _ in focused = true }
+    }
+}
+
+/// While typing: recent requests and saved runs matching the text when typing started, newest
+/// first, up to four; they stay put as the runner types. A tap fills the field and sends.
+/// Dragging the list down takes the keyboard with the finger.
+private struct MatchList: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let matches = model.fieldMatches
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                ForEach(matches) { m in
+                    RecentRow(title: m.title, date: m.date, shape: m.shape, hidden: !model.searchMode) {
+                        model.fieldText = m.request
+                        model.send(m.request, reduceMotion: reduceMotion)
+                    }
+                }
+            }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .frame(height: CGFloat(matches.count) * 40)
+        .padding(.top, matches.isEmpty ? 0 : 6)
     }
 }
 
 /// "Your runs": the runner's runs, then suggestions, then a dashed Save tile.
 private struct TileRow: View {
     let model: MainModel
+    /// Faded out (typing, or the sheet collapsed): hidden from VoiceOver and taps.
+    var hidden = false
 
     var body: some View {
         GeometryReader { g in
             let side = ((g.size.width - 3 * 12) / 4).rounded(.down)
             HStack(alignment: .top, spacing: 12) {
+                // Saved routes, their real shape; long-press for Rename and Remove.
                 ForEach(model.runs.saved.prefix(3)) { run in
-                    RunTile(side: side, name: run.name, detail: CardText.miles(run.distanceMi), shape: run.shape) {
-                        model.openRun(request: run.request)
+                    RunTile(side: side, name: run.name, detail: nil, shape: run.shape, hidden: hidden) {
+                        model.openSaved(run)
                     }
+                    .contextMenu { SavedTileMenu(model: model, saved: run) }
                 }
                 ForEach(model.runs.suggestedTiles) { s in
-                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph) {
+                    RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph, hidden: hidden) {
                         model.send(s.request, reduceMotion: false)
                     }
                 }
-                SaveTile(side: side)
+                SaveTile(side: side, hidden: hidden)
             }
         }
         .frame(height: Self.height(width: UIScreen.main.bounds.width - 2 * Metrics.s24))
@@ -243,6 +368,7 @@ private struct RunTile: View {
     let detail: String?
     let shape: [[Double]]?
     var glyph: SuggestedRun.Glyph? = nil
+    var hidden = false
     let action: () -> Void
 
     var body: some View {
@@ -274,12 +400,15 @@ private struct RunTile: View {
         .frame(width: side)
         .accessibilityLabel(detail.map { "\(name), \($0)" } ?? name)
         .accessibilityHint(shape == nil ? "Sends this request" : "Shows this route")
+        .accessibilityHidden(hidden)
+        .allowsHitTesting(!hidden)
     }
 }
 
 /// The dashed last tile. What it does from here is still open, so it isn't a button yet.
 private struct SaveTile: View {
     let side: CGFloat
+    var hidden = false
 
     var body: some View {
         VStack(spacing: 6) {
@@ -293,24 +422,36 @@ private struct SaveTile: View {
         }
         .frame(width: side)
         .accessibilityElement(children: .combine)
+        .accessibilityHidden(hidden)
     }
 }
 
 private struct RecentRow: View {
-    let recent: RecentRoute
+    let title: String
+    let date: Date
+    let shape: [[Double]]
+    var hidden = false
     let action: () -> Void
+
+    init(recent: RecentRoute, hidden: Bool = false, action: @escaping () -> Void) {
+        self.init(title: RunStore.sentence(recent.request), date: recent.date, shape: recent.shape, hidden: hidden, action: action)
+    }
+
+    init(title: String, date: Date, shape: [[Double]], hidden: Bool = false, action: @escaping () -> Void) {
+        self.title = title; self.date = date; self.shape = shape; self.hidden = hidden; self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                RouteThumbnail(shape: recent.shape, lineWidth: 1.8, dot: 0, inset: 0.06)
+                RouteThumbnail(shape: shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
-                Text(Self.sentence(recent.request))
+                Text(title)
                     .typeStyle(.body)
                     .foregroundStyle(Palette.ink.color)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(RunStore.dayText(recent.date))
+                Text(RunStore.dayText(date))
                     .typeStyle(.label)
                     .foregroundStyle(Palette.inkMuted.color)
             }
@@ -318,10 +459,9 @@ private struct RecentRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityHidden(hidden)
+        .allowsHitTesting(!hidden)
     }
-
-    /// The request as the runner typed it, without the full stop the header adds.
-    static func sentence(_ s: String) -> String { s.hasSuffix(".") ? String(s.dropLast()) : s }
 }
 
 /// A route's own shape as a small line drawing: route-water line, vermilion start dot. A suggestion
@@ -456,5 +596,44 @@ struct WeatherLine: View {
         f.locale = Locale(identifier: "en_US")
         f.dateFormat = "EEE h:mm"
         return f.string(from: date)
+    }
+}
+
+/// The return prompt: the route's own thumbnail, "Did you run the … route this morning?", Not today
+/// and I ran it (which draws the route and opens the rating).
+struct ReturnPrompt: View {
+    let model: MainModel
+    let viewed: ViewedRoute
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceSheet.color)
+                    .overlay(RouteThumbnail(shape: viewed.route.shape, lineWidth: 2, dot: 5, inset: 0.14))
+                    .frame(width: 44, height: 44)
+                Text(MainModel.promptText(viewed))
+                    .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Palette.surfaceSunken.color))
+            .accessibilityElement(children: .combine)
+            HStack(spacing: 10) {
+                Button { model.dismissReturnPrompt() } label: {
+                    Text("Not today").typeStyle(.bodyStrong).foregroundStyle(Palette.ink.color)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .overlay(RoundedRectangle(cornerRadius: Metrics.radiusButton).strokeBorder(Palette.controlBorder.color, lineWidth: 1.5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button { model.ranItFromPrompt() } label: {
+                    Text("I ran it").typeStyle(.bodyStrong).foregroundStyle(Palette.onAction.color)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }

@@ -12,6 +12,8 @@ struct ReadOut: Equatable {
         let field: String
         let title: String
         var value: String
+        /// The server chip it came from (a chip edit drops this id's span).
+        var chipId: String? = nil
         var id: String { field }
     }
     struct Filled: Equatable, Identifiable {
@@ -19,6 +21,7 @@ struct ReadOut: Equatable {
         let main: String
         let detail: String
         let source: String
+        var chipId: String? = nil
         var id: String { field }
     }
     struct Cant: Equatable { let gap: String; let text: String }
@@ -30,6 +33,45 @@ struct ReadOut: Equatable {
     var notes: [Note] = []
 
     var hasReadIt: Bool { !cant.isEmpty || !filled.isEmpty || !notes.isEmpty }
+
+    /// From the server's `parsed` event. Every string is shown as sent (server templates). Words the
+    /// runner said carry a span in Unicode scalars; here they become NSString (UTF-16) offsets.
+    init(parsed: ServerEvent.Parsed, sentence: String) {
+        for chip in parsed.chips {
+            if chip.source == "said", let span = chip.span,
+               let range = Self.utf16Range(of: span, in: sentence) {
+                understood.append(Understood(start: range.location, length: range.length, field: chip.field,
+                                             title: Self.title(chip.field), value: chip.text, chipId: chip.id))
+            } else {
+                // Preset, default and usual values, and edited ones (said, but not in the sentence):
+                // listed in "How Loop read it", each opening the editor.
+                filled.append(Filled(field: chip.field, main: chip.text, detail: "", source: chip.source, chipId: chip.id))
+            }
+        }
+        cant = parsed.cant.map { Cant(gap: $0.gap, text: $0.text) }
+        notes = parsed.notes.map { Note(key: $0.key, text: $0.text, trust: $0.trust ?? "") }
+    }
+
+    init() {}
+
+    /// A span's scalar positions as an NSRange in the sentence; nil if it doesn't fit.
+    static func utf16Range(of span: ServerEvent.Span, in text: String) -> NSRange? {
+        let scalars = text.unicodeScalars
+        guard span.start >= 0, span.end > span.start, span.end <= scalars.count else { return nil }
+        let a = scalars.index(scalars.startIndex, offsetBy: span.start)
+        let b = scalars.index(scalars.startIndex, offsetBy: span.end)
+        return NSRange(a..<b, in: text)
+    }
+
+    /// The editor's title for a chip field ("DISTANCE · YOU SAID").
+    static func title(_ field: String) -> String {
+        switch field {
+        case "time": return "Start time"
+        case "via": return "Through"
+        case "avoid": return "Avoid"
+        default: return field.prefix(1).uppercased() + field.dropFirst()
+        }
+    }
 
     /// Stand-in for the server's parse (simulation only; the real one is Claude + templates).
     static func simulated(_ sentence: String, data: LoopData, file: RouteFile.Summary?) -> ReadOut {
@@ -62,10 +104,8 @@ struct ReadOut: Equatable {
         if start == nil {
             r.filled.append(Filled(field: "start", main: "Starting where you are", detail: "Kips Bay Library", source: "default"))
         }
-        r.filled.append(Filled(field: "mode", main: "\(req.mode): fewer lights, fewer crowds, fewer turns", detail: "", source: "preset"))
-        let miles = r.understood.first { $0.field == "distance" }?.value ?? "the distance"
-        r.filled.append(Filled(field: "tolerance", main: "Within 5% of \(miles)", detail: "", source: "default"))
-        r.filled.append(Filled(field: "shape", main: "Any shape: a loop or out and back", detail: "", source: "default"))
+        r.filled.append(Filled(field: "mode", main: "\(req.mode): fewer lights, crowds and turns", detail: "", source: "preset"))
+        r.filled.append(Filled(field: "shape", main: "Any shape, a loop or out and back", detail: "", source: "default"))
         return r
     }
 }

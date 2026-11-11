@@ -8,7 +8,10 @@ import SwiftUI
 @Observable
 @MainActor
 final class MainModel {
-    let data: LoopData
+    /// The routes on screen: the bundled file, or a live build's (replaced as events arrive).
+    var data: LoopData { didSet { resampled = [:] } }
+    /// The bundled route file, for builds without the server and the debug replays.
+    let fixtureData: LoopData
 
     // Route: the build replay decides what is shown.
     var build: BuildState
@@ -58,6 +61,55 @@ final class MainModel {
     var requestText: String?
     /// The example the landing field types in its placeholder colour at launch.
     var fieldExample = ""
+    /// What the runner has typed in the landing field (kept when editing ends, cleared by Cancel).
+    var fieldText = ""
+    // Come back (UI chat, 2026-11-10; ComeBack.swift)
+    /// The route on the card: what Save, "I ran it" and the return prompt keep.
+    var currentRoute: RouteIdentity?
+    /// The card's primary action: Send to watch, or "Run again" for a route opened from History.
+    var cardMode: CardMode = .normal
+    enum CardMode: Equatable { case normal, history }
+    /// "How was it?": the route sheet shows the rating instead of the card.
+    var rating: RatingState?
+    struct RatingState: Equatable {
+        var runId: String
+        var route: RouteIdentity
+        var notForMe = false
+        var reasons: Set<String> = []
+        var note = ""
+    }
+    /// "Did you run the … route?" at the top of the home sheet, once per route, within 24 h.
+    var returnPrompt: ViewedRoute?
+    /// The route type picked in the row under the field; sent only if the runner touched it.
+    var pickedShape: UsualShape = .any
+    var shapeTouched = false
+    /// The request field's bottom in the landing sheet (measured), for the typing height.
+    @ObservationIgnored var landingFieldBottom: CGFloat = 74
+    /// While typing: the bottom of the route-type row and matches, measured in the landing sheet.
+    @ObservationIgnored var landingSearchBottom: CGFloat?
+    /// The "You" sheet is up.
+    var youShown = false
+    /// A saved route being renamed (long-press -> Rename).
+    var renaming: SavedRun?
+    /// Runs once the route has drawn and settled (opening a route to rate it from the prompt).
+    @ObservationIgnored var afterSettle: (() -> Void)?
+    /// The live build's id (`final.route_id`): a chip edit sends it so shape edits answer at once.
+    @ObservationIgnored var liveBuildId: String?
+
+    /// While true, the map's bottom padding follows the landing sheet's live height every frame, so
+    /// the location glides with the sheet. Off during a one-off camera ease (going home).
+    var landingCameraBound = true
+    /// Bumped to focus the landing field (debug screenshots).
+    var focusFieldRequest = 0
+    /// The on-screen keyboard's height over the screen bottom (0 when hidden).
+    var keyboardHeight: CGFloat = 0
+    /// The runner is typing in the landing field: the sheet shows matching recent and saved runs.
+    var searchMode: Bool { stage == .typing && !demoTyping }
+    /// Recent requests and saved runs under the field, filtered by what's typed.
+    /// While typing: the rows under the field, decided once when typing starts (from the text
+    /// then) and kept, with their space, until it ends. Re-filtering on each keystroke made rows
+    /// come and go and the sheet bounce (phone, 2026-11-11).
+    var fieldMatches: [RunMatch] = []
     /// The logo covering the map at launch.
     var logoShown = false
     /// The landing sheet is up (it rises at launch and slides away on send).
@@ -93,11 +145,55 @@ final class MainModel {
     @ObservationIgnored var reachFadeStart: CFTimeInterval?
     @ObservationIgnored var candidatesStart: CFTimeInterval?
     @ObservationIgnored var flow: Task<Void, Never>?
-    /// The runner's location. A public stand-in (the fixture's start) until location is wired.
-    var location: GeoPoint { data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0] }
-    /// How far the runner can go from the start: half the distance, out and back. Until the server
-    /// sends parsed.reach_m.
-    var reachMetres: Double { (data.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile }
+    /// The runner's location: Core Location (when-in-use) when this build talks to the server;
+    /// otherwise, and until a fix arrives, the bundled file's public start (Kips Bay Library).
+    var location: GeoPoint {
+        if LoopAPI.baseURL != nil, let h = locationProvider.here {
+            return GeoPoint(lon: h.coordinate.longitude, lat: h.coordinate.latitude)
+        }
+        return fixtureStart
+    }
+    @ObservationIgnored let fixtureStart: GeoPoint
+    let locationProvider = LocationProvider()
+    /// How far the runner can go from the start: the server's `reach_m` on a live build, else half
+    /// the bundled route's distance (out and back).
+    var reachMetres: Double {
+        liveReachM ?? (fixtureData.candidate(rank: 1)?.detail?.distanceMi ?? 3) / 2 * Units.metresPerMile
+    }
+
+    // Live builds (Phase 3 server; LiveFlow.swift).
+    @ObservationIgnored var liveTask: Task<Void, Never>?
+    /// This build streams from the server.
+    var liveMode = false
+    @ObservationIgnored var liveReachM: Double?
+    /// A stable integer key per server route id, so morphs and the build state work by key.
+    @ObservationIgnored var liveKeys: [String: Int] = [:]
+    @ObservationIgnored var liveSentAt: CFTimeInterval = 0
+    /// The last line from the stream (an event or a ping), for the watchdog.
+    @ObservationIgnored var liveLastActivity: CFTimeInterval = 0
+    @ObservationIgnored var liveWatchdog: Task<Void, Never>?
+    /// The launch health check failed: the landing sheet says so, with Try again.
+    var serverDown = false
+    @ObservationIgnored var liveParsedAt: CFTimeInterval?
+    @ObservationIgnored var liveSentence = ""
+    @ObservationIgnored var liveParseId: String?
+    @ObservationIgnored var liveExpiredRetried = false
+    /// The automatic resend after `expired` is under way (it mustn't reset the once-only guard).
+    @ObservationIgnored var liveResending = false
+    @ObservationIgnored var liveRouteId: String?
+    /// The latest parse's constraints: a chip edit changes one field and sends them back.
+    @ObservationIgnored var liveConstraints: JSONValue?
+    /// The last request body, so Try again repeats a chip edit too, not just the text.
+    @ObservationIgnored var liveLastBody: RunRequest?
+    /// Outlines of the routes the engine tries, with when each arrived (drawn in over 0.7 s).
+    @ObservationIgnored var liveOutlines: [(points: [GeoPoint], at: CFTimeInterval)] = []
+    /// A question from the parser or the engine, waiting for the runner.
+    var pendingQuestion: ServerEvent.Question?
+    /// A plain message instead of a spinner: the server is unreachable, or an error event.
+    var liveNotice: LiveNotice?
+    /// The token screen is up (no token yet, or the server said it's wrong).
+    var needsToken = false
+    var tokenMessage: String?
 
     // Camera and projection (set by the map)
     var cameraRequest = CameraRequest()
@@ -109,7 +205,11 @@ final class MainModel {
 
     init(data: LoopData, runs: RunStore) {
         self.data = data
+        self.fixtureData = data
+        self.fixtureStart = data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0]
+        self.needsToken = LoopAPI.baseURL != nil && TokenStore.load() == nil
         self.runs = runs
+        LoopAPI.installId = runs.installId
         build = .settled(top3: data.candidates.map(\.rank))
         landing.slide(to: 0, animated: false)
     }
@@ -119,7 +219,36 @@ final class MainModel {
 
     /// The overview frames the shown route only: it is the hero. The faint #2 and #3 may run off
     /// screen or under the header fade (framing all three made the hero too small).
-    var overviewCoordinates: [GeoPoint] { (data.candidate(rank: 1) ?? shown)?.line.points ?? [] }
+    var overviewCoordinates: [GeoPoint] {
+        guard let c = shown ?? data.candidates.first else { return [] }
+        return Self.fitPoints(c)
+    }
+
+    /// What a route fit frames: the line (simplified), its start, turnaround and every mile mark.
+    static func fitPoints(_ c: Candidate) -> [GeoPoint] {
+        var pts = DisplayLine.simplify(c.line.points, tolerance: 4).map { c.line.points[$0] }
+        if let d = c.detail {
+            pts.append(d.start)
+            if let t = d.turnaround { pts.append(t.point) }
+            pts += d.miles.map(\.point)
+        }
+        return pts
+    }
+
+    /// The runner panned or zoomed after the route appeared: no automatic refits until "Fit route".
+    var routeCameraFree = false
+
+    /// Glide to fit the route above the sheet, unless the runner has moved the map.
+    func autoFitRoute(duration: TimeInterval) {
+        guard !routeCameraFree, shown != nil else { return }
+        requestCamera(.overview, animated: true, duration: duration)
+    }
+
+    /// "Fit route": back to the framed route, and automatic fits resume.
+    func fitRoute() {
+        routeCameraFree = false
+        requestCamera(.overview, animated: true, duration: 0.5)
+    }
 
     var eyebrowText: String {
         CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
@@ -161,8 +290,20 @@ final class MainModel {
 
     private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
         let wasSettled = build.settleAt
+        let wasShown = build.shownRank
+        let wasBounds = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
         build.apply(event, at: t)
         frameVersion += 1
+        // A new leader, the flag, or a final that changed the route: glide to fit it again.
+        switch event {
+        case .top3:
+            if wasShown != nil, build.shownRank != wasShown { autoFitRoute(duration: 0.6) }
+        case .provisional:
+            autoFitRoute(duration: SheetState.settleDuration)
+        case .final:
+            let now = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
+            if build.shownRank != wasShown || now?.differs(from: wasBounds) == true { autoFitRoute(duration: 0.5) }
+        }
         if build.settleAt != nil, wasSettled == nil {
             pulseID += 1
             Haptics.settle()
@@ -201,7 +342,20 @@ final class MainModel {
 
     /// Done in the editor. Until the app is wired to the server this updates the sentence and the
     /// list locally; with the server it resends the constraints (no Claude) and rebuilds.
-    func applyEdit(field: String, value: String, phrase: String?) {
+    func applyEdit(field: String, value: String, phrase: String?, constraint: (key: String, value: JSONValue)? = nil) {
+        // Live: resend the parse's constraints with this one change; the route rebuilds.
+        if liveMode {
+            editing = nil
+            if let constraint, rebuildLive(field: field, key: constraint.key, value: constraint.value) {
+                updateSentence(field: field, value: value, phrase: phrase)
+            }
+            return
+        }
+        updateSentence(field: field, value: value, phrase: phrase)
+    }
+
+    /// The sentence and the read-out after an edit: the edited words replace the runner's.
+    private func updateSentence(field: String, value: String, phrase: String?) {
         guard var r = readOut else { editing = nil; return }
         if let i = r.understood.firstIndex(where: { $0.field == field }) {
             let u = r.understood[i]
@@ -224,11 +378,8 @@ final class MainModel {
     // MARK: Sheet
 
     func setSheet(open: Bool, animated: Bool) {
-        let changed = sheet.restingOpen != open || sheet.height != (open ? SheetState.open : SheetState.collapsed)
-        sheet.settle(open: open, animated: animated) { [weak self] in
-            // Refit the route to the space the sheet leaves, only once it has settled.
-            if changed { self?.requestCamera(.overview, animated: animated) }
-        }
+        // The route fit follows the sheet's height frame by frame (RouteMapView), so no refit here.
+        sheet.settle(open: open, animated: animated)
         sheetOpened(open)
     }
 
@@ -238,10 +389,7 @@ final class MainModel {
             goHome()
             return
         }
-        let wasOpen = sheet.restingOpen
-        sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { [weak self] open in
-            if open != wasOpen { self?.requestCamera(.overview, animated: animated) }
-        }
+        sheet.endDrag(predictedTranslation: predictedTranslation, animated: animated) { _ in }
         sheetOpened(sheet.restingOpen)
     }
 

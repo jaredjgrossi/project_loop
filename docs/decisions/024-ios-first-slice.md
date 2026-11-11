@@ -120,12 +120,89 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   while collapsed starts typing without opening the runs.
 - **Weather.** WeatherKit needs the paid developer program; the build uses a Personal Team, so
   Debug builds show fixed sample weather (48°, partly cloudy) and Release builds hide the line.
+- **Typing on the landing sheet.** Focusing the field stops the launch example and shows a static
+  "Describe your run", with "Cancel" to its right (clears and ends editing). The sheet fits the
+  field and up to four recent requests and saved runs matching the typed title, newest first;
+  a tap fills the field and sends. Tapping the map or the sheet ends editing (the text stays).
+  A drag down while typing only ends editing; the list under the field takes the keyboard down
+  with the finger (`scrollDismissesKeyboard(.interactively)`).
+- **One motion, driven by the sheet (device review, 2026-11-09).** The landing sheet ignores the
+  keyboard's safe area; its own height grows over the keyboard on the keyboard's curve and
+  duration, so the field never moves separately. The map's bottom padding is bound to the sheet's
+  live height every frame (no camera animations started on height changes), so the location
+  glides with the sheet. Runs and the typing list crossfade in place (200 ms); "Cancel" fades in
+  beside the field; contents are clipped to the sheet's shape.
+- **Wired to the Phase 3 server (2026-11-09).** With `LOOP_API_BASE` in the git-ignored
+  Secrets.xcconfig and a token in the Keychain (pasted once on a token screen), a request streams
+  `parsed → candidates → top3 → provisional → final → done` into the existing wait: the push-in
+  until `parsed` (never cut short before 1.2 s; it drifts on for a slow parse), the reach ring from
+  `reach_m`, the engine's outlines as they arrive, the route draw and the settle at `provisional`.
+  The card rises at provisional with the distance; the reason, stats and "Best of N" fill in with
+  `final`. Routes are keyed by the server's ids, so a new leader morphs. Questions (parser or
+  engine) show in a card at the bottom; answering continues the build. Unreachable or an error
+  shows a plain message with "Try again" where it can help; a 401 brings the token screen back.
+  The request sends the real location (when-in-use; null if denied), a fixed profile, and recent
+  routes (a live route keeps the server's id). Chip and can't-do text is shown as the server sends
+  it. Without an address or a token the app runs on the bundled file as before. Chip edits
+  are wired too (below).
+- **Framing the route (device review, 2026-11-09).** When the leader starts drawing, the camera
+  glides to fit the whole route (line, start, turnaround and mile marks) between the header and
+  the card's top: 24 pt in, 16 pt more for the marks, at least 40 pt above the card. It refits at
+  a new leader, at the provisional flag, at a final that changed the route, and follows the card's
+  height frame by frame. A new camera move cancels any running one (a leftover reading drift used
+  to pull the camera back to the start on live builds). After the runner pans or zooms, nothing
+  refits on its own; "Fit route" above the sheet does. START, TURN and every mile mark sit beside
+  their marker on the side with room, never on the line, flipping when that side is taken.
+- **Chip edits rebuild (2026-11-10).** The app keeps each `parsed` event's `constraints` as raw
+  JSON (keys as sent). Done in the editor sets the field (`shape`, `distance_mi`, `start_time`,
+  `mode`, `scenery`, `tolerance_pct`, as in `api/constraints.py`), drops the chip's entry from
+  `spans` and the field's from `sources`, and sends `constraints` instead of text; the stream
+  redraws the route through the same wait. An edited chip comes back said with no span, so it stays
+  listed in "How Loop read it". Try again repeats an edit, not just the text.
+- **Usual route type** (Any / Loop / Out and back), a plain setting behind the settings button,
+  kept on the phone and sent as `profile.usual_shape` (`any`, `loop`, `out_and_back`). The server's
+  profile ignores fields it doesn't know yet, so it's safe before Phase 3 reads it.
+- **Come back (UI chat, 2026-11-10; mockups come-back-screens-v2).**
+  - **Save:** a bookmark beside the card's × (light haptic). Saved routes show in Your runs with their
+    real shape, named from the longest stretch and the kind ("East River out-and-back"); long-press
+    for Rename and Remove; a tap draws the route and opens its card.
+  - **"I ran it" and the rating:** an outline button with a check beside the primary action marks the
+    run at once; the sheet turns into "How was it?" and fits it. Good saves with a success haptic; Not
+    for me shows reason pills (crowded, lights, water, safety, other; "other" adds a note); "Not now"
+    leaves the run unrated. Runs and ratings go to `POST /v1/routes/{id}/feedback` (decision 043).
+  - **Return prompt:** a route viewed or sent to the watch is asked about once at the next open, within
+    24 h, at the top of the home sheet; "I ran it" there draws the route and opens the rating.
+  - **History replaces Recent:** routes marked as run, newest first, name on line one, distance · day on
+    line two, a thumb when rated. A row shows the route with "Run again" (`mode: "exact"`).
+  - **"You":** the top-right button is the route L. A full-height sheet: a hero map of every run drawn
+    over the others at 45%, stats, the last 8 weeks, most run, saved, Your defaults (home by search or
+    current location, usual distance, usual time, route type) and History. Empty until the first run
+    apart from the hero, the defaults and History.
+  - **Route type before sending:** a segmented row under the focused field (Any, Loop, Out and back,
+    One way), preselected from the defaults; a pick goes as the request's top-level `shape`.
+  - **Storage:** the JSON run store (saved routes, runs with ratings, viewed routes, the profile, an
+    install id), plus each kept route's `final` payload in Application Support/routes, so saved routes
+    and History draw offline. Requests send `X-Loop-Install`, the profile and `recent_routes` (saved
+    names, `saved`, `ran_count`). Stats use each route's distance (no GPS or Health import).
+- **Never wait forever.** No `parsed` within 8 s, or 20 s with no line from the stream after it,
+  stops the wait with "Can't reach Loop right now." and Try again; `/v1/health` is checked at
+  launch and the landing sheet shows the same line if it fails. The question card has a × that
+  goes back to editing the sentence. Rows in "How Loop read it" open only on a clean tap.
 - **Back home.** The card's ×, a swipe down past collapsed, or the wordmark clear the route and
   the sentence and bring the landing sheet back; the dismissed route moves to the top of Recent
   (without counting another run).
-- **Type.** Only the design system's fourteen type styles exist (the brief's twelve plus `field`,
-  Fraunces 18/24, and `numeral-s`, Fraunces 18/22, from the UI review); `TypeStyle`'s
+- **Type.** Only the design system's twelve type styles exist: the brief's without `data` and
+  `data-strong`, plus `field` (Fraunces 18/24) and `numeral-s` (Fraunces 18/22). `TypeStyle`'s
   initializer is private to `Typography.swift`. The audit is in `docs/ios-type-audit.md`.
+- **Calm pass on the route sheet (UI review, 2026-11-09).** No JetBrains Mono (font and licence
+  removed). Trust words are hidden by default: measured values show none, estimates carry "≈",
+  and tapping a number (or the crowd sentence, or a note) shows its trust word and the file's
+  source in a popover; VoiceOver still reads the trust word. This keeps product rule 2 (every
+  fact carries a source and a trust label) one tap away instead of on screen. The crowd line is one
+  sentence, only when a stretch is moderate or busy. No strip legend. "How Loop read it" rows are
+  plain words with no source words and no distance-tolerance row.
+- **Mapbox logo and attribution** fade out while the route sheet is expanded past its open state,
+  where the sheet covers the map.
 - **The paper-model landing** (3D buildings, dawn light, 45° pitch) was tried on device and
   dropped; the flat map stays.
 
@@ -154,3 +231,8 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
   (no recents) is about 290 pt; collapsed, about 120 pt.
 - The Save tile isn't a button yet: what it saves from the landing is undecided.
 - WeatherKit and its required Apple Weather attribution, once the paid program is in place.
+- Mapbox's terms ask for the logo wherever the map shows. It's hidden only while "How Loop read
+  it" covers the map; check this with Mapbox before any public release.
+- The token screen's and the unreachable message's wording is the app's own until the UI chat
+  writes it ("Paste your Loop token", "Can't reach Loop right now.").
+- `planned` events are received but not saved or shown yet (no planned list).

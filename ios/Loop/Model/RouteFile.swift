@@ -68,6 +68,8 @@ struct RouteFile: Decodable {
     struct Properties: Decodable {
         // route line
         let kind: String?
+        /// The request as the engine read it (the route line's own properties; used for the card).
+        let request: [RequestItem]?
         let elevation: Elevation?
         let summary: Summary?
         // points
@@ -169,6 +171,9 @@ struct RouteFile: Decodable {
     }
 
     struct TopCandidate: Decodable {
+        /// The server's route id: the same for the same route in every event of one build (absent in
+        /// the bundled file).
+        let id: String?
         let rank: Int
         let kind: String
         let label: String

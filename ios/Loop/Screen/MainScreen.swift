@@ -3,6 +3,7 @@ import SwiftUI
 struct MainScreen: View {
     @State private var model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     init(data: LoopData) {
         _model = State(initialValue: MainModel(data: data, runs: Self.makeRunStore(data)))
@@ -13,6 +14,7 @@ struct MainScreen: View {
     private static func makeRunStore(_ data: LoopData) -> RunStore {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-LoopNewUser") { return RunStore() }
+        if ProcessInfo.processInfo.arguments.contains("-LoopDemoData") { return RunStore.demo(data: data) }
         #endif
         return RunStore.load(data: data)
     }
@@ -64,6 +66,7 @@ struct MainScreen: View {
                 })
 
             BetterRouteLayer(model: model)
+            FitRouteLayer(model: model)
 
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-LoopPinchTarget") {
@@ -79,18 +82,31 @@ struct MainScreen: View {
             }
             #endif
 
-            RouteSheet(model: model)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(model.sheetShown)
+            // The bottom sheets hang from clear layers that take the screen's size (above the home
+            // indicator), so a sheet taller than the room left never resizes this ZStack; that
+            // re-centred everything and moved the header. Each sheet then moves down by the home
+            // indicator's inset to reach the screen's edge: an ignoresSafeArea inside an overlay is
+            // honoured in the simulator but not on the phone, so it's done by offset, the same on
+            // both. The app ignores the keyboard (RootView); a sheet on the keyboard lifts itself.
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    RouteSheet(model: model)
+                        // The rating's note field lifts the sheet onto the keyboard.
+                        .offset(y: LandingSheet.bottomInset + (model.sheetShown ? 0 : Metrics.sheetOpen + 60)
+                                - (model.rating != nil ? model.keyboardHeight : 0))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
+                        .allowsHitTesting(model.sheetShown)
+                }
 
-            // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
-            LandingSheet(model: model)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea(.container, edges: .bottom)
-                .allowsHitTesting(model.landingShown)
-                .accessibilityHidden(!model.landingShown)
+            // The landing sheet: rises at launch, slides away on send. Its own height grows with
+            // the keyboard on the keyboard's curve, so nothing else moves it.
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    LandingSheet(model: model)
+                        .offset(y: LandingSheet.bottomInset)
+                        .allowsHitTesting(model.landingShown)
+                        .accessibilityHidden(!model.landingShown)
+                }
 
             // Edit mode: tapping the map leaves it.
             if model.editMode && model.editing == nil && !model.editingText {
@@ -99,6 +115,25 @@ struct MainScreen: View {
                     .ignoresSafeArea()
                     .onTapGesture { model.exitEditMode() }
             }
+
+            // A question from the server, or a plain message (no spinners): at the bottom, like a sheet.
+            Group {
+                if let q = model.pendingQuestion {
+                    QuestionCard(model: model, question: q)
+                        .id(q.id + (q.parseId ?? ""))
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                } else if let n = model.liveNotice {
+                    NoticeCard(model: model, notice: n)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            // Typing an answer lifts the card onto the keyboard (it sits above the home indicator's
+            // inset already).
+            .offset(y: model.pendingQuestion != nil ? -max(0, model.keyboardHeight - LandingSheet.bottomInset) : 0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
 
             if let target = model.editing {
                 EditorPanel(model: model, target: target)
@@ -118,7 +153,36 @@ struct MainScreen: View {
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
+        .sheet(isPresented: $model.youShown) { YouSheet(model: model) }
+        // Back in the foreground on the home sheet: the return prompt, if a route is waiting.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, model.stage == .landing, model.returnPrompt == nil {
+                withAnimation(reduceMotion ? nil : Motion.crossfade) { model.checkReturnPrompt(openedAt: Date()) }
+            }
+        }
+        .alert("Rename", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
+            RenameField(model: model)
+        }
+        .overlay {
+            // One-time token paste (and again after a 401). Covers everything until saved or skipped.
+            if model.needsToken {
+                TokenScreen(model: model).transition(.opacity)
+            }
+        }
+        // The first location fix: put it in the space above the landing sheet.
+        .onChange(of: model.locationProvider.here == nil) { _, missing in
+            guard !missing, [.logo, .landing, .typing].contains(model.stage) else { return }
+            model.requestCamera(.above(model.location, bottom: model.landing.height, zoom: nil),
+                                animated: !reduceMotion, duration: 0.6)
+        }
         .task { await start() }
+        // The keyboard's height, so the landing sheet sits on it and the map re-centres above both.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+            let height = max(0, UIScreen.main.bounds.height - end.minY)
+            model.keyboardChanged(height: height, duration: reduceMotion ? 0 : duration)
+        }
     }
 
     /// The replay button exists only in Debug builds.
@@ -133,6 +197,10 @@ struct MainScreen: View {
     /// Launch: the logo fades into the map and the bar types an example. Debug launch arguments
     /// that need a finished route (-LoopSettled, -LoopMile, -LoopZoomAt ...) skip straight to it.
     private func start() async {
+        if LoopAPI.baseURL != nil {
+            model.locationProvider.start()
+            model.checkHealth()
+        }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
@@ -145,10 +213,28 @@ struct MainScreen: View {
                 read.cant = args[i + 1].split(separator: ",").map { ReadOut.Cant(gap: String($0), text: texts[String($0)] ?? String($0)) }
             }
             model.readOut = read
+            model.currentRoute = model.identityOfShown(archive: RouteArchive.fixture, routeId: nil)
             await applyLaunchArguments()
             return
         }
+        model.checkReturnPrompt(openedAt: Date())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
+        if args.contains("-LoopYou") {
+            // Screenshots: open "You" once the landing sheet is up.
+            while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(0.6))
+            model.youShown = true
+        }
+        if args.contains("-LoopFocusField") {
+            // Screenshots: focus the field once the sheet has risen; `-LoopType text` types into it.
+            while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(1.0))
+            model.focusFieldRequest += 1
+            if let i = args.firstIndex(of: "-LoopType"), i + 1 < args.count {
+                try? await Task.sleep(for: .seconds(0.8))
+                model.fieldText = args[i + 1]
+            }
+        }
         if args.contains("-LoopCollapsed") {
             // Screenshots: collapse the landing sheet once it has risen and typed its example.
             while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
@@ -156,6 +242,7 @@ struct MainScreen: View {
             model.landing.settle(rest: .collapsed, animated: true)
         }
         #else
+        model.checkReturnPrompt(openedAt: Date())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: false)
         #endif
     }
@@ -180,6 +267,23 @@ struct MainScreen: View {
             try? await Task.sleep(for: .seconds(1.5))
             model.enterEditMode()
             if args.contains("-LoopEditor") { try? await Task.sleep(for: .seconds(0.4)); model.openEditor(.understood("distance")) }
+        }
+        if args.contains("-LoopRate") || args.contains("-LoopRateNo") {
+            // Screenshots: "I ran it" on the card; -LoopRateNo also picks Not for me and two reasons.
+            // Waits for the map: a change made before the first frames are up can be lost.
+            while !model.mapReady { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(1.0))
+            model.ranIt()
+            if args.contains("-LoopRateNo") {
+                try? await Task.sleep(for: .seconds(0.6))
+                model.chooseNotForMe()
+                model.toggleReason("crowded")
+                model.toggleReason("other")
+            }
+        }
+        if args.contains("-LoopSaved") {
+            try? await Task.sleep(for: .seconds(1.0))
+            model.toggleSave()
         }
         if args.contains("-LoopReadIt") {
             try? await Task.sleep(for: .seconds(2.0))
@@ -217,6 +321,7 @@ struct MainScreen: View {
 struct PlayBuildButton: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Menu {
@@ -226,7 +331,7 @@ struct PlayBuildButton: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "play.fill").font(.system(size: 11, weight: .semibold))
-                Text("Replay build").typeStyle(.data)
+                Text("Replay build").typeStyle(.label)
             }
             .foregroundStyle(Palette.inkMuted.color)
             .padding(.horizontal, 12)
@@ -271,6 +376,7 @@ struct BetterRouteChip: View {
 private struct BetterRouteLayer: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -283,6 +389,61 @@ private struct BetterRouteLayer: View {
         .padding(.bottom, model.sheet.height + 10)
         .ignoresSafeArea(edges: .bottom)
         .animation(reduceMotion ? nil : Motion.textArrive, value: model.betterRouteAvailable)
+    }
+}
+
+/// "Fit route": once the runner has panned or zoomed after the route appeared, the camera stops
+/// fitting it on its own; this small button, 10 pt above the sheet at the right, brings it back.
+private struct FitRouteLayer: View {
+    let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        let shows = model.routeCameraFree && model.sheetShown && model.shown != nil && model.sheet.readProgress == 0
+        ZStack {
+            if shows {
+                Button { model.fitRoute() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 11, weight: .semibold))
+                        Text("Fit route").typeStyle(.label)
+                    }
+                    .foregroundStyle(Palette.ink.color)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Capsule().fill(Palette.surfaceSheet.color))
+                    .overlay(Capsule().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
+                    .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.10), radius: 7, y: 4)
+                    .frame(height: Metrics.minTap)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Frames the whole route again")
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 16)
+        // Above the Mapbox attribution button, which rides 8 pt above the sheet at the right.
+        .padding(.bottom, model.sheet.height + 36)
+        .ignoresSafeArea(edges: .bottom)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: shows)
+    }
+}
+
+/// The Rename alert's field: starts with the current name.
+private struct RenameField: View {
+    let model: MainModel
+    @State private var name = ""
+
+    var body: some View {
+        TextField("Name", text: $name)
+            .onAppear { name = model.renaming?.name ?? "" }
+        Button("Cancel", role: .cancel) { model.renaming = nil }
+        Button("Save") {
+            if let s = model.renaming { model.runs.rename(s.id, to: name) }
+            model.renaming = nil
+        }
     }
 }
 

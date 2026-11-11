@@ -37,6 +37,8 @@ struct Trust: Equatable {
     init(_ raw: String) { self.raw = raw }
     /// "not_scored" reads as "not scored".
     var text: String { raw.replacingOccurrences(of: "_", with: " ") }
+    /// Estimates carry "≈" before the number; measured values carry nothing (UI review, 2026-11-09).
+    var isEstimate: Bool { raw == "estimate" }
 }
 
 struct Stretch: Equatable {
@@ -199,6 +201,8 @@ struct Candidate: Identifiable {
     let distanceMi: Double
     /// The file's trust label for the distance (nil if the file gives none).
     let distanceTrust: Trust?
+    /// The file's source for the distance.
+    var distanceSource: String? = nil
     let kindText: String
     let detail: RouteDetail?
     var id: Int { rank }
@@ -220,6 +224,13 @@ struct LoopData {
     let bestOf: Int
 
     func candidate(rank: Int) -> Candidate? { candidates.first { $0.rank == rank } }
+
+    /// A live build's routes before `final` (outlines and distances only), or after it.
+    init(request: RequestCard, candidates: [Candidate], bestOf: Int) {
+        self.request = request
+        self.candidates = candidates
+        self.bestOf = bestOf
+    }
 
     init(file: RouteFile) throws {
         guard let routeFeature = file.route.features.first,
@@ -290,6 +301,7 @@ struct LoopData {
                 line: t.rank == 1 ? line : Polyline(coords),
                 distanceMi: t.rank == 1 ? summary.distance.value : t.distance.value,
                 distanceTrust: Trust(t.rank == 1 ? summary.distance.status : t.distance.status),
+                distanceSource: t.rank == 1 ? summary.distance.source : t.distance.source,
                 kindText: CardText.kindText(t.kind),
                 detail: t.rank == 1 ? detail : nil)
         }.sorted { $0.rank < $1.rank }
