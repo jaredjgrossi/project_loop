@@ -101,3 +101,13 @@ def test_a_short_reversal_is_part_of_the_line():  # a ramp or a footbridge appro
     from api.markers import spurs, turnarounds
     route = _path((0, 0), (0, 1000), (80, 1000), (0, 1000), (0, 4000), (0, 0))
     assert spurs(route) == [] and len(turnarounds(route)) == 1
+
+
+def test_point_along_interpolates_on_the_route_and_clamps_at_its_ends():  # decision 045: a spur's base
+    from api.markers import point_along
+    route = _path((0, 0), (0, 1000), (250, 1000))
+    lon, lat = point_along(route, 1100)
+    assert (lon - -73.985) * 111_320 * math.cos(math.radians(40.78)) == pytest.approx(100, abs=1)
+    assert (lat - 40.78) * 110_574 == pytest.approx(1000, abs=1)
+    assert point_along(route, -5) == pytest.approx(tuple(route[0]))
+    assert point_along(route, 99_999) == pytest.approx(tuple(route[-1]))

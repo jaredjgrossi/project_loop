@@ -32,7 +32,7 @@ from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
 from api.along import runs_along
-from api.markers import spurs
+from api.markers import point_along, spurs
 from api.hills import hill_metrics
 from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
@@ -74,6 +74,9 @@ SHAPE_KINDS = {  # which route kinds each RunConstraints.shape accepts; a lollip
 }
 
 M_PER_DEG_LAT = 110_574
+# Decision 045: a spur whose tip is this close to one of the route's own waypoints (beyond the waypoint's own distance
+# off the route, where GraphHopper snapped it) was made by that waypoint.
+SPUR_WAYPOINT_M = 30.0
 
 
 @dataclass(frozen=True)
@@ -142,6 +145,48 @@ def _offset(lat: float, lon: float, bearing_deg: float, meters: float) -> tuple[
         lat + meters * math.cos(b) / M_PER_DEG_LAT,
         lon + meters * math.sin(b) / (111_320 * math.cos(math.radians(lat))),
     )
+
+
+def _off_route_m(p: tuple[float, float], coords: list[list[float]]) -> float:
+    """How far the (lat, lon) point is from the [lon, lat] route: where GraphHopper snapped it, near enough."""
+    kx = 111_320 * math.cos(math.radians(p[0]))
+    px, py = p[1] * kx, p[0] * M_PER_DEG_LAT
+    best = math.inf
+    for a, b in zip(coords, coords[1:]):
+        ax, ay, bx, by = a[0] * kx, a[1] * M_PER_DEG_LAT, b[0] * kx, b[1] * M_PER_DEG_LAT
+        dx, dy = bx - ax, by - ay
+        t = 0.0 if not (dx or dy) else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        best = min(best, math.hypot(px - ax - t * dx, py - ay - t * dy))
+    return best
+
+
+def without_waypoint_spurs(router: Callable[..., Route]) -> Callable[..., Route]:
+    """Decision 045: a spur the route makes at one of its own waypoints is the generator's doing, not the map's.
+
+    GraphHopper's way between two waypoints never doubles back, so a quick out-and-back off the main line ends at a
+    waypoint that sits off the way the streets go: from Kips Bay, the nearest point of the East River Esplanade is
+    75 m south of E 34th St, where the streets reach it, and the waterfront route went there and back. Such a
+    waypoint (every visit to it) moves to the spur's base, where the way out left the main line, and the route is
+    routed once more. The start and the end never move. A spur away from every waypoint is left as it is, for the
+    spur rule (decision 044)."""
+    def route(points, *args):
+        got = router(points, *args)
+        found = spurs(got.coordinates)
+        if not found:
+            return got
+        moved: dict[tuple[float, float], tuple[float, float]] = {}
+        for s in found:
+            tip = (s["lat"], s["lon"])
+            for p in points[1:-1]:
+                key = (p[0], p[1])
+                if key not in moved and _meters(tip, key) <= _off_route_m(key, got.coordinates) + SPUR_WAYPOINT_M:
+                    lon_b, lat_b = point_along(got.coordinates, s["along_m"] - s["reach_m"])
+                    moved[key] = (lat_b, lon_b)
+        if not moved:
+            return got
+        return router([moved.get((p[0], p[1]), p) for p in points], *args)
+
+    return route
 
 
 def rectangle_corners(
@@ -535,6 +580,10 @@ def generate_loops(
     rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along),
                    spurs_ok)
     notes: list[str] = []
+    if not spurs_ok:  # decision 045: a spur at one of our own waypoints moves the waypoint to the spur's base
+        route_fn = without_waypoint_spurs(route_fn)
+        if area_route_fn is not None:
+            area_route_fn = without_waypoint_spurs(area_route_fn)
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:
         def job():

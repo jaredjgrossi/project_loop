@@ -59,6 +59,21 @@ def mile_points(coords: list[list[float]]) -> list[dict]:
     return out
 
 
+def point_along(coords: list[list[float]], along_m: float) -> tuple[float, float]:
+    """(lon, lat) the given distance along the route, clamped to its ends. Decision 045: a spur's base, where the way
+    out leaves the main line, is its tip's distance less its reach."""
+    xy = _xy(coords)
+    along = _along(xy)
+    if along_m <= 0:
+        return coords[0][0], coords[0][1]
+    for i in range(1, len(along)):
+        if along[i] >= along_m:
+            f = (along_m - along[i - 1]) / ((along[i] - along[i - 1]) or 1.0)
+            a, b = coords[i - 1], coords[i]
+            return a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
+    return coords[-1][0], coords[-1][1]
+
+
 def reversals(coords: list[list[float]]) -> list[dict]:
     """Every place the route reverses direction, {lon, lat, along_m, reach_m}, in order along the route.
 
