@@ -27,6 +27,7 @@ struct RouteSheet: View {
                 card.transition(.opacity)
             }
         }
+        .animation(reduceMotion ? nil : Motion.crossfade, value: model.rating == nil)
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
         .clipped()

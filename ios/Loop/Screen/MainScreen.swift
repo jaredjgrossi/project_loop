@@ -265,9 +265,6 @@ struct MainScreen: View {
             while !model.mapReady { try? await Task.sleep(for: .seconds(0.2)) }
             try? await Task.sleep(for: .seconds(1.0))
             model.ranIt()
-            // Outside a tap the sheet can miss that first change; setting it again shows it.
-            try? await Task.sleep(for: .seconds(0.3))
-            if let r = model.rating { model.rating = r }
             if args.contains("-LoopRateNo") {
                 try? await Task.sleep(for: .seconds(0.6))
                 model.chooseNotForMe()

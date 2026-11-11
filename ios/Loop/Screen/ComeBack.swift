@@ -44,9 +44,9 @@ extension MainModel {
         let log = runs.markRun(r)
         sendFeedback(log, rating: nil)
         clearSelection()
-        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : Motion.crossfade) {
-            rating = RatingState(runId: log.id, route: r)
-        }
+        // A plain change (the sheet animates it): set inside withAnimation, outside a tap, the
+        // sheet could re-render mid-change, read the old value and never show the rating.
+        rating = RatingState(runId: log.id, route: r)
     }
 
     func rateGood() {
