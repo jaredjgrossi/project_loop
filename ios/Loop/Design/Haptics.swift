@@ -1,6 +1,7 @@
 import UIKit
 
-/// The only three things that vibrate (brief: nothing else does).
+/// The things that vibrate: the settle, mile ticks, success (Send to watch, a Good rating) and a saved
+/// route (brief, plus come back 2026-11-10). Nothing else does.
 @MainActor
 enum Haptics {
     private static let light = UIImpactFeedbackGenerator(style: .light)
@@ -14,6 +15,9 @@ enum Haptics {
     static func prepareScrub() { selection.prepare() }
     /// Each whole mile while scrubbing the profile strip.
     static func mileTick() { selection.selectionChanged(); selection.prepare() }
+
+    /// The bookmark saves a route (come back, 2026-11-10).
+    static func saved() { light.impactOccurred() }
 
     /// "Send to watch" confirms.
     static func success() { notification.notificationOccurred(.success) }

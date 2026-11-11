@@ -7,7 +7,7 @@ final class LandingUITests: XCTestCase {
         app.launchArguments.append("-LoopOffline")
         app.launch()   // the launch sequence: logo, landing sheet
 
-        let usual = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Usual, '")).firstMatch
+        let usual = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Usual'")).firstMatch
         XCTAssertTrue(usual.waitForExistence(timeout: 40))
         XCTAssertTrue(app.buttons["By the water"].exists, "suggestions follow the runner's own runs")
         usual.tap()
@@ -57,12 +57,10 @@ final class LandingUITests: XCTestCase {
         XCTAssertTrue(close.waitForHittable(timeout: 30), "the card opens")
         close.tap()
         XCTAssertTrue(water.waitForHittable(timeout: 5), "home sheet is back")
-        let recent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '3 miles by the water'")).firstMatch
-        XCTAssertTrue(recent.exists, "the dismissed route is the top Recent row")
         XCTAssertFalse(app.staticTexts["3 miles by the water."].exists, "the sentence cleared")
 
         // 2. Swipe the card down past collapsed.
-        recent.tap()
+        water.tap()
         XCTAssertTrue(close.waitForHittable(timeout: 30))
         let grabber = app.descendants(matching: .any)["Open route details"]
         XCTAssertTrue(grabber.waitForExistence(timeout: 5))
@@ -71,7 +69,7 @@ final class LandingUITests: XCTestCase {
         XCTAssertTrue(water.waitForHittable(timeout: 5), "swiping down dismissed the card")
 
         // 3. Wordmark.
-        recent.tap()
+        water.tap()
         XCTAssertTrue(close.waitForHittable(timeout: 30))
         app.buttons["Loop"].tap()   // a button once there is a route
         XCTAssertTrue(water.waitForHittable(timeout: 5), "the wordmark goes home")

@@ -39,6 +39,13 @@ struct LandingSheet: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { toggle() }
 
+            // "Did you run the … route this morning?": once per route, within 24 h, above the field.
+            if let v = model.returnPrompt, !searching {
+                ReturnPrompt(model: model, viewed: v)
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            }
+
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
 
@@ -61,8 +68,17 @@ struct LandingSheet: View {
             // Runs and Recent, or the typing list: both in place under the field, crossfading (200 ms).
             ZStack(alignment: .top) {
                 if searching {
-                    MatchList(model: model)
-                        .transition(.opacity)
+                    VStack(alignment: .leading, spacing: 0) {
+                        // The route type before sending: preselected from your defaults; a pick here
+                        // beats the words and goes as the request's shape. The sentence stays as typed.
+                        RouteTypeControl(selection: model.pickedShape) { s in
+                            model.pickedShape = s
+                            model.shapeTouched = true
+                        }
+                        .padding(.top, 10)
+                        MatchList(model: model)
+                    }
+                    .transition(.opacity)
                 }
 
                 if !searching {
@@ -76,26 +92,30 @@ struct LandingSheet: View {
 
                         TileRow(model: model, hidden: searching || expanded < 0.5)
                             .padding(.top, 12)
-                            .background(bottomReader { if runs.recents.isEmpty { setOpen($0) } })
+                            .background(bottomReader { if runs.runs.isEmpty { setOpen($0) } })
 
-                        if let first = runs.recents.first {
-                            Text("Recent")
+                        // History (replaces Recent): routes marked as run, newest first.
+                        if let first = runs.runs.first {
+                            Text("History")
                                 .typeStyle(.eyebrow)
                                 .foregroundStyle(Palette.inkMuted.color)
                                 .padding(.top, 20)
                                 .accessibilityAddTraits(.isHeader)
-                            RecentRow(recent: first, hidden: searching || expanded < 0.5) { model.openRun(request: first.request) }
-                                .padding(.top, 4)
+                            HistoryRow(log: first) { model.openHistory(first) }
+                                .padding(.top, 2)
+                                .accessibilityHidden(expanded < 0.5)
                                 .background(bottomReader { setOpen($0) })
                         }
                     }
                     .opacity(expanded)
                     .accessibilityHidden(expanded < 0.5 || searching)
 
-                    // More rows, revealed by dragging up past the open rest.
-                    ForEach(runs.recents.dropFirst()) { recent in
-                        RecentRow(recent: recent, hidden: searching || sheet.readProgress < 0.5) { model.openRun(request: recent.request) }
+                    // The full list, revealed by pulling the sheet up past the open rest.
+                    ForEach(runs.runs.dropFirst()) { log in
+                        HistoryRow(log: log) { model.openHistory(log) }
                             .opacity(Double(sheet.readProgress))
+                            .accessibilityHidden(sheet.readProgress < 0.5)
+                            .allowsHitTesting(sheet.readProgress > 0.5)
                     }
                 }
                 .transition(.opacity)
@@ -140,6 +160,7 @@ struct LandingSheet: View {
 
     /// Collapsed: just the field.
     private func setCollapsed(_ fieldBottom: CGFloat) {
+        model.landingFieldBottom = fieldBottom
         let h = (fieldBottom + 12 + Self.bottomInset).rounded()
         guard abs(sheet.baseCollapsed - h) > 0.5 else { return }
         sheet.baseCollapsed = h
@@ -158,7 +179,7 @@ struct LandingSheet: View {
     private func setFull(_ contentHeight: CGFloat) {
         guard !model.searchMode else { return }
         let full = min((contentHeight + 14 + Self.bottomInset).rounded(), UIScreen.main.bounds.height * 0.75)
-        let read: CGFloat? = runs.recents.count > 1 && full > sheet.baseOpen + 1 ? full : nil
+        let read: CGFloat? = runs.runs.count > 1 && full > sheet.baseOpen + 1 ? full : nil
         guard read != sheet.readHeight else { return }
         sheet.readHeight = read
         refresh()
@@ -318,10 +339,12 @@ private struct TileRow: View {
         GeometryReader { g in
             let side = ((g.size.width - 3 * 12) / 4).rounded(.down)
             HStack(alignment: .top, spacing: 12) {
+                // Saved routes, their real shape; long-press for Rename and Remove.
                 ForEach(model.runs.saved.prefix(3)) { run in
-                    RunTile(side: side, name: run.name, detail: CardText.miles(run.distanceMi), shape: run.shape, hidden: hidden) {
-                        model.openRun(request: run.request)
+                    RunTile(side: side, name: run.name, detail: nil, shape: run.shape, hidden: hidden) {
+                        model.openSaved(run)
                     }
+                    .contextMenu { SavedTileMenu(model: model, saved: run) }
                 }
                 ForEach(model.runs.suggestedTiles) { s in
                     RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph, hidden: hidden) {
@@ -572,5 +595,44 @@ struct WeatherLine: View {
         f.locale = Locale(identifier: "en_US")
         f.dateFormat = "EEE h:mm"
         return f.string(from: date)
+    }
+}
+
+/// The return prompt: the route's own thumbnail, "Did you run the … route this morning?", Not today
+/// and I ran it (which draws the route and opens the rating).
+struct ReturnPrompt: View {
+    let model: MainModel
+    let viewed: ViewedRoute
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceSheet.color)
+                    .overlay(RouteThumbnail(shape: viewed.route.shape, lineWidth: 2, dot: 5, inset: 0.14))
+                    .frame(width: 44, height: 44)
+                Text(MainModel.promptText(viewed))
+                    .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Palette.surfaceSunken.color))
+            .accessibilityElement(children: .combine)
+            HStack(spacing: 10) {
+                Button { model.dismissReturnPrompt() } label: {
+                    Text("Not today").typeStyle(.bodyStrong).foregroundStyle(Palette.ink.color)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .overlay(RoundedRectangle(cornerRadius: Metrics.radiusButton).strokeBorder(Palette.controlBorder.color, lineWidth: 1.5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button { model.ranItFromPrompt() } label: {
+                    Text("I ran it").typeStyle(.bodyStrong).foregroundStyle(Palette.onAction.color)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }

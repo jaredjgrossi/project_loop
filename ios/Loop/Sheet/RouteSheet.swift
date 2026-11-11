@@ -12,9 +12,41 @@ struct RouteSheet: View {
 
     var body: some View {
         let height = sheet.height
+        ZStack(alignment: .top) {
+            if let r = model.rating {
+                // "How was it?": the sheet turns into the rating and fits it (one motion, the sheet's).
+                RatingContent(model: model, state: r)
+                    .padding(.horizontal, Metrics.s24)
+                    .background(GeometryReader { g in
+                        Color.clear
+                            .onAppear { fitRating(g.size.height) }
+                            .onChange(of: g.size.height) { _, h in fitRating(h) }
+                    })
+                    .transition(.opacity)
+            } else {
+                card.transition(.opacity)
+            }
+        }
+        .frame(height: height, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .background(sheetBackground)
+        .contentShape(Rectangle())
+        .gesture(drag, including: model.rating == nil ? .all : .subviews)
+    }
+
+    /// The rating sizes the sheet to its content, above the home indicator.
+    private func fitRating(_ content: CGFloat) {
+        let target = (content + LandingSheet.bottomInset).rounded()
+        guard abs(sheet.height - target) > 0.5 else { return }
+        sheet.slide(to: target, animated: !reduceMotion, duration: 0.24)
+    }
+
+    private var card: some View {
+        let height = sheet.height
         let progress = sheet.progress
 
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             Capsule()
                 .fill(Palette.grabber.color)
                 .frame(width: 36, height: 4)
@@ -43,7 +75,7 @@ struct RouteSheet: View {
                 .accessibilityHidden(progress < 0.5)
                 .hiddenWhen(progress == 0)
 
-            SendButton(confirmed: $sentConfirmed) { model.touch() }
+            ActionRow(model: model, sentConfirmed: $sentConfirmed)
                 .padding(.top, 12)
 
             // "How Loop read it": revealed past the open state, scrolling if it's long.
@@ -70,12 +102,13 @@ struct RouteSheet: View {
         .onChange(of: readContentHeight) { _, h in updateReadHeight(h) }
         .onChange(of: model.headerBottom) { _, _ in updateReadHeight(readContentHeight) }
         .padding(.horizontal, Metrics.s24)
-        .overlay(alignment: .topTrailing) { CloseCardButton { model.goHome() }.padding(.top, 12).padding(.trailing, 14) }
-        .frame(height: height, alignment: .top)
-        .frame(maxWidth: .infinity)
-        .background(sheetBackground)
-        .contentShape(Rectangle())
-        .gesture(drag)
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: -6) {
+                if model.currentRoute != nil { BookmarkButton(saved: model.isCurrentSaved) { model.toggleSave() } }
+                CloseCardButton { model.goHome() }
+            }
+            .padding(.top, 12).padding(.trailing, 14)
+        }
     }
 
     /// The read rest fits the list, up to just under the header.
@@ -379,6 +412,150 @@ struct TrustTap<Content: View>: View {
 }
 
 /// The one primary action. Confirms at once with a success haptic and does nothing else (this slice).
+/// "I ran it" (outline, ink, with a check) beside the primary action: Send to watch, or "Run again"
+/// for a route opened from History.
+struct ActionRow: View {
+    let model: MainModel
+    @Binding var sentConfirmed: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if model.currentRoute != nil {
+                Button { model.ranIt() } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold))
+                        Text("I ran it")
+                    }
+                    .typeStyle(.bodyStrong)
+                    .foregroundStyle(Palette.ink.color)
+                    .padding(.horizontal, 18)
+                    .frame(height: 54)
+                    .overlay(RoundedRectangle(cornerRadius: Metrics.radiusButton).strokeBorder(Palette.ink.color, lineWidth: 1.5))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Marks this route as run, then asks how it was")
+            }
+            if model.cardMode == .history {
+                Button { model.runAgain() } label: {
+                    Text("Run again")
+                        .typeStyle(.bodyStrong)
+                        .foregroundStyle(Palette.onAction.color)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
+                }
+                .buttonStyle(.plain)
+            } else {
+                SendButton(confirmed: $sentConfirmed) { model.sentToWatch() }
+            }
+        }
+    }
+}
+
+/// The bookmark beside the ×: fills when the route is saved.
+struct BookmarkButton: View {
+    let saved: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: saved ? "bookmark.fill" : "bookmark")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(saved ? Palette.ink.color : Palette.inkMuted.color)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Palette.surfaceSunken.color))
+                .frame(width: Metrics.minTap, height: Metrics.minTap)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(saved ? "Saved" : "Save route")
+        .accessibilityHint(saved ? "Removes it from your runs" : "Keeps it in your runs")
+    }
+}
+
+/// "How was it?": Good saves with one tap; Not for me shows reasons to pick any of, then Done.
+/// "Not now" leaves the run marked without a rating (it can be rated later from History).
+struct RatingContent: View {
+    let model: MainModel
+    let state: MainModel.RatingState
+    @FocusState private var noteFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule().fill(Palette.grabber.color).frame(width: 36, height: 4)
+                .frame(maxWidth: .infinity).padding(.top, 10)
+            Text("How was it?").typeStyle(.request).foregroundStyle(Palette.ink.color)
+                .padding(.top, 14).accessibilityAddTraits(.isHeader)
+            Text("\(state.route.name) · \(CardText.miles(state.route.distanceMi))")
+                .typeStyle(.body).foregroundStyle(Palette.inkMuted.color).padding(.top, 4)
+            HStack(spacing: 10) {
+                choice("Good", selected: false) { model.rateGood() }
+                choice("Not for me", selected: state.notForMe) { model.chooseNotForMe() }
+            }
+            .padding(.top, 18)
+            if state.notForMe {
+                Text("What got in the way? Pick any.").typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
+                    .padding(.top, 18)
+                FlowLayout(spacing: 8, lineSpacing: 8) {
+                    ForEach(RunRating.reasonPills, id: \.key) { r in
+                        let on = state.reasons.contains(r.key)
+                        Button { model.toggleReason(r.key) } label: {
+                            Text(r.text).typeStyle(.label)
+                                .foregroundStyle(on ? Palette.surfaceSheet.color : Palette.ink.color)
+                                .padding(.horizontal, 14).frame(height: 36)
+                                .background(Capsule().fill(on ? Palette.ink.color : Palette.surfaceSunken.color))
+                                .frame(minHeight: Metrics.minTap)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+                .padding(.top, 8)
+                if state.reasons.contains("other") {
+                    TextField("", text: Binding(get: { model.rating?.note ?? "" }, set: { model.rating?.note = String($0.prefix(500)) }),
+                              prompt: Text("Tell us more (optional)").foregroundStyle(Palette.inkMuted.color))
+                        .typeStyle(.field).foregroundStyle(Palette.ink.color).tint(Palette.focusRing.color)
+                        .focused($noteFocused)
+                        .submitLabel(.done)
+                        .padding(.horizontal, 18).frame(height: 46)
+                        .background(Capsule().fill(Palette.surfaceSunken.color))
+                        .padding(.top, 10)
+                }
+                HStack {
+                    Spacer()
+                    Button("Done") { noteFocused = false; model.finishNotForMe() }
+                        .typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                        .frame(minHeight: Metrics.minTap)
+                }
+                .padding(.top, 4)
+            } else {
+                Button("Not now") { model.closeRating() }
+                    .typeStyle(.body).foregroundStyle(Palette.inkMuted.color)
+                    .frame(maxWidth: .infinity, minHeight: Metrics.minTap)
+                    .padding(.top, 6)
+                    .accessibilityHint("Keeps the run marked without a rating")
+            }
+        }
+        .padding(.bottom, 6)
+    }
+
+    private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .typeStyle(.bodyStrong)
+                .foregroundStyle(selected ? Palette.surfaceSheet.color : Palette.ink.color)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(selected ? Palette.ink.color : .clear))
+                .overlay(RoundedRectangle(cornerRadius: Metrics.radiusButton).strokeBorder(Palette.ink.color, lineWidth: 1.5))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
 struct SendButton: View {
     @Binding var confirmed: Bool
     var onTap: () -> Void

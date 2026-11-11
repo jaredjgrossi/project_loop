@@ -3,6 +3,7 @@ import SwiftUI
 struct MainScreen: View {
     @State private var model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     init(data: LoopData) {
         _model = State(initialValue: MainModel(data: data, runs: Self.makeRunStore(data)))
@@ -13,6 +14,7 @@ struct MainScreen: View {
     private static func makeRunStore(_ data: LoopData) -> RunStore {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-LoopNewUser") { return RunStore() }
+        if ProcessInfo.processInfo.arguments.contains("-LoopDemoData") { return RunStore.demo(data: data) }
         #endif
         return RunStore.load(data: data)
     }
@@ -83,7 +85,8 @@ struct MainScreen: View {
             RouteSheet(model: model)
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
-                .ignoresSafeArea(edges: .bottom)
+                // The rating's note field lifts the sheet over the keyboard; otherwise it ignores it.
+                .ignoresSafeArea(model.rating == nil ? .all : .container, edges: .bottom)
                 .allowsHitTesting(model.sheetShown)
 
             // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
@@ -137,6 +140,16 @@ struct MainScreen: View {
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
+        .sheet(isPresented: $model.youShown) { YouSheet(model: model) }
+        // Back in the foreground on the home sheet: the return prompt, if a route is waiting.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, model.stage == .landing, model.returnPrompt == nil {
+                withAnimation(reduceMotion ? nil : Motion.crossfade) { model.checkReturnPrompt(openedAt: Date()) }
+            }
+        }
+        .alert("Rename", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
+            RenameField(model: model)
+        }
         .overlay {
             // One-time token paste (and again after a 401). Covers everything until saved or skipped.
             if model.needsToken {
@@ -187,10 +200,18 @@ struct MainScreen: View {
                 read.cant = args[i + 1].split(separator: ",").map { ReadOut.Cant(gap: String($0), text: texts[String($0)] ?? String($0)) }
             }
             model.readOut = read
+            model.currentRoute = model.identityOfShown(archive: RouteArchive.fixture, routeId: nil)
             await applyLaunchArguments()
             return
         }
+        model.checkReturnPrompt(openedAt: Date())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
+        if args.contains("-LoopYou") {
+            // Screenshots: open "You" once the landing sheet is up.
+            while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(0.6))
+            model.youShown = true
+        }
         if args.contains("-LoopFocusField") {
             // Screenshots: focus the field once the sheet has risen; `-LoopType text` types into it.
             while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }
@@ -208,6 +229,7 @@ struct MainScreen: View {
             model.landing.settle(rest: .collapsed, animated: true)
         }
         #else
+        model.checkReturnPrompt(openedAt: Date())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: false)
         #endif
     }
@@ -232,6 +254,21 @@ struct MainScreen: View {
             try? await Task.sleep(for: .seconds(1.5))
             model.enterEditMode()
             if args.contains("-LoopEditor") { try? await Task.sleep(for: .seconds(0.4)); model.openEditor(.understood("distance")) }
+        }
+        if args.contains("-LoopRate") || args.contains("-LoopRateNo") {
+            // Screenshots: "I ran it" on the card; -LoopRateNo also picks Not for me and two reasons.
+            try? await Task.sleep(for: .seconds(1.5))
+            model.ranIt()
+            if args.contains("-LoopRateNo") {
+                try? await Task.sleep(for: .seconds(0.6))
+                model.chooseNotForMe()
+                model.toggleReason("crowded")
+                model.toggleReason("other")
+            }
+        }
+        if args.contains("-LoopSaved") {
+            try? await Task.sleep(for: .seconds(1.0))
+            model.toggleSave()
         }
         if args.contains("-LoopReadIt") {
             try? await Task.sleep(for: .seconds(2.0))
@@ -269,6 +306,7 @@ struct MainScreen: View {
 struct PlayBuildButton: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Menu {
@@ -323,6 +361,7 @@ struct BetterRouteChip: View {
 private struct BetterRouteLayer: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -343,6 +382,7 @@ private struct BetterRouteLayer: View {
 private struct FitRouteLayer: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         let shows = model.routeCameraFree && model.sheetShown && model.shown != nil && model.sheet.readProgress == 0
@@ -373,6 +413,22 @@ private struct FitRouteLayer: View {
         .padding(.bottom, model.sheet.height + 36)
         .ignoresSafeArea(edges: .bottom)
         .animation(reduceMotion ? nil : Motion.textArrive, value: shows)
+    }
+}
+
+/// The Rename alert's field: starts with the current name.
+private struct RenameField: View {
+    let model: MainModel
+    @State private var name = ""
+
+    var body: some View {
+        TextField("Name", text: $name)
+            .onAppear { name = model.renaming?.name ?? "" }
+        Button("Cancel", role: .cancel) { model.renaming = nil }
+        Button("Save") {
+            if let s = model.renaming { model.runs.rename(s.id, to: name) }
+            model.renaming = nil
+        }
     }
 }
 

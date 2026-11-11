@@ -162,6 +162,28 @@ Manager, no secret token needed), Standard style configured quiet. Look Around: 
 - **Usual route type** (Any / Loop / Out and back), a plain setting behind the settings button,
   kept on the phone and sent as `profile.usual_shape` (`any`, `loop`, `out_and_back`). The server's
   profile ignores fields it doesn't know yet, so it's safe before Phase 3 reads it.
+- **Come back (UI chat, 2026-11-10; mockups come-back-screens-v2).**
+  - **Save:** a bookmark beside the card's × (light haptic). Saved routes show in Your runs with their
+    real shape, named from the longest stretch and the kind ("East River out-and-back"); long-press
+    for Rename and Remove; a tap draws the route and opens its card.
+  - **"I ran it" and the rating:** an outline button with a check beside the primary action marks the
+    run at once; the sheet turns into "How was it?" and fits it. Good saves with a success haptic; Not
+    for me shows reason pills (crowded, lights, water, safety, other; "other" adds a note); "Not now"
+    leaves the run unrated. Runs and ratings go to `POST /v1/routes/{id}/feedback` (decision 043).
+  - **Return prompt:** a route viewed or sent to the watch is asked about once at the next open, within
+    24 h, at the top of the home sheet; "I ran it" there draws the route and opens the rating.
+  - **History replaces Recent:** routes marked as run, newest first, name on line one, distance · day on
+    line two, a thumb when rated. A row shows the route with "Run again" (`mode: "exact"`).
+  - **"You":** the top-right button is the route L. A full-height sheet: a hero map of every run drawn
+    over the others at 45%, stats, the last 8 weeks, most run, saved, Your defaults (home by search or
+    current location, usual distance, usual time, route type) and History. Empty until the first run
+    apart from the hero, the defaults and History.
+  - **Route type before sending:** a segmented row under the focused field (Any, Loop, Out and back,
+    One way), preselected from the defaults; a pick goes as the request's top-level `shape`.
+  - **Storage:** the JSON run store (saved routes, runs with ratings, viewed routes, the profile, an
+    install id), plus each kept route's `final` payload in Application Support/routes, so saved routes
+    and History draw offline. Requests send `X-Loop-Install`, the profile and `recent_routes` (saved
+    names, `saved`, `ran_count`). Stats use each route's distance (no GPS or Health import).
 - **Never wait forever.** No `parsed` within 8 s, or 20 s with no line from the stream after it,
   stops the wait with "Can't reach Loop right now." and Try again; `/v1/health` is checked at
   launch and the landing sheet shows the same line if it fails. The question card has a × that

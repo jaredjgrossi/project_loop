@@ -98,6 +98,8 @@ extension MainModel {
         guard stage == .landing else { return }
         stage = .typing
         fieldExample = ""
+        pickedShape = UsualShape(rawValue: runs.profile.usualShape) ?? .any
+        shapeTouched = false
         // No keyboard coming (a hardware keyboard): settle on our own curve.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(0.6))
@@ -126,9 +128,12 @@ extension MainModel {
     /// sheet runs on under the keyboard, so its height includes it).
     func landingSearchHeight(keyboard: CGFloat) -> CGFloat {
         let inset = LandingSheet.bottomInset
-        let fieldBottom = landing.baseCollapsed - 12 - inset
         let rows = CGFloat(fieldMatches.count)
-        return (fieldBottom + (rows > 0 ? 6 + rows * 40 : 0) + 10 + (keyboard > 0 ? keyboard : inset)).rounded()
+        // The field (measured: the return prompt above it hides while typing), the route-type row
+        // (10 + 44), then the matches; never taller than the space under the header.
+        let content = landingFieldBottom + 54 + (rows > 0 ? 6 + rows * 40 : 0) + 10
+        let room = UIScreen.main.bounds.height - headerBottom - 8
+        return min(content + (keyboard > 0 ? keyboard : inset), room).rounded()
     }
 
     /// While typing, the sheet fits the field and its matches (it changes as the runner types).
@@ -149,7 +154,7 @@ extension MainModel {
     }
 
     /// The sheet slides away (the Mapbox logo follows it down).
-    private func hideLanding(reduceMotion: Bool) {
+    func hideLanding(reduceMotion: Bool) {
         landingShown = false
         landingAnchor = max(landing.height, landing.collapsedHeight)
         landing.slide(to: 0, animated: !reduceMotion)
@@ -162,6 +167,10 @@ extension MainModel {
         // Leave typing first, so nothing reacting to the cleared field thinks the runner is still typing.
         stage = .reading
         routeCameraFree = false
+        rating = nil
+        cardMode = .normal
+        currentRoute = nil
+        returnPrompt = nil
         flow?.cancel()
         playbackCancel()
         clearSelection()
@@ -219,7 +228,8 @@ extension MainModel {
 
     /// The engine's stream, faked from the file: #1 first, the provisional flag once the line has
     /// drawn, the final a little later. Settle = provisional: reach and candidates fade, sheet rises.
-    private func startBuild(reduceMotion: Bool) {
+    /// Also draws a kept route (ComeBack.openRoute) the same way.
+    func startBuild(reduceMotion: Bool) {
         let t0 = CACurrentMediaTime()
         receiveEvent(.top3(data.candidates.map(\.rank)), at: t0)
         requestCamera(.overview, animated: true, duration: 0.9)
@@ -237,6 +247,10 @@ extension MainModel {
                 self.recordOnSettle = nil
                 self.runs.addRecent(request: request, distanceMi: route.distanceMi, line: route.line)
             }
+            if self.currentRoute == nil { self.currentRoute = self.identityOfShown(archive: RouteArchive.fixture, routeId: nil) }
+            if let r = self.currentRoute, self.cardMode == .normal { self.runs.noteViewed(r) }
+            self.afterSettle?()
+            self.afterSettle = nil
         }
     }
 
@@ -253,6 +267,10 @@ extension MainModel {
         liveTask?.cancel()
         pendingQuestion = nil
         liveNotice = nil
+        rating = nil
+        cardMode = .normal
+        currentRoute = nil
+        afterSettle = nil
         flow?.cancel()
         playbackCancel()
         clearSelection()

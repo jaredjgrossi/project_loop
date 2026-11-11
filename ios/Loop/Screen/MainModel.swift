@@ -63,6 +63,37 @@ final class MainModel {
     var fieldExample = ""
     /// What the runner has typed in the landing field (kept when editing ends, cleared by Cancel).
     var fieldText = ""
+    // Come back (UI chat, 2026-11-10; ComeBack.swift)
+    /// The route on the card: what Save, "I ran it" and the return prompt keep.
+    var currentRoute: RouteIdentity?
+    /// The card's primary action: Send to watch, or "Run again" for a route opened from History.
+    var cardMode: CardMode = .normal
+    enum CardMode: Equatable { case normal, history }
+    /// "How was it?": the route sheet shows the rating instead of the card.
+    var rating: RatingState?
+    struct RatingState: Equatable {
+        var runId: String
+        var route: RouteIdentity
+        var notForMe = false
+        var reasons: Set<String> = []
+        var note = ""
+    }
+    /// "Did you run the … route?" at the top of the home sheet, once per route, within 24 h.
+    var returnPrompt: ViewedRoute?
+    /// The route type picked in the row under the field; sent only if the runner touched it.
+    var pickedShape: UsualShape = .any
+    var shapeTouched = false
+    /// The request field's bottom in the landing sheet (measured), for the typing height.
+    @ObservationIgnored var landingFieldBottom: CGFloat = 74
+    /// The "You" sheet is up.
+    var youShown = false
+    /// A saved route being renamed (long-press -> Rename).
+    var renaming: SavedRun?
+    /// Runs once the route has drawn and settled (opening a route to rate it from the prompt).
+    @ObservationIgnored var afterSettle: (() -> Void)?
+    /// The live build's id (`final.route_id`): a chip edit sends it so shape edits answer at once.
+    @ObservationIgnored var liveBuildId: String?
+
     /// While true, the map's bottom padding follows the landing sheet's live height every frame, so
     /// the location glides with the sheet. Off during a one-off camera ease (going home).
     var landingCameraBound = true
@@ -173,6 +204,7 @@ final class MainModel {
         self.fixtureStart = data.candidate(rank: 1)?.detail?.start ?? data.candidates[0].line.points[0]
         self.needsToken = LoopAPI.baseURL != nil && TokenStore.load() == nil
         self.runs = runs
+        LoopAPI.installId = runs.installId
         build = .settled(top3: data.candidates.map(\.rank))
         landing.slide(to: 0, animated: false)
     }

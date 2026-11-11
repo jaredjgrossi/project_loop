@@ -7,6 +7,10 @@ struct LoopAPI {
     let base: URL
     let token: String
 
+    /// A random id per install (decision 043), sent as X-Loop-Install on every request. Set at launch
+    /// from the store; it groups ratings without an account and is never a name.
+    nonisolated(unsafe) static var installId = ""
+
     /// The server address, if this build has one (Secrets.xcconfig's LOOP_API_BASE).
     static var baseURL: URL? {
         #if DEBUG
@@ -51,6 +55,36 @@ struct LoopAPI {
 
     private struct Health: Decodable { let ok: Bool }
 
+    /// `POST /v1/routes/{id}/feedback` (decision 043): "I ran it" and the rating. Fire and forget: the
+    /// run is kept on the phone either way, and a later post replaces this one.
+    func feedback(routeId: String, ranAt: Date, rating: RunRating?) {
+        struct Body: Encodable {
+            let ran: Bool
+            let ranAt: String
+            let rating: String?
+            let reasons: [String]
+            let note: String?
+            func encode(to encoder: Encoder) throws {
+                var c = encoder.container(keyedBy: K.self)
+                try c.encode(ran, forKey: .ran); try c.encode(ranAt, forKey: .ranAt)
+                try c.encode(rating, forKey: .rating); try c.encode(reasons, forKey: .reasons); try c.encode(note, forKey: .note)
+            }
+            enum K: String, CodingKey { case ran, ranAt, rating, reasons, note }
+        }
+        let f = ISO8601DateFormatter()
+        f.timeZone = .current
+        let body = Body(ran: true, ranAt: f.string(from: ranAt), rating: rating?.verdict.rawValue,
+                        reasons: rating?.reasons ?? [], note: rating?.note.map { String($0.prefix(500)) })
+        var req = URLRequest(url: base.appending(path: "v1/routes/\(routeId)/feedback"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 15
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(Self.installId, forHTTPHeaderField: "X-Loop-Install")
+        req.httpBody = try? Self.encoder.encode(body)
+        Task { _ = try? await URLSession.shared.data(for: req) }
+    }
+
     /// `POST /v1/runs`, streamed. Each `data:` line is one event's JSON.
     func run(_ body: RunRequest) -> AsyncThrowingStream<ServerEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -61,6 +95,7 @@ struct LoopAPI {
                     req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                    if !Self.installId.isEmpty { req.setValue(Self.installId, forHTTPHeaderField: "X-Loop-Install") }
                     req.timeoutInterval = 60   // idle limit; the server pings every 15 s
                     req.httpBody = try Self.encoder.encode(body)
                     let (bytes, response) = try await URLSession.shared.bytes(for: req)
@@ -112,6 +147,13 @@ struct RunRequest: Encodable {
     var answer: Answer?
     /// A chip edit: the parse's constraints with the edit, sent instead of text (no Claude call).
     var constraints: JSONValue?
+    /// With `constraints`: the build the edit started from (a shape-only edit answers from it at once).
+    /// With `mode: "exact"`: the route to run again.
+    var routeId: String? = nil
+    /// "exact": "Run again", the stored route's own line read for now (decision 043).
+    var mode: String? = nil
+    /// The route type picked before sending: any, loop, out_and_back or one_way. Beats the words.
+    var shape: String? = nil
     var client: Client
     var profile: Profile
     var recentRoutes: [Recent]
@@ -153,11 +195,31 @@ struct RunRequest: Encodable {
     }
 
     struct Profile: Encodable {
-        var usualDistanceMi: Double = 3.1
+        var usualDistanceMi: Double = 3
         var usualTime: String = "07:00"
-        var savedPlaces: [String] = []
-        /// The "Usual route type" setting: "any", "loop" or "out_and_back".
-        var usualShape: String = UsualShape.current.rawValue
+        var savedPlaces: [SavedPlace] = []
+        /// The usual route type: "any", "loop", "out_and_back" or "one_way".
+        var usualShape: String = "any"
+
+        init(usualDistanceMi: Double = 3, usualTime: String = "07:00", savedPlaces: [SavedPlace] = [], usualShape: String = "any") {
+            self.usualDistanceMi = usualDistanceMi; self.usualTime = usualTime
+            self.savedPlaces = savedPlaces; self.usualShape = usualShape
+        }
+
+        /// From "You" -> Your defaults. Home goes as a saved place; it stays on the phone otherwise.
+        init(_ p: RunnerProfile) {
+            usualDistanceMi = p.usualDistanceMi
+            usualTime = p.usualTime
+            usualShape = p.usualShape
+            savedPlaces = p.home.map { [SavedPlace(id: "home", label: "Home", lat: $0.lat, lon: $0.lon)] } ?? []
+        }
+    }
+
+    struct SavedPlace: Encodable {
+        let id: String
+        let label: String
+        let lat: Double
+        let lon: Double
     }
 
     struct Recent: Encodable {
@@ -166,6 +228,8 @@ struct RunRequest: Encodable {
         let name: String
         let distanceMi: Double
         let timesRun: Int
+        var saved: Bool = false
+        var ranCount: Int = 0
     }
 
     func encode(to encoder: Encoder) throws {
@@ -174,11 +238,14 @@ struct RunRequest: Encodable {
         try c.encodeIfPresent(text, forKey: .text)
         try c.encodeIfPresent(answer, forKey: .answer)
         try c.encodeIfPresent(constraints, forKey: .constraints)
+        try c.encodeIfPresent(routeId, forKey: .routeId)
+        try c.encodeIfPresent(mode, forKey: .mode)
+        try c.encodeIfPresent(shape, forKey: .shape)
         try c.encode(client, forKey: .client)
         try c.encode(profile, forKey: .profile)
         try c.encode(recentRoutes, forKey: .recentRoutes)
     }
-    private enum CodingKeys: String, CodingKey { case v, text, answer, constraints, client, profile, recentRoutes }
+    private enum CodingKeys: String, CodingKey { case v, text, answer, constraints, routeId, mode, shape, client, profile, recentRoutes }
 
     static func client(location: Location?, now: Date = Date()) -> Client {
         let f = ISO8601DateFormatter()
@@ -204,7 +271,8 @@ enum ServerEvent {
     case candidates(Candidates)
     case top3(Routes)
     case provisional(Routes)
-    case final(Final)
+    /// The decoded event, and its JSON as sent (kept in RouteArchive for drawing the route again).
+    case final(Final, raw: Data)
     case question(Question)
     case planned
     case done
@@ -224,7 +292,7 @@ enum ServerEvent {
         case "top3": return (try? d.decode(Routes.self, from: data)).map(ServerEvent.top3) ?? .other
         case "provisional": return (try? d.decode(Routes.self, from: data)).map(ServerEvent.provisional) ?? .other
         case "final":
-            do { return .final(try d.decode(Final.self, from: data)) } catch { return .error(code: "bad_final", text: "") }
+            do { return .final(try d.decode(Final.self, from: data), raw: data) } catch { return .error(code: "bad_final", text: "") }
         case "question": return (try? d.decode(Question.self, from: data)).map(ServerEvent.question) ?? .other
         case "planned": return .planned
         case "done": return .done

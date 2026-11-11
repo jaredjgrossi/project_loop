@@ -43,7 +43,7 @@ final class LiveAPITests: XCTestCase {
         XCTAssertEqual(t.routes.first?.id, "r_1.7")
         XCTAssertEqual(t.routes.first?.distance.value, 3.02)
         guard case .provisional = event(#"{"event":"provisional","route_id":"r_1","routes":[\#(top)]}"#) else { return XCTFail("provisional") }
-        guard case let .final(f) = event(#"{"event":"final","route_id":"r_1","routes":[\#(top)],"route":null,"pool":{"candidates":40,"best_of":31},"pool_size":31,"notes":[{"key":"no_route","text":"No route fits","trust":"measured"}],"timing":{}}"#) else {
+        guard case let .final(f, _) = event(#"{"event":"final","route_id":"r_1","routes":[\#(top)],"route":null,"pool":{"candidates":40,"best_of":31},"pool_size":31,"notes":[{"key":"no_route","text":"No route fits","trust":"measured"}],"timing":{}}"#) else {
             return XCTFail("final")
         }
         XCTAssertNil(f.route)
@@ -70,7 +70,7 @@ final class LiveAPITests: XCTestCase {
                                                                      distanceMi: 3, timesRun: 2)])
         let json = try XCTUnwrap(String(data: LoopAPI.encoder.encode(body), encoding: .utf8))
         XCTAssertTrue(json.contains(#""location":null"#), "location is null when off")
-        XCTAssertTrue(json.contains(#""usual_distance_mi":3.1"#))
+        XCTAssertTrue(json.contains(#""usual_distance_mi":3"#))
         XCTAssertTrue(json.contains(#""recent_routes":[{"#))
         XCTAssertTrue(json.contains(#""times_run":2"#))
         XCTAssertFalse(json.contains(#""answer""#), "exactly one of text or answer")

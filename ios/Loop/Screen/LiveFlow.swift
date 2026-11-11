@@ -80,7 +80,7 @@ extension MainModel {
             guard let self, !Task.isCancelled, self.liveParsedAt == nil else { return }
             self.requestCamera(.at(self.location, zoom: z0 + 1.7), animated: true, duration: 3.3)
         }
-        if body?.constraints != nil {
+        if body?.constraints != nil || body?.mode == "exact" {
             // A chip edit: no Claude, `parsed` comes back at once, so there's no push-in to wait for.
             flow?.cancel()
             liveSentAt = CACurrentMediaTime() - 1.2
@@ -119,6 +119,34 @@ extension MainModel {
         return true
     }
 
+    /// "Run again" (decision 043): `{route_id, mode: "exact"}`; the stream is parsed, final, done.
+    func runAgainLive(routeId: String, request: String) {
+        guard let api = LoopAPI.live else { return }
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        exitEditMode()
+        clearSelection()
+        playbackCancel()
+        flow?.cancel()
+        pendingQuestion = nil
+        liveNotice = nil
+        rating = nil
+        cardMode = .normal
+        build = BuildState()
+        drawnFraction = 0
+        frameVersion += 1
+        reachStart = nil; reachFadeStart = nil; candidatesStart = nil
+        withAnimation(reduceMotion ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.4)) { sheetShown = false }
+        sheet.settle(open: false, animated: false)
+        stage = .reading
+        locationPulsing = !reduceMotion
+        routeCameraFree = false
+        liveSentence = request
+        var body = makeRequest(text: nil, answer: nil)
+        body.routeId = routeId
+        body.mode = "exact"
+        startLive(sentence: request, shown: requestText ?? request, api: api, z0: zoom, reduceMotion: reduceMotion, body: body)
+    }
+
     /// The parse's constraints with one field changed, the chip's span and the field's source gone.
     nonisolated static func edited(_ constraints: JSONValue, key: String, value: JSONValue, chipId: String?) -> JSONValue {
         var c = constraints
@@ -136,9 +164,11 @@ extension MainModel {
 
     private func makeRequest(text: String?, answer: RunRequest.Answer?, constraints: JSONValue? = nil) -> RunRequest {
         RunRequest(text: text, answer: answer, constraints: constraints,
+                   routeId: constraints != nil ? liveBuildId : nil,
+                   shape: text != nil && shapeTouched ? pickedShape.rawValue : nil,
                    client: RunRequest.client(location: LoopAPI.baseURL != nil ? locationProvider.requestLocation : nil),
-                   profile: RunRequest.Profile(),
-                   recentRoutes: RunRequest.recents(runs.recents))
+                   profile: RunRequest.Profile(runs.profile),
+                   recentRoutes: runs.recentRoutesPayload)
     }
 
     private func runLive(api: LoopAPI, body: RunRequest, shown: String, reduceMotion: Bool) {
@@ -207,8 +237,8 @@ extension MainModel {
             receiveLiveRoutes(r.routes, provisional: true)
             settleLive(reduceMotion: reduceMotion)
 
-        case let .final(f):
-            receiveFinal(f, reduceMotion: reduceMotion)
+        case let .final(f, raw):
+            receiveFinal(f, raw: raw, reduceMotion: reduceMotion)
 
         case let .question(q):
             showQuestion(q, parseId: q.parseId ?? liveParseId)
@@ -278,7 +308,7 @@ extension MainModel {
     }
 
     /// `final`: the #1 in full (card details, stretches, miles), the final top 3 and "Best of N".
-    private func receiveFinal(_ f: ServerEvent.Final, reduceMotion: Bool) {
+    private func receiveFinal(_ f: ServerEvent.Final, raw: Data, reduceMotion: Bool) {
         guard let route = f.route, let first = route.features.first else {
             settleLive(reduceMotion: reduceMotion)
             let text = f.notes?.first?.text ?? LiveCopy.noRoute
@@ -307,6 +337,10 @@ extension MainModel {
                             .withMode(data.request.mode),
                         candidates: remapped, bestOf: built.bestOf)
         liveRouteId = f.routes.first { $0.rank == 1 }?.id ?? f.routeId
+        liveBuildId = f.routeId
+        // Keep the route on the phone (Save, History and the return prompt draw it again from here).
+        let archiveKey = liveRouteId ?? f.routeId ?? UUID().uuidString
+        RouteArchive.save(key: archiveKey, finalJSON: raw)
         if let notes = f.notes, !notes.isEmpty, var r = readOut {
             r.notes += notes.map { ReadOut.Note(key: $0.key ?? "", text: $0.text, trust: $0.trust ?? "") }
             readOut = r
@@ -314,6 +348,11 @@ extension MainModel {
         settleLive(reduceMotion: reduceMotion)
         receiveEvent(.final(keys), at: CACurrentMediaTime())
         stage = .settled
+        currentRoute = identityOfShown(archive: archiveKey, routeId: liveRouteId)
+        cardMode = .normal
+        if let r = currentRoute { runs.noteViewed(r) }
+        afterSettle?()
+        afterSettle = nil
         if let request = recordOnSettle, let shown = self.shown {
             recordOnSettle = nil
             runs.addRecent(request: request, distanceMi: shown.distanceMi, line: shown.line, serverId: liveRouteId)
