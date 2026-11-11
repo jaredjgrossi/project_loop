@@ -82,33 +82,28 @@ struct MainScreen: View {
             }
             #endif
 
-            // The bottom sheets hang from clear layers that take the screen's size, so a sheet
-            // that is taller than the room left (with the keyboard up) never resizes this ZStack;
-            // that re-centred everything and moved the header. The app ignores the keyboard's safe
-            // area (RootView); each sheet sits on the keyboard from its height.
-            // The layer itself reaches the screen's bottom edge: on the phone, a sheet's own
-            // ignoresSafeArea inside an overlay is not honoured (it sat 34 pt up).
+            // The bottom sheets hang from clear layers that take the screen's size (above the home
+            // indicator), so a sheet taller than the room left never resizes this ZStack; that
+            // re-centred everything and moved the header. Each sheet then moves down by the home
+            // indicator's inset to reach the screen's edge: an ignoresSafeArea inside an overlay is
+            // honoured in the simulator but not on the phone, so it's done by offset, the same on
+            // both. The app ignores the keyboard (RootView); a sheet on the keyboard lifts itself.
             Color.clear
-                .ignoresSafeArea(.all, edges: .bottom)
                 .overlay(alignment: .bottom) {
                     RouteSheet(model: model)
                         // The rating's note field lifts the sheet onto the keyboard.
-                        .padding(.bottom, model.rating != nil ? model.keyboardHeight : 0)
+                        .offset(y: LandingSheet.bottomInset + (model.sheetShown ? 0 : Metrics.sheetOpen + 60)
+                                - (model.rating != nil ? model.keyboardHeight : 0))
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
-                        .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
-                        .ignoresSafeArea(.all, edges: .bottom)
                         .allowsHitTesting(model.sheetShown)
                 }
 
-            // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
-            // It ignores the keyboard's safe area: its own height grows with the keyboard on the
-            // keyboard's curve, so nothing else moves it.
+            // The landing sheet: rises at launch, slides away on send. Its own height grows with
+            // the keyboard on the keyboard's curve, so nothing else moves it.
             Color.clear
-                .ignoresSafeArea(.all, edges: .bottom)
                 .overlay(alignment: .bottom) {
                     LandingSheet(model: model)
-                        .ignoresSafeArea(.all, edges: .bottom)
-                        .ignoresSafeArea(.keyboard)
+                        .offset(y: LandingSheet.bottomInset)
                         .allowsHitTesting(model.landingShown)
                         .accessibilityHidden(!model.landingShown)
                 }
@@ -122,25 +117,23 @@ struct MainScreen: View {
             }
 
             // A question from the server, or a plain message (no spinners): at the bottom, like a sheet.
-            Color.clear
-                .overlay(alignment: .bottom) {
-                    Group {
-                        if let q = model.pendingQuestion {
-                            QuestionCard(model: model, question: q)
-                                .id(q.id + (q.parseId ?? ""))
-                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                        } else if let n = model.liveNotice {
-                            NoticeCard(model: model, notice: n)
-                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                        }
-                    }
-                    // Typing an answer lifts the card onto the keyboard (it sits above the home
-                    // indicator's inset already).
-                    .padding(.bottom, model.pendingQuestion != nil ? max(0, model.keyboardHeight - LandingSheet.bottomInset) : 0)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
-                    .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
-                    .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
+            Group {
+                if let q = model.pendingQuestion {
+                    QuestionCard(model: model, question: q)
+                        .id(q.id + (q.parseId ?? ""))
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                } else if let n = model.liveNotice {
+                    NoticeCard(model: model, notice: n)
+                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            // Typing an answer lifts the card onto the keyboard (it sits above the home indicator's
+            // inset already).
+            .offset(y: model.pendingQuestion != nil ? -max(0, model.keyboardHeight - LandingSheet.bottomInset) : 0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
+            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
 
             if let target = model.editing {
                 EditorPanel(model: model, target: target)
