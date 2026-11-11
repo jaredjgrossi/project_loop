@@ -24,7 +24,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from api.a_to_b import STREET_FACTOR_RANGE, ellipse_waypoint
-from api.generate import (PRIORITY, SHAPE_KINDS, Rejection, Route, RouteFn, _evaluate, _fit, _meters, _offset, _Rules)
+from api.generate import (PRIORITY, SHAPE_KINDS, Rejection, Route, RouteFn, _evaluate, _fit, _meters, _offset, _Rules,
+                          without_waypoint_spurs)
 from api.geometry import shapes_within
 from api.routing import RoutingError
 from api.units import miles_to_meters
@@ -187,6 +188,8 @@ def via_jobs(start: tuple[float, float], vias: Sequence[Via], miles: float, rout
 
     def make(rules: _Rules) -> list[tuple[int, Callable]]:
         jobs = []
+        # decision 045: a spur at one of our own waypoints moves the waypoint to the spur's base
+        router = route_fn if rules.spurs_ok else without_waypoint_spurs(route_fn)
 
         def shortest_job():
             return _evaluate("via_shortest", None, f"the shortest way {names}", shortest, rules,
@@ -201,7 +204,7 @@ def via_jobs(start: tuple[float, float], vias: Sequence[Via], miles: float, rout
 
                 def make_route(scale: float) -> Route:
                     w = ellipse_waypoint(a, b, _meters(a, b) + extra_m * scale / factor, angle)
-                    return route_fn([start, *pts, w, start] if close_after else [start, w, *pts, start])
+                    return router([start, *pts, w, start] if close_after else [start, w, *pts, start])
 
                 try:
                     route = _fit(make_route, target_m)
@@ -219,7 +222,7 @@ def via_jobs(start: tuple[float, float], vias: Sequence[Via], miles: float, rout
             def job():
                 def make_route(scale: float) -> Route:
                     turn = _offset(*pts[-1], bearing, extra_m * scale / 2 / factor)
-                    return route_fn([start, *pts, turn, *reversed(pts), start])
+                    return router([start, *pts, turn, *reversed(pts), start])
 
                 try:
                     route = _fit(make_route, target_m)

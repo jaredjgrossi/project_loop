@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.generate import (PRIORITY, AnchorFn, AreaRouteFn, Candidate, ContextFn, GenerationResult, Rejection, RouteFn,
-                          _evaluate, _fit, _meters, _offset, _Rules, run_and_finish)
+                          _evaluate, _fit, _meters, _offset, _Rules, run_and_finish, without_waypoint_spurs)
 from api.grid import GridEstimate
 from api.closures import Closure
 from api.nogo import NoGoZone
@@ -91,6 +91,10 @@ def generate_a_to_b(
     target_m = miles_to_meters(miles)
     rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along),
                    spurs_ok)
+    if not spurs_ok:  # decision 045: a spur at one of our own waypoints moves the waypoint to the spur's base
+        route_fn = without_waypoint_spurs(route_fn)
+        if area_route_fn is not None:
+            area_route_fn = without_waypoint_spurs(area_route_fn)
     legs = [start, *vias, end]
     last = legs[-2]  # the detour goes between the last via (or the start) and the end
     straight = max(sum(_meters(a, b) for a, b in zip(legs, legs[1:])), 1.0)

@@ -211,6 +211,10 @@ Built in step 11 (decision 038):
   distance: a dead end it goes 150–400 m into and back, more than 300 m from the start or finish. A reversal under
   150 m is part of the line (a ramp, a footbridge approach). A past route rebuilt or run again keeps the spurs
   the runner ran.
+  - A spur at one of the generator's own waypoints is removed, not rejected (decision 045): the waypoint moves to
+    where the spur left the main line and the route is routed again. From Kips Bay, the waterfront entry sat 75 m
+    down the East River Esplanade from E 34th St, and the waterfront route went there and back. Nothing in the
+    response changes; routes that used to be dropped for such a spur now come back without it.
 - **Turnaround markers** (`feature: "turnaround"`) mark only where the run turns: every dead end it reaches 400 m or
   more into, and its farthest point if it turns there. Not spurs or short reversals; a round loop has none.
 - **Climb** (`summary.climb`, `route.elevation.gain_m` and `loss_m`) is read from the height every 0.1 mi through a
