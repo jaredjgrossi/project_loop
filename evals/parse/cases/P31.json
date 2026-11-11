@@ -1,0 +1,25 @@
+{
+  "id": "P31",
+  "seq": 29,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "crowds dont bother me, just want water views",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · crowds=dont_mind (said) · scenery=park_or_water (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "crowds": {
+        "value": "dont_mind",
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

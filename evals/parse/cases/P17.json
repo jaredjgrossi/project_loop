@@ -1,0 +1,44 @@
+{
+  "id": "P17",
+  "seq": 18,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "start at 1st and 23rd, 4 mi",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"1st Ave & E 23rd St\" (said) · distance_mi=4 (said). If the lookup finds the same crossing in several boroughs, ASK (start, places) also passes.",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "1st Ave & E 23rd St"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 4,
+        "source": "said"
+      }
+    }
+  },
+  "alternatives": [
+    {
+      "outcome": "ASK",
+      "question": {
+        "about": "start",
+        "from": "places",
+        "min_options": 2
+      },
+      "keep": {
+        "distance_mi": {
+          "value": 4
+        }
+      }
+    }
+  ],
+  "must_not": []
+}

@@ -1,0 +1,48 @@
+{
+  "id": "P50",
+  "seq": 51,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C2",
+  "text": "Loop of Prospect Park from Grand Army Plaza",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE · start_place=place:\"Grand Army Plaza\" (Brooklyn, said) · via_places=[place:\"Prospect Park\", around] (said) · scenery=park_or_water (said) · no distance: the lap and the way there set it (decision 035)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "Grand Army Plaza",
+          "borough": "Brooklyn"
+        },
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Prospect Park",
+            "mode": "around"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: use the usual 3.1 mi; the lap sets the length (decision 035).",
+      "field": "distance_mi"
+    }
+  ]
+}

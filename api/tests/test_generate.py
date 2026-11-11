@@ -738,3 +738,58 @@ def test_the_streamed_top3_ends_as_the_final_top3_and_is_sent_only_when_it_chang
     assert result.timing["provisional_s"] is not None and result.timing["provisional_s"] <= result.timing["total_s"]
     assert result.timing["number1_changes_after_provisional"] >= 0
     assert [c.label for c in result.provisional] == [c.label for c in next(e for e in events if e["event"] == "provisional")["candidates"]]
+
+
+def test_a_failing_stream_callback_raises_instead_of_hanging():
+    """A callback that raises used to kill its worker thread, so the queue never drained and the build hung."""
+    import threading
+
+    from api.tests.test_a_to_b import GRID, KIPS, straight_route
+
+    def boom(c, elapsed):
+        raise KeyError("source")
+    outcome = {}
+
+    def run():
+        try:
+            generate_loops(KIPS[0], KIPS[1], 3.0, GRID, route_fn=straight_route, round_trip_fn=None, top_n=3,
+                           on_candidate=boom)
+        except KeyError as exc:
+            outcome["raised"] = exc
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout=60)
+    assert not t.is_alive(), "the build hung"
+    assert "raised" in outcome
+
+
+# ---- spurs, honest kinds, loop as a hard rule (decision 044) -------------------------------------------------------
+
+def test_a_route_padded_with_a_spur_is_rejected():
+    from api.constraints import DEFAULTS
+    from api.generate import Rejection, _evaluate, _Rules
+    from api.routing import Route
+    from api.tests.test_markers import SPUR_ROUTE
+    from api.geometry import line_length_m
+    route = Route(distance_m=line_length_m(SPUR_ROUTE), time_s=0, coordinates=SPUR_ROUTE)
+    got = _evaluate("t", None, "t", route, _Rules(route.distance_m / 1609.344, DEFAULTS, ()),
+                    allowed=("loop", "lollipop", "out_and_back"))
+    assert isinstance(got, Rejection) and got.reason == "spur"
+
+
+def test_mostly_retraced_is_an_out_and_back_and_loop_rules_it_out_but_keeps_it():
+    from api.constraints import DEFAULTS
+    from api.generate import Candidate, Rejection, SHAPE_KINDS, _evaluate, _Rules
+    from api.routing import Route
+    from api.geometry import line_length_m
+    from api.tests.test_markers import _path
+    # 1.6 km up a street, a 400 m square at the top, and back: about 80% retraced
+    coords = _path((0, 0), (0, 1600), (200, 1600), (200, 1800), (0, 1800), (0, 1600), (0, 0))
+    route = Route(distance_m=line_length_m(coords), time_s=0, coordinates=coords)
+    rules = _Rules(route.distance_m / 1609.344, DEFAULTS, ())
+    as_any = _evaluate("t", None, "t", route, rules, allowed=SHAPE_KINDS["any"])
+    assert isinstance(as_any, Candidate) and as_any.kind == "out_and_back"
+    as_loop = _evaluate("t", None, "t", route, rules, allowed=SHAPE_KINDS["loop"])
+    assert isinstance(as_loop, Rejection) and as_loop.reason == "unwanted_out_and_back"
+    assert as_loop.candidate is not None and as_loop.candidate.kind == "out_and_back"
+    assert SHAPE_KINDS["loop"] == ("loop",)  # no lollipops either

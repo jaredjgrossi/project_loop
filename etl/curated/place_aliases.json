@@ -1,0 +1,25 @@
+{
+  "_doc": "Curated names OSM lacks (decision 026). `aliases`: another name for the same place; a lookup by it reports that name (\"Central Park Reservoir\"). `redirects`: a name runners use for a different thing, such as the road beside a running path; a lookup by it reports the place's own name (\"West Side Highway\" finds the Hudson River Greenway). Each entry names the OSM place exactly; the loader fails if it isn't found. Keep this short: names live here, not in the parse prompt.",
+  "aliases": [
+    {
+      "alias": "Central Park Reservoir",
+      "name": "Jacqueline Kennedy Onassis Reservoir",
+      "kind": "water",
+      "why": "What runners call it (parse eval R02); OSM has only the official name."
+    }
+  ],
+  "redirects": [
+    {
+      "name_used": "West Side Highway",
+      "name": "Hudson River Greenway",
+      "kind": "path",
+      "why": "Runners name the road; the running path beside it is the greenway (parse eval R03). Moved out of the parse prompt (Jared, 2026-11-06)."
+    },
+    {
+      "name_used": "East River Path",
+      "name": "East River Greenway",
+      "kind": "path",
+      "why": "What runners call the East River Greenway (parse eval P49). Moved out of the parse prompt."
+    }
+  ]
+}

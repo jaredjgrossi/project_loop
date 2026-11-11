@@ -1,0 +1,37 @@
+{
+  "id": "R04",
+  "seq": 9,
+  "category": "C",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "Heading out for a run in 30 - thinking 5 miles, low pedestrian areas",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_time=07:10 (said) · distance_mi=5 (said) · crowds=avoid (said) · use_my_location (default) · note: crowds near schools and ferry landings are estimated for 07:10; other path stretches aren't scored",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_time": {
+        "value": "07:10",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      },
+      "crowds": {
+        "value": "avoid",
+        "source": "said"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      }
+    },
+    "notes": [
+      "crowds_estimated"
+    ]
+  },
+  "must_not": []
+}

@@ -22,7 +22,8 @@ import psycopg
 
 from etl.load import database_url
 
-from api.constraints import Lights, RunConstraints, describe, request_items, resolve_preferences, with_default_date
+from api.constraints import (Lights, RunConstraints, describe, request_items, resolve_preferences, unsupported,
+                             with_default_date)
 from api.anchors import Anchors, corridor_anchors, park_anchors, water_anchors
 from api.generate import TOLERANCE_PCT, Candidate, GenerationResult, generate_loops
 from api.geocoding import GeocodeError, GeocodeResult, geocode
@@ -174,10 +175,13 @@ def routers(zones: list[NoGoZone], extra: dict | None = None) -> tuple[Callable,
             _Reused(partial(request_round_trip, custom_model=model)))
 
 
-def routers_for(zones: list[NoGoZone], lights: Lights, closures=()) -> tuple[Callable, Callable, Callable]:
+def routers_for(zones: list[NoGoZone], lights: Lights, closures=(), alongs=()) -> tuple[Callable, Callable, Callable]:
     """Route, round-trip and feature-area route functions for a runner: a signal penalty in every request when they
-    wait at lights, none when they zig-zag (decision 015), and around reported closures (decision 017)."""
-    extra = _merged(signal_penalty_model() if lights == Lights.WAITS else None, closures_model(closures))
+    wait at lights, none when they zig-zag (decision 015), around reported closures (decision 017), and off the
+    streets they won't run along (decision 036)."""
+    from api.along import custom_model as along_model
+    extra = _merged(signal_penalty_model() if lights == Lights.WAITS else None, closures_model(closures),
+                    along_model(alongs))
     route_fn, round_trip_fn = routers(zones, extra)
     return route_fn, round_trip_fn, area_router(zones, extra)
 
@@ -235,6 +239,28 @@ def area_router(zones: list[NoGoZone], extra: dict | None = None) -> Callable:
     return route_once
 
 
+def route_file(c: Candidate, rank: int, lat: float, lon: float, label: str, miles: float, constraints: RunConstraints,
+               best_of: int | None, stretch_fn: Callable | None) -> dict:
+    """One route as the app reads it (the fixture's `route`): the line with its shape, elevation, request and summary,
+    then mile markers and turnarounds, then stretches and pieces by kind (decisions 014, 020, 023)."""
+    from api.naming import display_name
+    name = display_name(c.kind, c.label)
+    geojson = route_to_geojson(
+        c.route, lat, lon, label, miles, c.shape.as_dict(), name=name,
+        extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": name, "plan": c.label,
+                          "score": round(c.score),
+                          "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
+                          "start_hour": constraints.start_hour, "request": request_items(constraints)},
+    )
+    markers = marker_features(c.route.coordinates)
+    stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
+                 if stretch_fn is not None else [])
+    geojson["features"][0]["properties"]["summary"] = route_summary(
+        c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=best_of)
+    geojson["features"] += markers + stretches
+    return geojson
+
+
 def print_candidate(rank: int, c: Candidate) -> None:
     d = c.shape.as_dict()
     kind = KIND_LABELS[c.kind]
@@ -288,7 +314,11 @@ def run(
     constraints = with_default_date(constraints, now_fn())
     prefs = resolve_preferences(constraints).values
     print("Request:   " + "\n           ".join(describe(constraints)))
-    zones, unknown = resolve_zones(constraints.avoid_places)
+    later = unsupported(constraints)
+    if later:  # product rule 3: say so, never build without them
+        print(f"Can't build this yet: {', '.join(later)} (Phase 3).", file=sys.stderr)
+        return 6
+    zones, unknown = resolve_zones([a.name for a in constraints.avoid_places])
     for name in unknown:
         print(f"Avoid:     '{name}' isn't in the no-go list, so it was NOT applied.")
 
@@ -348,18 +378,7 @@ def run(
     for rank, c in enumerate(result.candidates, start=1):
         print_candidate(rank, c)
         path = base if len(result.candidates) == 1 else base.with_name(f"{base.stem}-rank{rank}{base.suffix}")
-        geojson = route_to_geojson(
-            c.route, place.lat, place.lon, place.label, miles, c.shape.as_dict(),
-            extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score),
-                              "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
-                              "start_hour": constraints.start_hour, "request": request_items(constraints)},
-        )
-        markers = marker_features(c.route.coordinates)
-        stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
-                     if stretch_fn is not None else [])
-        geojson["features"][0]["properties"]["summary"] = route_summary(
-            c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=result.best_of)
-        geojson["features"] += markers + stretches
+        geojson = route_file(c, rank, place.lat, place.lon, place.label, miles, constraints, result.best_of, stretch_fn)
         path.write_text(json.dumps(geojson))
         saved.append(path)
 

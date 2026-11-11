@@ -10,6 +10,8 @@ are sums over the stretches, so the stretches always add up to the summary. Labe
 """
 
 from api.generate import Candidate
+from api.elevation import SOURCE as ELEVATION_SOURCE
+from api.hills import hill_metrics
 from api.route_context import COMPOSITION
 from api.segments import COMPOSITION_SOURCE, SIGNALS_COUNTED
 
@@ -72,6 +74,12 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
         out["climb"] = _value(elevation["gain_m"], "m", "estimate", elevation["source"])
     else:
         out["climb"] = _not_scored("no elevation for this route")
+    hills = next((d for d in (c.ranking.dimensions if c.ranking else ()) if d.key == "hills"), None)
+    if hills is not None:  # only when the runner asked for flat (decision 037)
+        h = hill_metrics(c.route.coordinates, c.route.elevation)
+        out["hills"] = (_value(h.climb_m_per_mi, "m/mi", "estimate", f"{ELEVATION_SOURCE}, read every 0.1 mi",
+                               steepest_pct=h.steepest_pct) if h is not None
+                        else _not_scored("no elevation for this route"))
     if ctx is not None and ctx.wait_s is not None:
         out["wait_at_lights"] = _value(round(ctx.wait_s / 60, 1), "min", "estimate",
                                        "decision 015's signal-timing assumptions, at every signalized crossing")

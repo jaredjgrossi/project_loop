@@ -1,0 +1,32 @@
+{
+  "id": "P04",
+  "seq": 2,
+  "category": "A",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "kip bay 3 mi",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=3 (said) · use_my_location (said: Kips Bay; you're in Kips Bay)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "lookup_not_called",
+      "why": "Must not: send \"kip bay\" to the lookup as a start address.",
+      "name_contains": "kip bay",
+      "role": "start"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "id": "R05",
+  "seq": 3,
+  "category": "A",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C2",
+  "text": "New to this area and want to find a good route - what do you suggest",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · mode=exploring (said) · distance_mi=3.1 (usual) · use_my_location (default)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "mode": {
+        "value": "exploring",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.1,
+        "source": "usual"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "no_question",
+      "why": "Must not: ask."
+    },
+    {
+      "check": "no_free_text",
+      "why": "Must not: reply to \"what do you suggest\" with text. The routes are the answer."
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "H04",
+  "seq": 43,
+  "category": "H",
+  "origin": "endorsed",
+  "context": "C1",
+  "text": "last week's route but skip the ferry part",
+  "tags": [
+    "engine"
+  ],
+  "needs": [
+    "reuse"
+  ],
+  "doc": "ASK (reuse, parser) · \"Which one?\" · options Tue · East River esplanade out-and-back · Thu · Gramercy street rectangle · keep avoid_places=[\"E 34th St ferry landing\"]",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "reuse",
+      "from": "parser",
+      "options": [
+        "Tue East River esplanade out-and-back",
+        "Thu Gramercy street rectangle"
+      ]
+    },
+    "keep": {
+      "avoid_places": {
+        "value": [
+          {
+            "name": "E 34th St ferry landing"
+          }
+        ]
+      }
+    }
+  },
+  "must_not": []
+}

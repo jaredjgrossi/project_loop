@@ -1,0 +1,30 @@
+{
+  "id": "P52",
+  "seq": 53,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "W. 71st Street, 4 mi",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"W 71st St\" (Manhattan, said) · distance_mi=4 (said). \"W.\" and \"Street\" read as W and St (decision 043).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "W 71st St",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 4,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

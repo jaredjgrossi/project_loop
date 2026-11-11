@@ -1,0 +1,147 @@
+"""Place names: normalizing, street bases, display names, crossings and grouping (Phase 3, step 2). No database;
+the lookups against the loaded table are in evals/places/."""
+
+import pytest
+
+from api.places import (PlaceMatch, display_name, group_ids, is_streetlike, normalize, pick_by_borough, split_crossing,
+                        street_base)
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("East 42nd Street", "e 42nd st"),
+    ("E. 42nd St", "e 42nd st"),
+    ("42 St", "42nd st"),
+    ("86 St (Q)", "86th st"),
+    ("First Avenue", "1st ave"),
+    ("1st Ave", "1st ave"),
+    ("West 23 Street", "w 23rd st"),
+    ("East 11th Street", "e 11th st"),
+    ("102 St", "102nd st"),
+    ("113 Street", "113th st"),
+    ("Central Park South", "central park s"),
+    ("34th Street–Penn Station", "34th st penn station"),
+    ("34 St-Penn Station (A,C,E)", "34th st penn station"),
+    ("The Reservoir", "reservoir"),
+    ("St. Mark's Place", "st marks pl"),
+    ("Frederick Douglass Boulevard", "frederick douglass blvd"),
+    ("  McCarren   Park ", "mccarren park"),
+    ("Union Square", "union sq"),
+])
+def test_normalize(raw, want):
+    assert normalize(raw) == want
+
+
+def test_numbers_not_on_a_street_keep_their_form():
+    assert normalize("Pier 45") == "pier 45"
+    assert normalize("PS 116") == "ps 116"
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("East 42nd Street", "42nd st"),
+    ("West 86th Street", "86th st"),
+    ("86th Street", "86th st"),
+    ("South Street", "s st"),  # nothing left but the suffix: keep the direction
+    ("North Moore Street", "moore st"),
+    ("Central Park South", "central park s"),
+])
+def test_street_base_drops_a_leading_direction(raw, want):
+    assert street_base(normalize(raw)) == want
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("East 42nd Street", "E 42nd St"),
+    ("First Avenue", "1st Ave"),
+    ("Central Park West", "Central Park West"),
+    ("Hudson River Greenway", "Hudson River Greenway"),
+    ("Frederick Douglass Boulevard", "Frederick Douglass Blvd"),
+])
+def test_display_name(raw, want):
+    assert display_name(raw) == want
+
+
+@pytest.mark.parametrize("q, want", [
+    ("1st Ave & E 23rd St", ("1st ave", "e 23rd st")),
+    ("1st and 23rd", ("1st", "23rd")),
+    ("5th Ave and E 86th St", ("5th ave", "e 86th st")),
+    ("McCarren Park", None),
+    ("&", None),
+])
+def test_split_crossing(q, want):
+    assert split_crossing(q) == want
+
+
+def test_streetlike():
+    assert is_streetlike("86th st") and is_streetlike("central park s") is False
+    assert is_streetlike("e 42nd st") and not is_streetlike("penn station")
+
+
+def test_group_ids_joins_pairs_transitively():
+    assert group_ids([1, 2, 3, 4, 5], [(1, 2), (2, 3), (4, 4)]) == [[1, 2, 3], [4], [5]]
+
+
+def _m(borough, distance_m=None, name="42nd St"):
+    return PlaceMatch(name=name, kind="street", borough=borough, lat=0, lon=0, matched=name, source="OpenStreetMap",
+                      distance_m=distance_m)
+
+
+def test_pick_one_match_is_that_match():
+    assert pick_by_borough([_m("Queens")], "Manhattan").borough == "Queens"
+
+
+def test_pick_prefers_the_reference_borough():
+    assert pick_by_borough([_m("Brooklyn", 900), _m("Manhattan", 5000)], "Manhattan").borough == "Manhattan"
+
+
+def test_pick_nearest_within_3_km_when_the_others_are_farther():
+    found = [_m("Manhattan", 900), _m("Queens", 4000), _m("Brooklyn", 9000)]
+    assert pick_by_borough(found, "Bronx").borough == "Manhattan"
+    assert pick_by_borough(found).borough == "Manhattan"
+
+
+def test_pick_asks_when_two_are_within_3_km_or_none_is():
+    assert pick_by_borough([_m("Manhattan", 900), _m("Queens", 2500)]) is None
+    assert pick_by_borough([_m("Manhattan", 3500), _m("Queens", 4000)]) is None
+    assert pick_by_borough([_m("Manhattan"), _m("Queens")]) is None  # no distances: ask
+
+
+def test_pick_applies_nearest_inside_the_reference_borough():
+    found = [_m("Manhattan", 500, "a"), _m("Manhattan", 4000, "b"), _m("Brooklyn", 300, "c")]
+    assert pick_by_borough(found, "Manhattan").name == "a"
+
+
+# ---- names as people say them (phone test, 2026-11-09) -------------------------------------------------------------
+
+def test_library_variants():
+    from api.places import name_variants
+    v = name_variants("NYPL: Kips Bay Library", "amenity", "amenity=library")
+    assert {"Kips Bay Library", "Kips Bay Branch", "Kips Bay Branch Library", "nypl Kips Bay Branch",
+            "new york public library Kips Bay Branch"} <= set(v)
+    assert "Kips Bay Library" in name_variants("New York Public Library - Kips Bay Branch", "amenity", "amenity=library")
+    assert "Macomb's Bridge Library" in name_variants("Macomb's Bridge Branch", "amenity", "amenity=library")
+
+
+def test_station_and_park_variants():
+    from api.places import name_variants
+    assert name_variants("Bedford Av", "subway_station", "railway=station") == ["Bedford Av Station"]
+    assert name_variants("New York Penn Station", "station", "railway=station") == ["New York Penn"]
+    assert name_variants("McCarren Park", "park", "leisure=park") == ["McCarren"]
+    assert name_variants("Stuyvesant Cove", "park", "leisure=park") == ["Stuyvesant Cove Park"]
+    assert name_variants("Joe's Deli", "shop", "shop=deli") == []
+
+
+def test_word_order_and_the_dont_matter():
+    from api.places import normalize, token_key
+    assert token_key(normalize("Library Kips Bay")) == token_key(normalize("the Kips Bay Library"))
+    assert token_key(normalize("Kips Bay Library")) != token_key(normalize("Kips Bay"))
+
+
+def test_one_place_per_name_and_borough_the_place_not_the_shop():  # phone test, 2026-11-10: "Which Williamsburg?"
+    from api.places import PlaceMatch, one_per_name
+
+    def m(kind, borough="Brooklyn", name="Williamsburg"):
+        return PlaceMatch(name=name, kind=kind, borough=borough, lat=40.71, lon=-73.95, matched=name, source="OSM")
+    hood, shop, queens = m("neighborhood"), m("shop"), m("neighborhood", "Queens")
+    assert one_per_name([shop, hood]) == [hood]
+    assert one_per_name([hood, shop, queens]) == [hood, queens]  # another borough stays: R19 picks between them
+    street_a, street_b = m("street", name="42nd St"), m("street", name="42nd St")
+    assert one_per_name([street_a, street_b]) == [street_a, street_b]  # streets are grouped by _groups, not here

@@ -1,0 +1,30 @@
+{
+  "id": "P16",
+  "seq": 17,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5 mi from 11 madison ave",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=address:\"11 Madison Ave\" (Manhattan, said) · distance_mi=5 (said). The runner is in Manhattan, so R19 picks the Manhattan address.",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "address": "11 Madison Ave",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

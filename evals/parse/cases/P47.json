@@ -1,0 +1,23 @@
+{
+  "id": "P47",
+  "seq": 48,
+  "category": "J",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "100 mile loop",
+  "tags": [],
+  "needs": [],
+  "doc": "ASK (distance, parser) · \"Did you mean 10 miles?\" · options 10 mi, allow_text",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "distance",
+      "from": "parser",
+      "options": [
+        "10 mi"
+      ],
+      "allow_text": true
+    }
+  },
+  "must_not": []
+}

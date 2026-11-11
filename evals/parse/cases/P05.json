@@ -1,0 +1,25 @@
+{
+  "id": "P05",
+  "seq": 5,
+  "category": "B",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "3 mi loop",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=3 (said) · shape=any (said \"loop\", R10)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "shape": {
+        "value": "any",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

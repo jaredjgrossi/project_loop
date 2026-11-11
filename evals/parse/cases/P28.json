@@ -1,0 +1,21 @@
+{
+  "id": "P28",
+  "seq": 27,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "no lights if possible, i'll stop if i have to",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · lights=waits (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "lights": {
+        "value": "waits",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

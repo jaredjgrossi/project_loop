@@ -1,5 +1,5 @@
 # Shortcuts. Run `make help` to list them.
-.PHONY: help setup up down data corridors closures crowds pulses test
+.PHONY: help setup up down data corridors closures crowds pulses places test eval-parse serve
 
 help:
 	@echo "make setup   first-time setup: Python deps, NYC map, services, data and street load (a few minutes, ~600 MB download)"
@@ -10,7 +10,10 @@ help:
 	@echo "make closures reload the closures (corridor gaps and routing/curated_closures.geojson, decision 017)"
 	@echo "make crowds  precompute crowd levels per sidewalk (needs the downloads in data/crowds/raw, decision 016)"
 	@echo "make pulses  load school and ferry pulse sources (needs the downloads in data/pulses/raw, decision 022)"
+	@echo "make places  build the places table for name lookups (needs make setup; decision 026)"
 	@echo "make test    run the unit tests"
+	@echo "make eval-parse run the parse evals and print a pass/fail table (PARSER=module:function, default the stub)"
+	@echo "make serve   run the API on HOST:PORT (default 127.0.0.1:8000; needs make up and LOOP_TOKEN in .env)"
 
 setup:
 	uv sync
@@ -20,6 +23,9 @@ setup:
 	uv run python -m etl.load_osm
 	uv run python -m etl.build_corridors
 	uv run python -m etl.build_closures
+	uv run python -m etl.load_places
+	uv run python -m etl.load_neighborhoods
+	uv run python -m etl.build_running_loops
 
 up:
 	docker compose up -d --wait
@@ -32,6 +38,7 @@ data:
 
 corridors:
 	uv run python -m etl.build_corridors
+	uv run python -m etl.build_running_loops
 	uv run python -m etl.build_closures
 
 closures:
@@ -43,5 +50,21 @@ crowds:
 pulses:
 	uv run python -m etl.load_pulses
 
+places:
+	uv run python -m etl.load_places
+	uv run python -m etl.load_neighborhoods
+
 test:
 	uv run pytest
+
+PARSER ?= evals.parse.stub:parse
+MODEL ?=
+EFFORT ?=
+THINKING ?=
+eval-parse:
+	uv run python -m evals.parse.run --parser $(PARSER) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(THINKING),--thinking $(THINKING))
+
+HOST ?= 127.0.0.1
+PORT ?= 8000
+serve:
+	uv run uvicorn api.server:app --host $(HOST) --port $(PORT)

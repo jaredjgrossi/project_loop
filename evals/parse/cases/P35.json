@@ -1,0 +1,33 @@
+{
+  "id": "P35",
+  "seq": 33,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "8 miles, need water halfway",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=8 (said) · amenities=[water @ 4] (said) · note: fountains are listed only (2024 data, no seasonal status), and many may be off in November",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 8,
+        "source": "said"
+      },
+      "amenities": {
+        "value": [
+          {
+            "kind": "water",
+            "at_mile": 4
+          }
+        ],
+        "source": "said"
+      }
+    },
+    "notes": [
+      "fountains_seasonal"
+    ]
+  },
+  "must_not": []
+}

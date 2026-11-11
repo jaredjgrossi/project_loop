@@ -1,0 +1,45 @@
+{
+  "id": "R03",
+  "seq": 14,
+  "category": "D",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "Chill run on the west side highway, 3 easy miles",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE · distance_mi=3 (said) · via_places=[place:\"Hudson River Greenway\"] (said) · use_my_location (default)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Hudson River Greenway"
+          }
+        ],
+        "source": "said"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: set a mode from \"chill\" or \"easy\".",
+      "field": "mode"
+    }
+  ]
+}

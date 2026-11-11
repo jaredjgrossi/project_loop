@@ -1,0 +1,25 @@
+{
+  "id": "P10",
+  "seq": 7,
+  "category": "B",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "3-4 miles",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=3.5 (said) · tolerance_pct≈14.3 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3.5,
+        "source": "said"
+      },
+      "tolerance_pct": {
+        "value": 14.3,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

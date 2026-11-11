@@ -1,0 +1,27 @@
+{
+  "id": "P20",
+  "seq": 21,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "start at the park, 3 mi",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"East River Esplanade\" (said \"the park\", R13) · distance_mi=3 (said). No major park within about 1 mi of Kips Bay; of the runnable places the esplanade (0.4 mi) clearly wins over the next (1.2 mi), so no question (decision 043; before it, ASK \"Which park?\").",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "East River Esplanade"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

@@ -1,0 +1,24 @@
+{
+  "id": "P44",
+  "seq": 46,
+  "category": "I",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "no lights but i wanna take 2nd ave the whole way",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE + CANT · lights=waits (said) · cant: staying on one street the whole way (G1)",
+  "expect": {
+    "outcome": "PARSE+CANT",
+    "fields": {
+      "lights": {
+        "value": "waits",
+        "source": "said"
+      }
+    },
+    "cant": [
+      "G1"
+    ]
+  },
+  "must_not": []
+}

@@ -1,0 +1,43 @@
+{
+  "id": "P23",
+  "seq": 24,
+  "category": "E",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "6 miles, avoid 1st ave by the hospitals",
+  "tags": [
+    "engine"
+  ],
+  "needs": [],
+  "doc": "PARSE · distance_mi=6 (said) · avoid_places=[1st Ave, along, a stretch inside E 23rd–E 34th St] (said). Loosened by Jared 2026-11-08: where the hospital stretch starts is a judgment (the VA is at E 23rd–25th, Bellevue from E 26th).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 6,
+        "source": "said"
+      },
+      "avoid_places": {
+        "value": [
+          {
+            "street": "1st Ave",
+            "within": [
+              "E 23rd St",
+              "E 34th St"
+            ],
+            "how": "along"
+          }
+        ],
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "avoid_excludes",
+      "why": "Must not: avoid all of 1st Ave.",
+      "match": "1st ave",
+      "exact": true
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "R01",
+  "seq": 12,
+  "category": "D",
+  "origin": "real",
+  "who": "R2",
+  "context": "C1",
+  "text": "Today, we're doing 8 miles on the water, ending at McCarren Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "end"
+  ],
+  "doc": "PARSE · distance_mi=8 (said) · scenery=park_or_water (said) · end_place=place:\"McCarren Park\" (said) · use_my_location (default) · start_date=today (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 8,
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      },
+      "end_place": {
+        "value": {
+          "place": "McCarren Park"
+        },
+        "source": "said"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      },
+      "start_date": {
+        "value": "2026-11-03",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

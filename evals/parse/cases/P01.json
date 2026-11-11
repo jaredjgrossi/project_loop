@@ -1,0 +1,38 @@
+{
+  "id": "P01",
+  "seq": 1,
+  "category": "A",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "run",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=3.1 (usual) · use_my_location (default) · start_time=now (default) · shape=any (default)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3.1,
+        "source": "usual"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      },
+      "start_time": {
+        "value": "06:40",
+        "source": "default"
+      },
+      "shape": {
+        "value": "any",
+        "source": "default"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "no_question",
+      "why": "Must not: ask."
+    }
+  ]
+}

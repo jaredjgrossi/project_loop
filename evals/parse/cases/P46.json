@@ -1,0 +1,36 @@
+{
+  "id": "P46",
+  "seq": 22,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "run to work, 5 mi, office is 120 broadway",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [
+    "end"
+  ],
+  "doc": "PARSE · end_place=address:\"120 Broadway\" (Manhattan, said) · distance_mi=5 (said) · use_my_location (default). The route starts in Manhattan, so R19 picks the Manhattan address.",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "end_place": {
+        "value": {
+          "address": "120 Broadway",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      },
+      "use_my_location": {
+        "value": true,
+        "source": "default"
+      }
+    }
+  },
+  "must_not": []
+}

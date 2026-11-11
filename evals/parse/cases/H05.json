@@ -1,0 +1,26 @@
+{
+  "id": "H05",
+  "seq": 44,
+  "category": "H",
+  "origin": "endorsed",
+  "who": "Jared",
+  "context": "C1",
+  "text": "my usual",
+  "tags": [
+    "engine"
+  ],
+  "needs": [
+    "reuse"
+  ],
+  "doc": "PARSE · reuse_route_id=rt_a (usual), rebuilt for now",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "reuse_route_id": {
+        "value": "rt_a",
+        "source": "usual"
+      }
+    }
+  },
+  "must_not": []
+}

@@ -1,0 +1,35 @@
+{
+  "id": "P32",
+  "seq": 30,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "soft surface pls, knees r sore. 4",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · surface=paths (said) · distance_mi=4 (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "surface": {
+        "value": "paths",
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 4,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "text_absent",
+      "why": "Must not: store or repeat the knee detail (R8).",
+      "patterns": [
+        "\\bknee",
+        "\\bsore\\b"
+      ],
+      "where": "visible_and_constraints"
+    }
+  ]
+}

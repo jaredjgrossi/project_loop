@@ -1,0 +1,30 @@
+{
+  "id": "P34",
+  "seq": 32,
+  "category": "F",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "6, need a bathroom around mile 3",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · distance_mi=6 (said) · amenities=[restroom @ 3] (said)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 6,
+        "source": "said"
+      },
+      "amenities": {
+        "value": [
+          {
+            "kind": "restroom",
+            "at_mile": 3
+          }
+        ],
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

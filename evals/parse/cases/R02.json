@@ -1,0 +1,50 @@
+{
+  "id": "R02",
+  "seq": 13,
+  "category": "D",
+  "origin": "real",
+  "who": "Jared",
+  "context": "C1",
+  "text": "Central park reservor, starting at 86th st and ending at central park south",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [
+    "end",
+    "via"
+  ],
+  "doc": "ASK (start, places) · \"Which 86th St?\" · options East side (5th Ave) · West side (Central Park West) · keep via_places=[place:\"Central Park Reservoir\", around] (the Reservoir named on its own is its running track, decision 035), end_place=place:\"Central Park South\"",
+  "expect": {
+    "outcome": "ASK",
+    "question": {
+      "about": "start",
+      "from": "places",
+      "options": [
+        "East side 5th Ave",
+        "West side Central Park West"
+      ]
+    },
+    "keep": {
+      "via_places": {
+        "value": [
+          {
+            "place": "Central Park Reservoir",
+            "mode": "around"
+          }
+        ]
+      },
+      "end_place": {
+        "value": {
+          "place": "Central Park South"
+        }
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "field_absent",
+      "why": "Must not: ask for a distance (R10).",
+      "field": "distance_mi"
+    }
+  ]
+}

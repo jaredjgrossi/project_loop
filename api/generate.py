@@ -31,6 +31,10 @@ from api.anchors import Anchors
 from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
+from api.along import runs_along
+from api.markers import spurs
+from api.hills import hill_metrics
+from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
 from api.ranking import Kind, Ranking, rank
 from api.route_context import ContextScores
@@ -47,7 +51,10 @@ DUPLICATE_SIMILARITY = 0.8
 ASPECTS = (1.0, 1.5, 2.5)  # long side : short side
 FALLBACK_SEEDS = range(8)
 OUT_AND_BACK_HEADINGS = (0, 90, 180, 270, 45, 135, 225, 315)  # degrees from the grid angle; along the grid first
-OUT_AND_BACK_MIN_RETRACED_PCT = 70.0  # less than this and the way back isn't the way out
+# Most of it retraced: an out-and-back, whatever made it (phone test, 2026-11-11, decision 044; was 70, which left
+# a route 67% retraced, with a small loop at the far end, called a loop).
+OUT_AND_BACK_MIN_RETRACED_PCT = 50.0
+A_TO_B_MAX_RETRACED_PCT = 25.0  # step 8, provisional: more than this and an A-to-B route doubles back
 
 RouteFn = Callable[[list[tuple[float, float]]], Route]  # (lat, lon) points -> route
 RoundTripFn = Callable[..., Route]  # (lat, lon, distance_m, seed) -> route
@@ -61,7 +68,7 @@ MAX_ANCHOR_DIRECTIONS = {("familiar", "along"): 4, ("familiar", "straight"): 4, 
                          ("water", "straight"): 8}
 DEFAULT_ANCHOR_DIRECTIONS = 2
 SHAPE_KINDS = {  # which route kinds each RunConstraints.shape accepts; a lollipop starts and ends as a loop does
-    "loop": ("loop", "lollipop"),
+    "loop": ("loop",),  # a hard rule (decision 044): a lollipop is mostly retraced, so it isn't a loop
     "out_and_back": ("out_and_back",),
     "any": ("loop", "lollipop", "out_and_back"),
 }
@@ -101,6 +108,7 @@ class Rejection:
     method: str
     label: str
     reason: str
+    candidate: "Candidate | None" = None  # a route of a kind the shape rules out: kept for the "no good loop" note
 
 
 @dataclass
@@ -117,6 +125,8 @@ class GenerationResult:
     # duplicates dropped by the same rule as the top 3. None when no route came within the limit.
     best_of: int | None = None
     provisional: list[Candidate] = field(default_factory=list)  # the top N when flagged provisional (decision 018)
+    # Decision 044: the best routes of the kinds the shape ruled out, for a "no good loop from here" answer.
+    fallback: list[Candidate] = field(default_factory=list)
 
 
 # --- geometry ------------------------------------------------------------------------
@@ -233,6 +243,11 @@ class _Rules:
     avoid: tuple[NoGoZone, ...]
     context_fn: ContextFn | None = None
     closures: tuple[Closure, ...] = ()
+    # step 9: (GeoJSON shape, meters, None) the route must pass, each one; decision 035: (ring, meters, share) a lap
+    # it must run along
+    through: tuple[tuple[dict, float, float | None], ...] = ()
+    along: tuple = ()  # step 8b: streets (along.Along) a route may cross but not run along
+    spurs_ok: bool = False  # decision 044: a past route rebuilt or run again keeps the spurs the runner ran
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -255,19 +270,31 @@ def _evaluate(
         return Rejection(method, label, "no_go_zone")
     if passed(route.coordinates, rules.closures):  # decision 017: a hard rule, like a no-go zone
         return Rejection(method, label, "closure")
+    if rules.along and runs_along(route.coordinates, rules.along):  # step 8b (decision 036)
+        return Rejection(method, label, "runs_along")
+    for shape, tol, share in rules.through:  # step 9: through or along every via place; 035: a lap of each ring
+        if share is None and not passes_through(route.coordinates, shape, tol):
+            return Rejection(method, label, "misses_via")
+        if share is not None and covered_share(route.coordinates, shape, tol) < share:
+            return Rejection(method, label, "misses_lap")
     try:
         shape = shape_metrics(route.coordinates)
     except ValueError:
         return Rejection(method, label, "degenerate")
+    if not rules.spurs_ok and spurs(route.coordinates):  # decision 044: no padding with a quick out-and-back
+        return Rejection(method, label, "spur")
+    unwanted = False
     if kind is None:
         kind = _classify(shape)
         if kind is None:
             return Rejection(method, label, "too_thin")
-        if kind not in allowed:
-            return Rejection(method, label, f"unwanted_{kind}")
+        unwanted = kind not in allowed
     elif kind == "out_and_back":
         if shape.retraced_pct < OUT_AND_BACK_MIN_RETRACED_PCT:
             return Rejection(method, label, "not_out_and_back")
+    elif kind == "a_to_b":  # step 8: a detour that doubles back on itself isn't a way there
+        if shape.retraced_pct > A_TO_B_MAX_RETRACED_PCT:
+            return Rejection(method, label, "retraced")
     elif kind == "loop":
         if shape.compactness is None:
             return Rejection(method, label, "not_a_loop")
@@ -277,9 +304,10 @@ def _evaluate(
             return Rejection(method, label, "too_thin")
     miss = percent_off(rules.miles, meters_to_miles(route.distance_m))
     context = rules.context_fn(route.coordinates) if rules.context_fn else None
-    ranking = rank(kind, shape, rules.prefs, context)
-    return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking,
-                     context)
+    hills = hill_metrics(route.coordinates, route.elevation) if rules.prefs.get("hills") == "avoid" else None
+    ranking = rank(kind, shape, rules.prefs, context, hills)
+    c = Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking, context)
+    return Rejection(method, label, f"unwanted_{kind}", candidate=c) if unwanted else c
 
 
 def _dedupe(ranked: list[Candidate], limit: int) -> list[Candidate]:
@@ -312,6 +340,17 @@ def _select(candidates: list[Candidate], top_n: int, shape: str) -> list[Candida
         return _dedupe(sorted(candidates, key=lambda c: abs(c.miss_pct)), top_n)
     chosen = _dedupe(in_tolerance, top_n)
     return _offer_both_kinds(chosen, in_tolerance) if shape == "any" else chosen
+
+
+def select_from_pool(candidates: list[Candidate], top_n: int, shape: str) -> tuple[list[Candidate], int | None]:
+    """A shape-only edit (phone test, 2026-11-10): the top N of the kinds `shape` accepts, from a finished build's
+    candidates, and how many distinct ones that was ("Best of N"). Nothing when none of those kinds came within the
+    distance limit: then the caller builds again."""
+    kinds = SHAPE_KINDS[shape]
+    fitting = sorted((c for c in candidates if c.kind in kinds and c.within_tolerance), key=lambda c: -c.score)
+    if not fitting:
+        return [], None
+    return _select(fitting, top_n, shape), len(_dedupe(fitting, len(fitting)))
 
 
 PRIORITY = {"anchors": 0, "anchored": 1, "anchored_straight": 2, "out_and_back": 3, "rectangle": 4, "round_trip": 5}
@@ -376,6 +415,7 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
     outcomes: list[tuple[tuple, object, float]] = []
     by_tier: Counter = Counter()
     tier_fired = [tier_max is None or on_tier_done is None]
+    callback_errors: list[Exception] = []
 
     def put(priority: int, key: tuple, job: Callable) -> None:
         with lock:
@@ -403,7 +443,12 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
                     with lock:
                         outcomes.append((key, result, elapsed))
                     if on_candidate is not None and isinstance(result, Candidate):
-                        on_candidate(result, elapsed, key)
+                        try:
+                            on_candidate(result, elapsed, key)
+                        except Exception as exc:  # a streaming callback failing: kept for the caller, and the
+                            with lock:            # thread lives on, so the queue still drains (a dead worker hung
+                                callback_errors.append(exc)  # the build, 2026-11-09)
+
             finally:
                 fire = False
                 with lock:
@@ -414,7 +459,11 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
                     if pending[0] == 0:
                         all_done.set()
                 if fire:
-                    on_tier_done(time.perf_counter() - t0)
+                    try:
+                        on_tier_done(time.perf_counter() - t0)
+                    except Exception as exc:
+                        with lock:
+                            callback_errors.append(exc)
 
     if not jobs:
         return []
@@ -428,6 +477,8 @@ def _run_prioritized(jobs: list[tuple[int, Callable]], workers: int,
         tasks.put((math.inf, next(order), (), None))
     for th in threads:
         th.join()
+    if callback_errors:
+        raise callback_errors[0]
     return [(result, elapsed) for _, result, elapsed in sorted(outcomes, key=lambda o: o[0])]
 
 
@@ -471,10 +522,18 @@ def generate_loops(
     # Streaming the top N (decision 018): {"event": "top3" | "provisional" | "final", "elapsed_s", "provisional",
     # "candidates"}. "top3" whenever it changes, "provisional" once the anchored tiers are done, "final" at the end.
     on_top3: Callable[[dict], None] | None = None,
+    # Step 9 (via places): only the anchored jobs (the features the vias are on), plus jobs built from the rules by
+    # extra_jobs, and every route must pass each `through` shape.
+    only_anchored: bool = False,
+    extra_jobs: Callable[["_Rules"], list[tuple[int, Callable]]] | None = None,
+    through: Sequence[tuple[dict, float, float | None]] = (),
+    along: Sequence = (),  # step 8b: streets not to run along (along.Along)
+    spurs_ok: bool = False,  # decision 044: following a past route
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures))
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along),
+                   spurs_ok)
     notes: list[str] = []
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:
@@ -650,9 +709,11 @@ def generate_loops(
         jobs.append((PRIORITY["anchors"], lambda fetch=fetch: [
             (PRIORITY["anchored" if a.placement == "along" else "anchored_straight"], j)
             for a in fetch(lat, lon, radius) for j in anchored_jobs([a], radius)]))
-    if shape in ("out_and_back", "any"):
+    if extra_jobs is not None:
+        jobs += extra_jobs(rules)
+    if shape in ("out_and_back", "any") and not only_anchored:
         jobs += [(PRIORITY["out_and_back"], out_and_back_job(h)) for h in OUT_AND_BACK_HEADINGS]
-    if shape in ("loop", "any"):
+    if shape in ("loop", "any") and not only_anchored:
         # Rectangles are always tried: they route along real streets, so even a mixed grid can give a good loop.
         # Round trips are tried everywhere too (decision 012): the one generator not tied to the grid.
         jobs += [(PRIORITY["rectangle"], rectangle_job(s)) for s in _rectangle_specs()]
@@ -661,6 +722,13 @@ def generate_loops(
             notes.append(
                 f"The street grid here is weak (strength {grid.strength:.2f}), so rectangles are less dependable."
             )
+    return run_and_finish(jobs, workers, top_n, shape, miles, grid, notes, on_candidate, on_top3)
+
+
+def run_and_finish(jobs: list[tuple[int, Callable]], workers: int, top_n: int, shape: str, miles: float,
+                   grid: GridEstimate, notes: list[str], on_candidate=None, on_top3=None) -> GenerationResult:
+    """Run the jobs, stream the top N as they arrive, then pick the top N and build the result: shared by loops and
+    A-to-B routes (step 8). `shape` picks which kinds are offered ("any" offers the best of each kind)."""
     stream = _TopStream(top_n, shape, on_top3)
 
     def arrived_candidate(c: Candidate, elapsed: float, key: tuple) -> None:
@@ -708,4 +776,5 @@ def generate_loops(
         timing=timing,
         best_of=best_of,
         provisional=stream.provisional or [],
+        fallback=_select([r.candidate for r, _ in outcomes if isinstance(r, Rejection) and r.candidate], top_n, "any"),
     )
