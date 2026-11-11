@@ -301,13 +301,13 @@ struct RequestField: View {
                 focused = false
             }
         }
-        .onChange(of: model.fieldText) { _, _ in model.layoutSearch(animated: !reduceMotion) }
         .onChange(of: model.focusFieldRequest) { _, _ in focused = true }
     }
 }
 
-/// While typing: recent requests and saved runs matching the text, newest first, up to four. A
-/// tap fills the field and sends. Dragging the list down takes the keyboard with the finger.
+/// While typing: recent requests and saved runs matching the text when typing started, newest
+/// first, up to four; they stay put as the runner types. A tap fills the field and sends.
+/// Dragging the list down takes the keyboard with the finger.
 private struct MatchList: View {
     let model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

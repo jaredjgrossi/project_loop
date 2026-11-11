@@ -96,6 +96,7 @@ extension MainModel {
     /// the keyboard's own curve (the keyboard notification drives it).
     func beginTyping() {
         guard stage == .landing else { return }
+        fieldMatches = runs.matches(fieldText)
         stage = .typing
         fieldExample = ""
         pickedShape = UsualShape(rawValue: runs.profile.usualShape) ?? .any
@@ -146,7 +147,8 @@ extension MainModel {
         layoutSearch(animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
-    /// While typing, the sheet fits the field and its matches (it changes as the runner types).
+    /// While typing, the sheet fits the field and the rows decided when typing started; it
+    /// doesn't change as the runner types.
     func layoutSearch(animated: Bool) {
         guard searchMode, landingShown, landingAnchor == nil else { return }
         landing.slide(to: landingSearchHeight(keyboard: keyboardHeight), animated: animated,

@@ -23,11 +23,17 @@ final class LandingKeyboardUITests: XCTestCase {
         field.tap()
         XCTAssertTrue(cancel.waitForExistence(timeout: 1), "a tap in the field doesn't end editing")
 
-        // Typing filters by title.
-        field.typeText("kips")
-        let kips = app.buttons.matching(NSPredicate(format: "label BEGINSWITH '3 miles from the Kips Bay'")).firstMatch
-        XCTAssertTrue(kips.waitForExistence(timeout: 3))
-        XCTAssertFalse(usual.exists, "\"Usual\" doesn't match \"kips\"")
+        // Typing a long request quickly keeps the layout: the rows decided when typing started
+        // stay, and the field doesn't move (no re-layout per keystroke; phone, 2026-11-11).
+        // (In the simulator the software keyboard comes with the first character, so measure after it.)
+        field.typeText("6 ")
+        sleep(1)   // let the sheet settle on the keyboard
+        let fieldTop = field.frame.minY
+        let rows = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Usual'")).count
+        field.typeText("miles from Kips Bay mostly by the water with a bathroom near mile 3")
+        XCTAssertEqual(field.frame.minY, fieldTop, accuracy: 0.5, "the sheet doesn't move while typing")
+        XCTAssertTrue(usual.exists, "rows don't come and go as the text changes")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Usual'")).count, rows)
 
         // Cancel clears and ends editing.
         cancel.tap()

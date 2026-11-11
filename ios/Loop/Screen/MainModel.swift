@@ -106,7 +106,10 @@ final class MainModel {
     /// The runner is typing in the landing field: the sheet shows matching recent and saved runs.
     var searchMode: Bool { stage == .typing && !demoTyping }
     /// Recent requests and saved runs under the field, filtered by what's typed.
-    var fieldMatches: [RunMatch] { runs.matches(fieldText) }
+    /// While typing: the rows under the field, decided once when typing starts (from the text
+    /// then) and kept, with their space, until it ends. Re-filtering on each keystroke made rows
+    /// come and go and the sheet bounce (phone, 2026-11-11).
+    var fieldMatches: [RunMatch] = []
     /// The logo covering the map at launch.
     var logoShown = false
     /// The landing sheet is up (it rises at launch and slides away on send).
