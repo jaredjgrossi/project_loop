@@ -92,12 +92,16 @@ struct MainScreen: View {
             // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
             // It ignores the keyboard's safe area: its own height grows with the keyboard on the
             // keyboard's curve, so nothing else moves it.
-            LandingSheet(model: model)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .ignoresSafeArea(.all, edges: .bottom)
-                .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(model.landingShown)
-                .accessibilityHidden(!model.landingShown)
+            // It hangs from a clear layer that takes the screen's size, so a sheet taller than the
+            // room the keyboard leaves never resizes this ZStack (that moved the header while typing).
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    LandingSheet(model: model)
+                        .ignoresSafeArea(.all, edges: .bottom)
+                        .ignoresSafeArea(.keyboard)
+                        .allowsHitTesting(model.landingShown)
+                        .accessibilityHidden(!model.landingShown)
+                }
 
             // Edit mode: tapping the map leaves it.
             if model.editMode && model.editing == nil && !model.editingText {
@@ -136,10 +140,6 @@ struct MainScreen: View {
                     .zIndex(10)
             }
         }
-        // The keyboard never shrinks the screen: the landing sheet grows with it on its own, and a
-        // smaller screen would push the header up while typing. Only the rating's note and a
-        // question's answer field need lifting, so the keyboard's safe area counts for those.
-        .ignoresSafeArea(model.rating == nil && model.pendingQuestion == nil ? .keyboard : [], edges: .bottom)
         .background(Palette.mapLand.color)
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
