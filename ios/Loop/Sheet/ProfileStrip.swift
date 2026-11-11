@@ -118,24 +118,26 @@ struct ProfileStrip: View {
     }
 
     private func axis(width w: CGFloat) -> some View {
-        var marks: [(String, Double)] = [("0", 0)]
-        marks += detail.miles.map { ("\($0.mile)", $0.alongMi) }
-        if let t = detail.turnaround { marks.append(("turn", t.alongMi)) }
+        var marks: [(text: String, mile: Double, width: CGFloat, isTurn: Bool)] = [label("0", at: 0)]
+        marks += detail.miles.map { label("\($0.mile)", at: $0.alongMi) }
+        if let t = detail.turnaround { marks.append(label("turn", at: t.alongMi, isTurn: true)) }
+        let placed = StripLabels.layout(marks.map { StripLabels.Label(text: $0.text, x: x($0.mile, w), width: $0.width, isTurn: $0.isTurn) },
+                                        width: w)
         return ZStack(alignment: .topLeading) {
-            ForEach(marks, id: \.0) { label, mile in
-                Text(label)
+            ForEach(placed.filter { !$0.hidden }, id: \.text) { p in
+                Text(p.text)
                     .typeStyle(.label)
                     .foregroundStyle(Palette.inkMuted.color)
                     .fixedSize()
-                    .position(x: labelX(mile, label: label, w), y: 57)
+                    .position(x: p.x, y: 57)
             }
         }
         .frame(width: w, height: height, alignment: .topLeading)
     }
 
-    private func labelX(_ mile: Double, label: String, _ w: CGFloat) -> CGFloat {
-        let half = CGFloat(label.count) * 3.4
-        return min(max(x(mile, w), half), w - half)
+    private func label(_ text: String, at mile: Double, isTurn: Bool = false) -> (text: String, mile: Double, width: CGFloat, isTurn: Bool) {
+        let width = ceil((text as NSString).size(withAttributes: [.font: TypeStyle.label.uiFont]).width) + 1
+        return (text, mile, width, isTurn)
     }
 
     private func scrub(width w: CGFloat) -> some Gesture {
@@ -163,5 +165,59 @@ struct ProfileStrip: View {
         let names = detail.stripRuns(width: 342).map(\.kind.legend)
         let lo = elevationRange.0, hi = elevationRange.1
         return "Route profile by mile, elevation \(detail.profileTrust.text). Between \(CardText.trimmed(lo.rounded())) and \(CardText.trimmed(hi.rounded())) metres up. Turnaround at mile \(detail.turnaround.map { String(format: "%.2f", $0.alongMi) } ?? "none"). \(names.joined(separator: ", ")). Swipe up or down to change the selected mile."
+    }
+}
+
+/// The strip's axis labels (pure, so it's tested without a screen). Mile numbers sit on their
+/// marks, inside the strip. "turn" sits on its tick unless it would cover a mile number: then it
+/// slides clear (up to `maxShift`, so it still reads as the tick's label; the tick keeps the exact
+/// spot), as the map pushes a label off its neighbours. With no room to slide, the mile number it
+/// covers hides.
+enum StripLabels {
+    struct Label {
+        let text: String
+        let x: CGFloat
+        let width: CGFloat
+        let isTurn: Bool
+    }
+
+    struct Placed: Equatable {
+        let text: String
+        var x: CGFloat
+        let width: CGFloat
+        var hidden: Bool
+    }
+
+    static let gap: CGFloat = 4
+    static let maxShift: CGFloat = 24
+
+    static func layout(_ labels: [Label], width w: CGFloat) -> [Placed] {
+        func inside(_ x: CGFloat, _ width: CGFloat) -> CGFloat { min(max(x, width / 2), w - width / 2) }
+        var out = labels.map { Placed(text: $0.text, x: inside($0.x, $0.width), width: $0.width, hidden: false) }
+        guard let ti = labels.firstIndex(where: \.isTurn) else { return out }
+        let turn = out[ti]
+
+        func hits(_ x: CGFloat) -> [Int] {
+            out.indices.filter { i in
+                i != ti && !out[i].hidden && abs(out[i].x - x) < (out[i].width + turn.width) / 2 + gap - 0.01
+            }
+        }
+        let covered = hits(turn.x)
+        guard !covered.isEmpty else { return out }
+
+        // Just clear of each covered label, on either side; the nearest that fits and covers nothing.
+        let candidates = covered.flatMap { i -> [CGFloat] in
+            let reach = (out[i].width + turn.width) / 2 + gap
+            return [out[i].x - reach, out[i].x + reach]
+        }
+        let slid = candidates
+            .filter { abs($0 - turn.x) <= maxShift && $0 - turn.width / 2 >= 0 && $0 + turn.width / 2 <= w && hits($0).isEmpty }
+            .min { abs($0 - turn.x) < abs($1 - turn.x) }
+        if let x = slid {
+            out[ti].x = x
+        } else {
+            for i in covered { out[i].hidden = true }
+        }
+        return out
     }
 }
