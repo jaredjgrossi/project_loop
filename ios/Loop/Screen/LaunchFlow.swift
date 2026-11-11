@@ -129,11 +129,21 @@ extension MainModel {
     func landingSearchHeight(keyboard: CGFloat) -> CGFloat {
         let inset = LandingSheet.bottomInset
         let rows = CGFloat(fieldMatches.count)
-        // The field (measured: the return prompt above it hides while typing), the route-type row
-        // (10 + 44), then the matches; never taller than the space under the header.
-        let content = landingFieldBottom + 54 + (rows > 0 ? 6 + rows * 40 : 0) + 10
+        // The route-type row and matches as measured (until measured: the field, the row at
+        // 10 + 44, 40 pt per match), 10 pt under them; never taller than the space under the header.
+        let listBottom = landingSearchBottom ?? landingFieldBottom + 54 + (rows > 0 ? 6 + rows * 40 : 0)
+        let content = listBottom + 10
         let room = UIScreen.main.bounds.height - headerBottom - 8
         return min(content + (keyboard > 0 ? keyboard : inset), room).rounded()
+    }
+
+    /// The typing list was measured (it moves when the return prompt above the field hides, and
+    /// grows or shrinks with the matches): refit the sheet to it.
+    func searchListMeasured(_ bottom: CGFloat) {
+        guard searchMode else { landingSearchBottom = nil; return }
+        guard abs((landingSearchBottom ?? -1) - bottom) > 0.5 else { return }
+        landingSearchBottom = bottom
+        layoutSearch(animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
     /// While typing, the sheet fits the field and its matches (it changes as the runner types).

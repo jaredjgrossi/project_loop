@@ -86,7 +86,10 @@ struct MainScreen: View {
             // that is taller than the room left (with the keyboard up) never resizes this ZStack;
             // that re-centred everything and moved the header. The app ignores the keyboard's safe
             // area (RootView); each sheet sits on the keyboard from its height.
+            // The layer itself reaches the screen's bottom edge: on the phone, a sheet's own
+            // ignoresSafeArea inside an overlay is not honoured (it sat 34 pt up).
             Color.clear
+                .ignoresSafeArea(.all, edges: .bottom)
                 .overlay(alignment: .bottom) {
                     RouteSheet(model: model)
                         // The rating's note field lifts the sheet onto the keyboard.
@@ -101,6 +104,7 @@ struct MainScreen: View {
             // It ignores the keyboard's safe area: its own height grows with the keyboard on the
             // keyboard's curve, so nothing else moves it.
             Color.clear
+                .ignoresSafeArea(.all, edges: .bottom)
                 .overlay(alignment: .bottom) {
                     LandingSheet(model: model)
                         .ignoresSafeArea(.all, edges: .bottom)

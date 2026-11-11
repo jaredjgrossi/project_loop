@@ -85,6 +85,8 @@ final class MainModel {
     var shapeTouched = false
     /// The request field's bottom in the landing sheet (measured), for the typing height.
     @ObservationIgnored var landingFieldBottom: CGFloat = 74
+    /// While typing: the bottom of the route-type row and matches, measured in the landing sheet.
+    @ObservationIgnored var landingSearchBottom: CGFloat?
     /// The "You" sheet is up.
     var youShown = false
     /// A saved route being renamed (long-press -> Rename).

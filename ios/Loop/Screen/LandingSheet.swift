@@ -78,6 +78,7 @@ struct LandingSheet: View {
                         .padding(.top, 10)
                         MatchList(model: model)
                     }
+                    .background(bottomReader { model.searchListMeasured($0) })
                     .transition(.opacity)
                 }
 
