@@ -82,18 +82,24 @@ struct MainScreen: View {
             }
             #endif
 
-            RouteSheet(model: model)
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
-                // The rating's note field lifts the sheet over the keyboard; otherwise it ignores it.
-                .ignoresSafeArea(model.rating == nil ? .all : .container, edges: .bottom)
-                .allowsHitTesting(model.sheetShown)
+            // The bottom sheets hang from clear layers that take the screen's size, so a sheet
+            // that is taller than the room left (with the keyboard up) never resizes this ZStack;
+            // that re-centred everything and moved the header. The app ignores the keyboard's safe
+            // area (RootView); each sheet sits on the keyboard from its height.
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    RouteSheet(model: model)
+                        // The rating's note field lifts the sheet onto the keyboard.
+                        .padding(.bottom, model.rating != nil ? model.keyboardHeight : 0)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
+                        .offset(y: model.sheetShown ? 0 : Metrics.sheetOpen + 60)
+                        .ignoresSafeArea(.all, edges: .bottom)
+                        .allowsHitTesting(model.sheetShown)
+                }
 
             // The landing sheet: rises at launch, slides away on send. The keyboard lifts it.
             // It ignores the keyboard's safe area: its own height grows with the keyboard on the
             // keyboard's curve, so nothing else moves it.
-            // It hangs from a clear layer that takes the screen's size, so a sheet taller than the
-            // room the keyboard leaves never resizes this ZStack (that moved the header while typing).
             Color.clear
                 .overlay(alignment: .bottom) {
                     LandingSheet(model: model)
@@ -112,19 +118,25 @@ struct MainScreen: View {
             }
 
             // A question from the server, or a plain message (no spinners): at the bottom, like a sheet.
-            Group {
-                if let q = model.pendingQuestion {
-                    QuestionCard(model: model, question: q)
-                        .id(q.id + (q.parseId ?? ""))
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
-                } else if let n = model.liveNotice {
-                    NoticeCard(model: model, notice: n)
-                        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+            Color.clear
+                .overlay(alignment: .bottom) {
+                    Group {
+                        if let q = model.pendingQuestion {
+                            QuestionCard(model: model, question: q)
+                                .id(q.id + (q.parseId ?? ""))
+                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        } else if let n = model.liveNotice {
+                            NoticeCard(model: model, notice: n)
+                                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    // Typing an answer lifts the card onto the keyboard (it sits above the home
+                    // indicator's inset already).
+                    .padding(.bottom, model.pendingQuestion != nil ? max(0, model.keyboardHeight - LandingSheet.bottomInset) : 0)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
+                    .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
+                    .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
                 }
-            }
-            .frame(maxHeight: .infinity, alignment: .bottom)
-            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.pendingQuestion?.id)
-            .animation(reduceMotion ? nil : Motion.sheetSettle, value: model.liveNotice)
 
             if let target = model.editing {
                 EditorPanel(model: model, target: target)

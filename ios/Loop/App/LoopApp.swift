@@ -30,7 +30,11 @@ struct RootView: View {
     var body: some View {
         switch loaded {
         case let .success(data):
+            // No automatic keyboard avoidance anywhere: on the phone it shifted the whole screen to
+            // keep the focused field in view. Sheets that sit on the keyboard place themselves
+            // from the keyboard's height (MainModel.keyboardHeight).
             MainScreen(data: data)
+                .ignoresSafeArea(.keyboard)
         case let .failure(error):
             Text("Couldn't read the saved route: \(error.localizedDescription)")
                 .typeStyle(.body)
