@@ -42,9 +42,9 @@
    {
     "label": "rectangle 1.5:1, -+",
     "kind": "loop",
-    "distance_m": 6214,
-    "score": 64.93,
-    "fingerprint": "73bc664db745"
+    "distance_m": 6382,
+    "score": 64.47,
+    "fingerprint": "eb638422b137"
    }
   ],
   "kips-bay|6|zigzags": [
@@ -58,9 +58,9 @@
    {
     "label": "rectangle 1.5:1, +-",
     "kind": "loop",
-    "distance_m": 9630,
-    "score": 60.96,
-    "fingerprint": "26c662aca341"
+    "distance_m": 9734,
+    "score": 61.0,
+    "fingerprint": "34019dfacfe2"
    },
    {
     "label": "rectangle 2.5:1, +-",
@@ -102,18 +102,18 @@
     "fingerprint": "8af29368f9c9"
    },
    {
-    "label": "out-and-back on unnamed waterfront path and beyond, heading 104 degrees",
-    "kind": "out_and_back",
-    "distance_m": 6293,
-    "score": 57.86,
-    "fingerprint": "bef86c15cf43"
+    "label": "rectangle 1:1, -+",
+    "kind": "loop",
+    "distance_m": 6465,
+    "score": 63.09,
+    "fingerprint": "b8cc9f7b551d"
    },
    {
-    "label": "loop on unnamed waterfront path and beyond, heading 104 degrees",
+    "label": "rectangle 1.5:1 (short side along grid), +-",
     "kind": "loop",
-    "distance_m": 6557,
-    "score": 57.07,
-    "fingerprint": "9d4b2f80a42f"
+    "distance_m": 6562,
+    "score": 59.08,
+    "fingerprint": "5c2e237a866a"
    }
   ],
   "astor-place|6|zigzags": [
@@ -178,11 +178,11 @@
     "fingerprint": "c9dae1ffd5ed"
    },
    {
-    "label": "round trip, seed 6",
+    "label": "rectangle 1:1, --",
     "kind": "loop",
-    "distance_m": 6551,
-    "score": 70.61,
-    "fingerprint": "6b415629bf81"
+    "distance_m": 6220,
+    "score": 70.73,
+    "fingerprint": "0f181abc7445"
    }
   ],
   "upper-east-side|6|zigzags": [
@@ -194,18 +194,18 @@
     "fingerprint": "da5fc8b2f967"
    },
    {
-    "label": "loop on the waterfront, heading 15 degrees",
+    "label": "out-and-back on Bobby Wagner Walk and beyond, heading 31 degrees",
     "kind": "out_and_back",
-    "distance_m": 9739,
-    "score": 77.49,
-    "fingerprint": "72f656b77ecb"
+    "distance_m": 9814,
+    "score": 77.94,
+    "fingerprint": "cdf785db74a7"
    },
    {
-    "label": "rectangle 1.5:1 (short side along grid), +-",
+    "label": "rectangle 1:1, +-",
     "kind": "loop",
-    "distance_m": 9776,
-    "score": 67.91,
-    "fingerprint": "0ada730ccc22"
+    "distance_m": 9807,
+    "score": 71.51,
+    "fingerprint": "bb52d0461ec6"
    }
   ],
   "williamsburg|4|zigzags": [
@@ -263,18 +263,18 @@
     "fingerprint": "4d18b72fe126"
    },
    {
+    "label": "out-and-back on Promenade of Industry and beyond, heading 170 degrees",
+    "kind": "out_and_back",
+    "distance_m": 4873,
+    "score": 71.19,
+    "fingerprint": "a643bcffc3ac"
+   },
+   {
     "label": "round trip, seed 2",
     "kind": "loop",
     "distance_m": 4656,
     "score": 67.19,
     "fingerprint": "91d54d106211"
-   },
-   {
-    "label": "out-and-back, heading 160 degrees",
-    "kind": "out_and_back",
-    "distance_m": 4776,
-    "score": 65.57,
-    "fingerprint": "fd3ffe56b6df"
    }
   ],
   "grand-concourse|4|zigzags": [
@@ -293,11 +293,11 @@
     "fingerprint": "c52a4ac3f21f"
    },
    {
-    "label": "loop on the waterfront, heading 270 degrees",
+    "label": "rectangle 2.5:1, +-",
     "kind": "loop",
-    "distance_m": 6584,
-    "score": 54.18,
-    "fingerprint": "fc3059ba0d85"
+    "distance_m": 6124,
+    "score": 59.71,
+    "fingerprint": "e7a5ab139401"
    }
   ],
   "st-george|3|zigzags": [
@@ -339,11 +339,11 @@
     "fingerprint": "7fff50773ed0"
    },
    {
-    "label": "out-and-back, heading 320 degrees",
-    "kind": "out_and_back",
-    "distance_m": 4776,
-    "score": 44.24,
-    "fingerprint": "3c4a01e38435"
+    "label": "rectangle 1.5:1, +-",
+    "kind": "loop",
+    "distance_m": 5014,
+    "score": 39.82,
+    "fingerprint": "6334044b2e53"
    }
   ],
   "kips-bay|3|waits": [
@@ -394,6 +394,13 @@
   ],
   "kips-bay|6|waits": [
    {
+    "label": "loop on the waterfront, heading 3 degrees",
+    "kind": "out_and_back",
+    "distance_m": 9270,
+    "score": 69.14,
+    "fingerprint": "f8071733ae44"
+   },
+   {
     "label": "rectangle 1.5:1 (short side along grid), +-",
     "kind": "loop",
     "distance_m": 9841,
@@ -401,18 +408,11 @@
     "fingerprint": "860cbe80eae2"
    },
    {
-    "label": "rectangle 1:1, +-",
-    "kind": "loop",
-    "distance_m": 9816,
-    "score": 59.58,
-    "fingerprint": "7f3ba95572b8"
-   },
-   {
-    "label": "out-and-back on East River Esplanade and beyond, heading 132 degrees",
+    "label": "out-and-back on the waterfront, heading 360 degrees",
     "kind": "out_and_back",
-    "distance_m": 9729,
-    "score": 58.48,
-    "fingerprint": "2d60bb383488"
+    "distance_m": 9839,
+    "score": 63.87,
+    "fingerprint": "6e41315a9545"
    }
   ],
   "flatiron|3|waits": [
@@ -454,11 +454,11 @@
     "fingerprint": "e3ebdd19358b"
    },
    {
-    "label": "rectangle 1.5:1, --",
+    "label": "rectangle 1:1, -+",
     "kind": "loop",
-    "distance_m": 6369,
-    "score": 54.85,
-    "fingerprint": "5dc0c48d7e0b"
+    "distance_m": 6445,
+    "score": 60.34,
+    "fingerprint": "e96ba883bd02"
    }
   ],
   "astor-place|6|waits": [
@@ -523,11 +523,11 @@
     "fingerprint": "12a7a8ca3ed7"
    },
    {
-    "label": "rectangle 1.5:1 (short side along grid), +-",
+    "label": "loop on a route you run, heading 344 degrees",
     "kind": "loop",
-    "distance_m": 6563,
-    "score": 77.14,
-    "fingerprint": "7ec8c7c2f970"
+    "distance_m": 6313,
+    "score": 77.65,
+    "fingerprint": "9cfc04a393b9"
    }
   ],
   "upper-east-side|6|waits": [
@@ -546,11 +546,11 @@
     "fingerprint": "a672e0f842d8"
    },
    {
-    "label": "rectangle 2.5:1 (short side along grid), +-",
+    "label": "rectangle 1.5:1, +-",
     "kind": "loop",
-    "distance_m": 9737,
-    "score": 71.61,
-    "fingerprint": "f4748b9cce05"
+    "distance_m": 9317,
+    "score": 77.3,
+    "fingerprint": "2239a7bdd43b"
    }
   ],
   "williamsburg|4|waits": [
@@ -608,18 +608,18 @@
     "fingerprint": "4d18b72fe126"
    },
    {
-    "label": "out-and-back, heading 115 degrees",
+    "label": "out-and-back on Promenade of Industry and beyond, heading 170 degrees",
     "kind": "out_and_back",
-    "distance_m": 4861,
-    "score": 72.44,
-    "fingerprint": "cb6449911647"
+    "distance_m": 4873,
+    "score": 78.91,
+    "fingerprint": "a643bcffc3ac"
    },
    {
-    "label": "round trip, seed 2",
+    "label": "loop on unnamed waterfront path and beyond, heading 102 degrees",
     "kind": "loop",
-    "distance_m": 4736,
-    "score": 71.14,
-    "fingerprint": "20ea18c7ffc6"
+    "distance_m": 4791,
+    "score": 71.35,
+    "fingerprint": "2a073f3d6af7"
    }
   ],
   "grand-concourse|4|waits": [
@@ -640,9 +640,9 @@
    {
     "label": "rectangle 2.5:1, +-",
     "kind": "loop",
-    "distance_m": 6414,
-    "score": 59.99,
-    "fingerprint": "53aee1d1f152"
+    "distance_m": 6516,
+    "score": 58.93,
+    "fingerprint": "f7f60af752f2"
    }
   ],
   "st-george|3|waits": [
@@ -684,11 +684,11 @@
     "fingerprint": "a09feaa4be24"
    },
    {
-    "label": "round trip, seed 4",
+    "label": "rectangle 1:1, ++",
     "kind": "loop",
-    "distance_m": 4752,
-    "score": 42.98,
-    "fingerprint": "071f9a7fa91d"
+    "distance_m": 4900,
+    "score": 44.7,
+    "fingerprint": "3f18ba8cd749"
    }
   ]
  }
