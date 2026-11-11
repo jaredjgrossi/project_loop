@@ -144,9 +144,16 @@ CREATE TABLE IF NOT EXISTS route_feedback (
     issues         text[]      NOT NULL DEFAULT '{}',
     stretch_issues jsonb       NOT NULL DEFAULT '[]',
     note           text        CHECK (char_length(note) <= 500),
-    CHECK ((ran_it AND rating IS NOT NULL) OR (NOT ran_it AND rating IS NULL))
+    -- The iPhone app (decision 043): one row per install and route, updated when the rating changes.
+    install_id     text,
+    verdict        text        CHECK (verdict IS NULL OR verdict IN ('good', 'not_for_me')),
+    reasons        text[]      NOT NULL DEFAULT '{}',   -- keys: crowded, lights, water, safety, other
+    updated_at     timestamptz,
+    CONSTRAINT route_feedback_ran_check CHECK ((rating IS NULL AND verdict IS NULL) OR ran_it)
 );
 CREATE INDEX IF NOT EXISTS route_feedback_route_idx ON route_feedback (route_id);
+CREATE UNIQUE INDEX IF NOT EXISTS route_feedback_route_install_idx ON route_feedback (route_id, install_id)
+    WHERE install_id IS NOT NULL;
 
 -- "Crowded" reports, for the route or a stretch, with the crowd level shown there and the hour run (decision 016).
 -- Kept to calibrate crowd levels later. No location beyond the stretch's name and index.

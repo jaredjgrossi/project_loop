@@ -491,6 +491,44 @@ def one_per_name(matches: list[PlaceMatch]) -> list[PlaceMatch]:
     keep = {id(m) for m in best.values()}
     return [m for m in matches if m.kind in LINE_KINDS or id(m) in keep]
 
+LONG_STREET_M = 2500  # a street this long, given alone, can mean very different spots ...
+CHOICE_M = 800  # ... when the runner (or the other named place) is this far from it: then Loop asks where on it
+
+
+def street_crossings(street: PlaceMatch, near: tuple[float, float], limit: int = 4, conn=None) -> list[PlaceMatch]:
+    """Where on a long street a runner means, when the choice matters (phone test, 2026-11-10): its crossings nearest
+    `near`, at most `limit`, about 400 m apart. Empty when the street is short or `near` is close to it: the street's
+    point nearest `near` is then the obvious one."""
+    if street.kind not in ("street", "path"):
+        return []
+    conn, own = _connect(conn)
+    try:
+        row = conn.execute(
+            """SELECT sum(ST_Length(outline::geography)),
+                      min(ST_Distance(outline::geography, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326)::geography)),
+                      array_agg(DISTINCT norm)
+               FROM places WHERE id = ANY(%(ids)s)""", {"ids": list(street.ids), "lat": near[0], "lon": near[1]}).fetchone()
+        length, away, norms = row
+        if not length or length < LONG_STREET_M or (away or 0) < CHOICE_M:
+            return []
+        rows = conn.execute(
+            f"""SELECT {_ROW}, ST_Distance(geom::geography, ST_SetSRID(ST_Point(%(lon)s, %(lat)s), 4326)::geography) d
+                FROM places WHERE kind = 'crossing' AND street_norms && %(norms)s::text[] AND borough = %(b)s
+                ORDER BY d LIMIT 40""", {"norms": norms, "lat": near[0], "lon": near[1], "b": street.borough}).fetchall()
+    finally:
+        if own:
+            conn.close()
+    out: list[PlaceMatch] = []
+    for r in rows:
+        m = PlaceMatch(name=r[1], kind=r[2], borough=r[3], lat=r[8], lon=r[9], matched=r[1], source=r[10],
+                       ids=(r[0],), distance_m=round(r[-1], 1))
+        if all(_meters((m.lat, m.lon), (o.lat, o.lon)) >= 400 for o in out):
+            out.append(m)
+        if len(out) == limit:
+            break
+    return out
+
+
 def borough_at(lat: float, lon: float, conn=None) -> str | None:
     """The borough holding the point, or None outside New York City."""
     conn, own = _connect(conn)

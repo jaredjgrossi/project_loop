@@ -86,13 +86,13 @@ def reasons(case_id: str, output: dict) -> list[str]:
 
 # ---- the fixtures ----------------------------------------------------------------------------------------------
 
-def test_fifty_one_cases_with_the_docs_coverage():  # P50 joined for decision 035
-    assert len(CASES) == 51 and len(BY_ID) == 51
-    assert [c["seq"] for c in CASES] == list(range(1, 52))
-    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 12, "E": 4, "F": 7, "G": 6,
+def test_fifty_four_cases_with_the_docs_coverage():  # P50 joined for decision 035, P51-P53 for decision 043
+    assert len(CASES) == 54 and len(BY_ID) == 54
+    assert [c["seq"] for c in CASES] == list(range(1, 55))
+    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 15, "E": 4, "F": 7, "G": 6,
                                                      "H": 5, "I": 3, "J": 3}
-    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 13  # P16, P46 parse since R19
-    assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 16
+    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 12  # P16, P46 parse since R19; P20 since 043
+    assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 17
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])
@@ -142,8 +142,8 @@ def test_request_follows_the_contract_and_drops_human_labels():
 
 def test_stub_fails_every_case():
     rows = runner.run(runner.load_parser("evals.parse.stub:parse"))
-    assert len(rows) == 51 and not any(g.passed for _, g, _ in rows)
-    assert "passed 0/51" in runner.table(rows)
+    assert len(rows) == 54 and not any(g.passed for _, g, _ in rows)
+    assert "passed 0/54" in runner.table(rows)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])
@@ -214,9 +214,12 @@ def test_question_checks():
     out = oracle(BY_ID["R06"])
     out["trace"]["routing_calls"] = 1
     assert any("routing call" in r for r in reasons("R06", out))
-    out = oracle(BY_ID["P20"])
+    case = copy.deepcopy(BY_ID["R06"])  # a question that must offer at least one option
+    case["expect"]["question"] = {k: v for k, v in case["expect"]["question"].items() if k != "options"} | {
+        "min_options": 1}
+    out = oracle(case)
     out["parsed"]["question"]["options"] = []
-    assert any("at least 1" in r for r in reasons("P20", out))
+    assert any("at least 1" in r for r in grade(case, out).reasons)
 
 
 def test_must_nots():

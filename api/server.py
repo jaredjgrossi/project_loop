@@ -15,6 +15,7 @@ app's source. The Claude key never leaves the server. Request bodies aren't logg
 
 import asyncio
 import os
+import re
 import secrets
 import threading
 from collections import OrderedDict
@@ -35,6 +36,7 @@ from api.engine import (BadStart, Engine, EngineQuestion, EngineUnavailable, bef
                         new_route_id, start_for)
 from api.parse import Context, DbPlaces, answer_overrides, parse, parsed_for_constraints, resume
 from api.pending import Pending, PendingStore
+from api.feedback import AppFeedback, PgFeedbackStore
 from api.saved_routes import PgRouteStore, stored_request
 
 MAX_TEXT = 500  # characters; a run request is a sentence or two
@@ -76,16 +78,18 @@ class SavedPlace(_Loose):
 class Profile(_Loose):
     usual_distance_mi: float | None = None
     usual_time: str | None = None
-    usual_shape: Literal["any", "loop", "out_and_back"] | None = None  # when the runner says no shape (source usual)
+    usual_shape: Literal["any", "loop", "out_and_back", "one_way"] | None = None  # when no shape is said (usual)
     saved_places: list[SavedPlace] = []
 
 
 class RecentRoute(_Loose):
     id: str
     date: str
-    name: str
+    name: str  # for a saved favorite, the runner's own name for it ("the Stuy loop")
     distance_mi: float | None = None
     times_run: int | None = None
+    saved: bool = False  # a favorite the runner saved (decision 043)
+    ran_count: int | None = None  # how often they ran it; "my usual" is the most run
 
 
 class Answer(_Loose):
@@ -100,7 +104,9 @@ class RunRequest(_Loose):
     text: str | None = Field(default=None, max_length=MAX_TEXT)
     answer: Answer | None = None
     constraints: dict | None = None
-    route_id: str | None = None  # with constraints: the build the chip edit started from (a shape edit reuses it)
+    route_id: str | None = None  # with constraints: the build a chip edit started from; with mode exact: the route
+    mode: Literal["exact"] | None = None  # "run again": the stored route's own line, read for now (decision 043)
+    shape: Literal["any", "loop", "out_and_back", "one_way"] | None = None  # the app's route type: beats the text
     client: ClientInfo
     profile: Profile = Profile()
     recent_routes: list[RecentRoute] = []
@@ -108,6 +114,10 @@ class RunRequest(_Loose):
     @model_validator(mode="after")
     def _exactly_one(self) -> "RunRequest":
         given = [k for k in ("text", "answer", "constraints") if getattr(self, k) is not None]
+        if self.mode == "exact":
+            if given or not self.route_id:
+                raise ValueError("run again takes route_id alone, without text, answer or constraints")
+            return self
         if len(given) != 1:
             raise ValueError("exactly one of text, answer or constraints")
         if self.text is not None and not self.text.strip():
@@ -115,8 +125,21 @@ class RunRequest(_Loose):
         return self
 
     def context_request(self) -> dict:
-        """The shape parse() reads: text, client, profile and recent routes."""
-        return self.model_dump(mode="json", include={"text", "client", "profile", "recent_routes"})
+        """The shape parse() reads: text, the app's route type, client, profile and recent routes."""
+        return self.model_dump(mode="json", include={"text", "shape", "client", "profile", "recent_routes"})
+
+
+INSTALL_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")  # a random id per app install (a UUID), never a person's name
+
+
+def install_id_of(x_loop_install: str | None = Header(default=None)) -> str | None:
+    """The `X-Loop-Install` header (decision 043): groups one install's ratings without an account. The Phase 4
+    per-user key. Absent: None. Malformed: 400."""
+    if x_loop_install is None:
+        return None
+    if not INSTALL_ID.match(x_loop_install):
+        raise HTTPException(status_code=400, detail="X-Loop-Install must be 8-64 letters, digits or dashes")
+    return x_loop_install
 
 
 # ---- events ------------------------------------------------------------------------------------------------------
@@ -164,7 +187,8 @@ def _health_checks() -> dict:
 
 def create_app(*, token: str | None = None, parse_fn: Callable | None = None, places: Callable | None = None,
                engine: Engine | None = None, store: PendingStore | None = None,
-               route_store=None, health_fn: Callable[[], dict] = _health_checks, warm: bool = True) -> FastAPI:
+               route_store=None, feedback_store=None, health_fn: Callable[[], dict] = _health_checks,
+               warm: bool = True) -> FastAPI:
     """The app. Tests pass fakes; `uvicorn api.server:app` uses the real parser, places table and engine."""
     from api.env import load_env
 
@@ -177,6 +201,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
     engine = Engine() if engine is None else engine
     store = PendingStore() if store is None else store
     route_store = PgRouteStore() if route_store is None else route_store
+    feedbacks = PgFeedbackStore() if feedback_store is None else feedback_store
     routes: OrderedDict[str, dict] = OrderedDict()
     routes_lock = threading.Lock()
 
@@ -301,7 +326,67 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         event["summary"]["distance_mi"] = final["routes"][0]["distance"]["value"]
         return event
 
-    async def stream(req: RunRequest) -> AsyncIterator[ServerSentEvent]:
+    def stored_route(route_id: str) -> tuple[dict, dict] | None:
+        """A stored build's `final` and constraints, by its id or one of its routes' ids."""
+        build = route_id.partition(".")[0]
+        with routes_lock:
+            final = routes.get(build)
+        loaded = route_store.load_with_constraints(route_id)
+        if loaded is None:
+            return (final, {}) if final is not None else None
+        return final or loaded[0], loaded[1]
+
+    def run_again_constraints(stored: dict, past, kept: dict) -> dict:
+        """The stored request, for now (decision 043): today's date and the time it's sent, so crowds are read for
+        now; the stored route's own length. Code-filled where the stored request can't stand on its own."""
+        from api.geometry import line_length_m
+        from api.parse import Context
+        now = Context.from_request(kept).now
+        miles = round(line_length_m([list(c) for c in past.coords]) / 1609.344, 2)
+        keep = {k: v for k, v in (stored or {}).items()
+                if k in RunConstraints.model_fields and k not in ("spans", "sources", "start_time", "start_date",
+                                                                  "planned", "reuse_route_id", "reverse")}
+        out = keep | {"distance_mi": max(miles, 0.5), "start_time": now.strftime("%H:%M"),
+                      "start_date": now.date().isoformat()}
+        try:
+            return RunConstraints.model_validate(out).model_dump(mode="json", exclude_defaults=True) | {
+                "shape": out.get("shape", "any")}
+        except ValidationError:
+            return {"use_my_location": True, "distance_mi": max(miles, 0.5), "start_time": out["start_time"],
+                    "start_date": out["start_date"], "shape": "any"}
+
+    async def run_again(req: RunRequest, install: str | None) -> AsyncIterator[ServerSentEvent]:
+        """`{route_id, mode: "exact"}`: the stored route's own line, re-read for now (decision 043): `parsed` (the
+        stored request's chips), `final`, `done`. No routing: the geometry is exactly what was run."""
+        from api.parse import Context, parsed_for_constraints
+        from api.past_routes import from_final
+        kept = req.context_request()
+        found = await run_in_threadpool(stored_route, req.route_id)
+        past = from_final(req.route_id, found[0]) if found else None
+        if past is None or not hasattr(engine, "run_again"):
+            yield _error("route_not_found")
+            return
+        constraints = run_again_constraints(found[1], past, kept)
+        parsed = parsed_for_constraints(constraints, Context.from_request(kept), None)
+        yield _event(parsed)
+        route_id = new_route_id()
+        try:
+            final = await run_in_threadpool(engine.run_again, RunConstraints.model_validate(constraints), past,
+                                            route_id)
+        except EngineUnavailable:
+            yield _error("engine_unavailable")
+            return
+        keep_route(final)
+        await run_in_threadpool(route_store.save, route_id, stored_request(kept, "again", parsed["parse_id"], install),
+                                constraints, final)
+        yield _event(final)
+        yield _event(DONE)
+
+    async def stream(req: RunRequest, install: str | None = None) -> AsyncIterator[ServerSentEvent]:
+        if req.mode == "exact":
+            async for ev in run_again(req, install):
+                yield ev
+            return
         kind = "text" if req.text is not None else "answer" if req.answer is not None else "constraints"
         step = {"text": from_text, "answer": from_answer, "constraints": from_constraints}[kind]
         try:
@@ -358,7 +443,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                 # Stored before the phone gets final, so the id it holds always works, after a restart too.
                 # No text and no location (decision 030); a few ms for the insert.
                 stored = {k: v for k, v in parsed["constraints"].items() if k != "spans"}  # spans are the runner's words
-                route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"]), stored, final)
+                route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"], install), stored, final)
                 send(final)
                 if rc.planned is not None:  # D6, step 11: the second run, built for its own day, after the first
                     send(build_planned(rc, stored.get("planned") or {}, kept, location, saved))
@@ -393,24 +478,38 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         return await request.body()
 
     @app.post("/v1/runs", response_class=EventSourceResponse, dependencies=[Depends(check_token)])
-    async def runs(raw: bytes = Depends(raw_body)) -> AsyncIterator[ServerSentEvent]:
+    async def runs(raw: bytes = Depends(raw_body),
+                   install: str | None = Depends(install_id_of)) -> AsyncIterator[ServerSentEvent]:
         try:
             req = RunRequest.model_validate_json(raw)
         except ValidationError:  # bad JSON or a bad shape: the stream says so, as any error
             yield _error("bad_request")
             return
-        async for ev in stream(req):
+        async for ev in stream(req, install):
             yield ev
 
-    @app.get("/v1/routes/{route_id}", dependencies=[Depends(check_token)])
+    @app.get("/v1/routes/{route_id}", dependencies=[Depends(check_token), Depends(install_id_of)])
     def get_route(route_id: str) -> dict:
-        with routes_lock:
-            found = routes.get(route_id)
-        if found is None:
-            found = route_store.load(route_id)  # an older build, or one from before a restart
+        """A build's `final`, by the build's id or one of its routes' ids (r_xxxxxxxx.N), with every route's full
+        line. Builds are kept in saved_routes for good (decision 043), so a saved or run route stays fetchable."""
+        found = stored_route(route_id)
         if found is None:
             raise HTTPException(status_code=404, detail="no such route")
-        return found
+        return found[0]
+
+    @app.post("/v1/routes/{route_id}/feedback", dependencies=[Depends(check_token)])
+    def feedback(route_id: str, body: AppFeedback, install: str | None = Depends(install_id_of)) -> dict:
+        """'I ran it' and the rating (decision 043). One row per install and route: a later post updates it."""
+        if install is None:
+            raise HTTPException(status_code=400, detail="feedback needs the X-Loop-Install header")
+        found = stored_route(route_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such route")
+        try:
+            saved = feedbacks.save(route_id if "." in route_id else f"{route_id}.1", install, body, found[0], found[1])
+        except LookupError:
+            raise HTTPException(status_code=404, detail="no such route") from None
+        return {"v": 1, "route_id": route_id, **body.model_dump(mode="json"), **saved}
 
     @app.get("/v1/health")
     def health() -> dict:

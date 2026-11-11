@@ -58,7 +58,7 @@ New: `start_place`, `end_place`, `via_places` (place refs: places like `place:"P
 
 **Places** (D2, D3)
 - **R12. Lookup, never invention.** Claude normalizes the name ("penn" → "Penn Station"). The places table (built from our OSM extract) resolves it. One match: use it, trust listed. Several: pick by borough (R19), otherwise ask with the options. None: ask for an address. Claude never outputs coordinates.
-- **R13. "The park"** means the nearest major park within about 1 mi, shown on the chip. If there's none, ask "Which park?". The options are only places to run (phone test, 2026-11-09; decision 041):
+- **R13. "The park"** means the nearest major park within about 1 mi, shown on the chip. If there's none, take the runnable place that clearly wins (the only one that fits the run, or the nearest when the next is at least twice as far; decision 043), else ask "Which park?". The options are only places to run (phone test, 2026-11-09; decision 041):
   - major parks (10 ha and up, plus Battery Park);
   - named waterfront paths at least 2 km long, at least half of them within 60 m of the shore.
 
@@ -164,7 +164,7 @@ ASK (start, places) · "Loop only covers New York City. Where should it start?"
 Must not: start in New Jersey.
 
 **P20** · C1 · `start at the park, 3 mi`
-ASK (start, places) · "Which park?" with the nearest runnable places as options (no major park within about 1 mi of Kips Bay, R13): East River Esplanade · 0.4 mi first, then parks past a mile (Central Park · 1.5 mi)
+PARSE · `start_place=place:"East River Esplanade" (said "the park", R13)` · `distance_mi=3 (said)`. No major park within about 1 mi of Kips Bay; of the runnable places the esplanade (0.4 mi) clearly wins over the next (1.2 mi), so no question (decision 043; before it, ASK "Which park?").
 
 **P46** · C1 · `run to work, 5 mi, office is 120 broadway` · [lookup]
 PARSE · `end_place=address:"120 Broadway" (Manhattan, said)` · `distance_mi=5 (said)` · `use_my_location (default)`
@@ -173,6 +173,15 @@ The route starts in Manhattan, so R19 picks the Manhattan address. The chip name
 **P50** · C2 · `Loop of Prospect Park from Grand Army Plaza` *(Jared, 2026-11-09)* · [lookup] [engine]
 PARSE · `start_place=place:"Grand Army Plaza" (Brooklyn, said)` · `via_places=[place:"Prospect Park", around] (said)` · `scenery=park_or_water (said)`
 Must not: use the usual 3.1 mi; the lap sets the length (R20). End to end, a full lap of the Prospect Park drive and back to the plaza.
+
+**P51** · C1 · `west 71st st` *(Jared)* · [lookup]
+PARSE · `start_place=place:"W 71st St" (Manhattan, said)` · `distance_mi=3.1 (usual)`. A street given alone is its point nearest the runner, labeled listed (decision 043).
+
+**P52** · C1 · `W. 71st Street, 4 mi` · [lookup]
+PARSE · `start_place=place:"W 71st St" (Manhattan, said)` · `distance_mi=4 (said)`
+
+**P53** · C1 · `71st and Columbus, 5k` · [lookup]
+PARSE · `start_place=place:"Columbus Ave & W 71st St" (Manhattan, said)` · `distance_mi=3.11 (said)`
 
 ### E. Avoid
 **R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup] [engine]
@@ -282,16 +291,16 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | A. Bare and vague | 4 | 1 | 2 |
 | B. Distance and units | 4 | 1 | 0 |
 | C. Time | 3 | 0 | 1 |
-| D. Start, end and places | 12 | 5 | 4 |
+| D. Start, end and places | 15 | 4 | 5 |
 | E. Avoid | 4 | 0 | 1 |
 | F. Preferences | 7 | 0 | 0 |
 | G. Training, Exploring and novelty | 6 | 2 | 3 |
 | H. Past routes | 5 | 2 | 5 |
 | I. Multi-part and contradictory | 3 | 0 | 0 |
 | J. Impossible and feasibility | 3 | 2 | 0 |
-| **Total** | **51** | **13** | **16** |
+| **Total** | **54** | **12** | **17** |
 
-The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035). Each diary phrasing replaces the synthetic case closest to it.
+The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
 
 Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, P40, P41 and P43. Each was covered by a real phrasing or another case, or was changed by a decision.
 

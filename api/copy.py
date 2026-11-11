@@ -94,6 +94,7 @@ TEMPLATES: dict[str, str] = {
     "chip.shape.loop": "Loop",
     "chip.shape.out_and_back": "Out and back",
     "chip.shape.any": "Loop or out and back",
+    "chip.shape.one_way": "One way",
     "chip.mode.training": "Training",
     "chip.mode.exploring": "Exploring",
     "chip.lights.waits": "Fewer lights",
@@ -131,6 +132,8 @@ TEMPLATES: dict[str, str] = {
     "question.distance.longer": "How much longer?",
     "question.place.which": "Which {name}?",
     "question.place.which_park": "Which park?",
+    "question.place.where_on": "Where on {name}?",
+    "question.end.where": "Where do you want to end?",
     "question.place.not_found": "Couldn't find {name}. What's the address?",
     "question.place.outside_nyc": "Loop only covers New York City. Where should it start?",
     "question.place.outside_nyc_end": "Loop only covers New York City. Where should it end?",
@@ -149,6 +152,7 @@ TEMPLATES: dict[str, str] = {
     "option.plus_miles": "+{miles} mi",
     "option.place": "{name}, {borough}",
     "option.place.distance": "{name} · {miles} mi",
+    "option.crossing": "{name}",
     "option.side": "{side} side ({at})",
     "option.borough": "{borough}",
     "option.route": "{weekday} · {name}",
@@ -183,6 +187,7 @@ TEMPLATES: dict[str, str] = {
     "error.engine_unavailable": "Can't build routes right now. Try again in a minute.",
     "error.bad_request": "Something was wrong with that request.",
     "error.expired": "That question timed out, so the request is being sent again.",
+    "error.route_not_found": "Couldn't find that route. It may be from before Loop kept routes.",
 }
 
 

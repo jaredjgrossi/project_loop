@@ -31,12 +31,13 @@ CREATE INDEX IF NOT EXISTS saved_routes_created_at_idx ON saved_routes (created_
 """
 
 
-def stored_request(request: dict, kind: str, parse_id: str | None) -> dict:
-    """What saved_routes keeps of a request: its version, kind, parse id and clock. Nothing the runner typed, and
-    nothing from where they are."""
+def stored_request(request: dict, kind: str, parse_id: str | None, install_id: str | None = None) -> dict:
+    """What saved_routes keeps of a request: its version, kind, parse id and clock, and the app install's random id
+    (decision 043). Nothing the runner typed, and nothing from where they are."""
     client = request.get("client") or {}
-    return {"v": request.get("v", 1), "kind": kind, "parse_id": parse_id,
-            "client": {"now": client.get("now"), "tz": client.get("tz")}}
+    out = {"v": request.get("v", 1), "kind": kind, "parse_id": parse_id,
+           "client": {"now": client.get("now"), "tz": client.get("tz")}}
+    return out | ({"install_id": install_id} if install_id else {})
 
 
 class PgRouteStore:
@@ -76,10 +77,17 @@ class PgRouteStore:
             return False
 
     def load(self, route_id: str) -> dict | None:
+        """A build's `final`, by its id or one of its routes' ids (r_xxxxxxxx.N). Rows are never deleted, so a
+        route a runner saved or ran stays fetchable (decision 043)."""
+        found = self.load_with_constraints(route_id)
+        return found[0] if found else None
+
+    def load_with_constraints(self, route_id: str) -> tuple[dict, dict] | None:
         try:
             with self._connect() as conn:
-                row = conn.execute("SELECT final FROM saved_routes WHERE route_id = %s", (route_id,)).fetchone()
-            return row[0] if row else None
+                row = conn.execute("SELECT final, constraints FROM saved_routes WHERE route_id = %s",
+                                   (route_id.partition(".")[0],)).fetchone()
+            return (row[0], row[1]) if row else None
         except psycopg.Error as exc:
             self._warn(exc)
             return None

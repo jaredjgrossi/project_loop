@@ -21,6 +21,8 @@ Exactly one of `text`, `answer` or `constraints`.
   "answer": {"parse_id": "p_8f2c", "question_id": "q_1", "option_id": "a", "text": null},
   "constraints": { "...": "RunConstraints, from an earlier parsed event, with edits" },
   "route_id": "r_ab12cd34",
+  "mode": "exact",
+  "shape": "out_and_back",
   "client": {
     "now": "2026-11-03T06:40:00-05:00",
     "tz": "America/New_York",
@@ -33,15 +35,42 @@ Exactly one of `text`, `answer` or `constraints`.
     "saved_places": [{"id": "home", "label": "Home", "lat": 40.7438, "lon": -73.9799}]
   },
   "recent_routes": [
-    {"id": "rt_a", "date": "2026-10-27", "name": "East River esplanade out-and-back", "distance_mi": 3.0, "times_run": 5}
+    {"id": "rt_a", "date": "2026-10-27", "name": "East River esplanade out-and-back", "distance_mi": 3.0, "ran_count": 2},
+    {"id": "rt_b", "date": "2026-11-02", "name": "the Stuy loop", "distance_mi": 4.0, "saved": true, "ran_count": 7}
   ]
 }
 ```
+Headers: `Authorization: Bearer <Loop token>`, and `X-Loop-Install: <a random id per app install>` (decision 043).
 - `location` is null when location is off.
 - `profile` and `recent_routes` live on the phone (minimal storage, no accounts) and are sent with every request.
-- `profile.usual_shape` (2026-11-10): `"any"`, `"loop"` or `"out_and_back"`, optional.
-  - It applies when the runner says no shape: the shape chip shows it with `source: "usual"`.
+- `shape` (decision 043): the route type the runner picked in the app before sending: `"any"`, `"loop"`,
+  `"out_and_back"` or `"one_way"`, optional.
+  - It beats the words: "3 mile loop" sent with `shape: "out_and_back"` builds out-and-backs. The shape chip shows
+    it with `source: "said"` and `span: null`, since it isn't in the sentence.
+  - `one_way` means the run ends somewhere else, so it needs an end place. If the text names none, the `parsed`
+    event asks `{"about": "end", "from": "parser", "text": "Where do you want to end?", "allow_text": true}`.
+    Answer it with a place name, like any question. With an end, the shape chip reads "One way".
+- `profile.usual_shape` (2026-11-10): the same four values, optional.
+  - It applies when neither `shape` nor the words give one: the shape chip shows it with `source: "usual"`.
   - Any shape word in the request wins over it, even a plain "loop" (which means either shape, R10).
+  - A usual `one_way` asks for the end the same way.
+- `recent_routes` entries (decision 043) may carry `saved: true` (a favorite), `name` (the runner's own name for a
+  favorite, which can differ from Loop's) and `ran_count` (how often they ran it; `times_run` is still read).
+  - "My usual" is the most run (`ran_count`).
+  - A favorite is found by its name: "the Stuy loop".
+  - Claude sees each route's id, date, name, distance, how often it was run and `saved`, never its line.
+- `X-Loop-Install` (decision 043): a random id the app makes once per install (a UUID: 8 to 64 letters, digits or
+  dashes) and sends on every request.
+  - It groups one runner's ratings without an account, and becomes the per-user key in Phase 4.
+  - It's stored with each build in `saved_routes` and with feedback, never with the request text or location.
+  - Optional on `POST /v1/runs` and `GET /v1/routes/{id}`; required for feedback. Malformed: HTTP 400.
+- **"Run again"** (decision 043): `{"v": 1, "route_id": "r_ab12cd34.2", "mode": "exact", "client": ..., "profile": ...}`,
+  with no `text`, `answer` or `constraints`.
+  - It runs the stored route's own line exactly, with no routing: the same geometry, read for now (crowds for the
+    time it's sent).
+  - The stream is `parsed` (the stored request's chips, with today's clock), `final` (one route, under a new
+    `route_id`, `timing.run_again` naming the original), then `done`.
+  - Not stored: `error` with `code: "route_not_found"`.
 - `route_id` (2026-11-10), with `constraints` only: the build the chip edit started from (the `route_id` of its
   `final`).
   - When the edit changes only `shape`, the server answers from that build's routes at once: `parsed`, one `top3`,
@@ -97,7 +126,14 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
 - `about` is one of: `distance`, `start`, `end`, `via`, `time`, `reuse`, `amount`.
 - `from` is one of: `parser`, `places`, `engine`.
 - `options`: 0–4 tap answers. `allow_text`: whether typing is offered.
+- "The park" with no major park within about 1 mi (R13, decision 043) picks the runnable place that clearly wins,
+  with no question: the only one that fits, or the nearest when the next is at least twice as far. For a run that
+  goes there from elsewhere, a place counts only within 45% of the run's length. Otherwise it asks:
 - "Which park?" options (decision 041) are runnable places only, nearest first, each with how far it is: `{"id": "a", "text": "East River Esplanade · 0.4 mi"}`. Places whose shapes mostly overlap are one option, the nearer one: Hudson River Park, not also the greenway through it (decision 042).
+- **A street given alone** ("west 71st st", "W. 71st Street") as a start, end or via is the point on it nearest the
+  runner, or the other named place, labeled `listed` (decision 043). If the street is over 2.5 km long and that
+  point is over 800 m away, the choice matters, so it asks `{"about": "start"|"end"|"via", "from": "places", "text":
+  "Where on Amsterdam Ave?"}`, with up to four crossings, about 400 m apart, as options ("Amsterdam Ave & W 71st St").
 - A place question never offers two options that read the same: of two places with one name in one borough, the place wins over a shop named after it (decision 042).
 - `chip_id` (2026-11-09): the chip the question is about, so the app can mark its words in the sentence; null when the runner said nothing about it ("How far?" after "what do you suggest"). When nothing was built for it yet ("Which 86th St?"), the event carries a chip for it made from the runner's own words, with its span.
 - While a question is open, no routes stream.
@@ -150,7 +186,7 @@ Built in step 11 (decision 038):
 
 ## Events: `done` and `error`
 - `done`: `{"event": "done"}`.
-- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request" | "expired", "text": "..."}`. The text comes from templates.
+- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request" | "expired" | "route_not_found", "text": "..."}`. The text comes from templates. `route_not_found`: "run again" of a route the server doesn't have.
 - `expired`: the answer's `parse_id` is unknown or older than 15 minutes (pending questions are kept in memory for 15 minutes, and a server restart forgets them). The app resends the original request (Jared, 2026-11-08).
 
 ## Built in step 5 (decision 029)
@@ -180,9 +216,25 @@ Built in step 11 (decision 038):
 - **Auth:** `Authorization: Bearer <Loop token>` on everything but `GET /v1/health`. A missing or wrong token is HTTP 401; every other problem is an `error` event.
 
 ## Other endpoints
-- `GET /v1/routes/{id}`: a stored result, the same payload as `final`.
+- `GET /v1/routes/{id}`: a stored result, the same payload as `final`, with every route's full line.
+  - `{id}` is a build's `route_id` or one of its routes' ids (`r_xxxxxxxx.N`).
+  - Builds are kept in `saved_routes` for good, so a route the runner saved or ran stays fetchable indefinitely
+    (decision 043).
+  - Unknown: HTTP 404.
+- `POST /v1/routes/{id}/feedback` (decision 043): "I ran it" and the rating. Needs `X-Loop-Install`.
+  ```json
+  {"ran": true, "ran_at": "2026-11-10T07:30:00-05:00", "rating": "good", "reasons": [], "note": null}
+  ```
+  - `rating`: `"good"`, `"not_for_me"` or null. Null is fine right after "I ran it": rate later.
+  - `reasons`: keys, never wording: `crowded`, `lights`, `water`, `safety`, `other`. They go with a rating.
+  - `note`: at most 500 characters.
+  - A rating needs `ran: true`.
+  - One record per install and route: a later post replaces the earlier one, to change a rating.
+  - The reply: the record as stored, plus `created_at`, `updated_at` and `updated` (true when it replaced one).
+  - Errors: HTTP 400 without the install id, 404 for an unknown route, 422 for a bad body, 401 without the token.
+  - Stored in Phase 2's `route_feedback` (with `generated_routes` holding the route's line), so the ranking can be
+    tuned with it later.
 - `GET /v1/health`: the server is up and the engine is ready.
-- Feedback endpoints come later. The feedback tables from Phase 2 already exist.
 
 ## Copy
 Every string the runner sees (chip text, questions, can't-do lines, notes, errors) lives in one template file on the server. The UI chat owns the wording; Code owns the keys. Claude only fills in place names and route names.

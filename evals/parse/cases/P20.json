@@ -7,17 +7,19 @@
   "text": "start at the park, 3 mi",
   "tags": [],
   "needs": [],
-  "doc": "ASK (start, places) · \"Which park?\" with the nearest parks as options (no major park within about 1 mi of Kips Bay, R13)",
+  "doc": "PARSE · start_place=place:\"East River Esplanade\" (said \"the park\", R13) · distance_mi=3 (said). No major park within about 1 mi of Kips Bay; of the runnable places the esplanade (0.4 mi) clearly wins over the next (1.2 mi), so no question (decision 043; before it, ASK \"Which park?\").",
   "expect": {
-    "outcome": "ASK",
-    "question": {
-      "about": "start",
-      "from": "places",
-      "min_options": 1
-    },
-    "keep": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "East River Esplanade"
+        },
+        "source": "said"
+      },
       "distance_mi": {
-        "value": 3
+        "value": 3,
+        "source": "said"
       }
     }
   },

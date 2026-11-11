@@ -1,0 +1,30 @@
+{
+  "id": "P53",
+  "seq": 54,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "71st and Columbus, 5k",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"Columbus Ave & W 71st St\" (Manhattan, said) · distance_mi=3.11 (said, 5 km). A crossing named by its numbers and an avenue's first word (decision 043).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "Columbus Ave & W 71st St",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.11,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

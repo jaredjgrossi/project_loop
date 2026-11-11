@@ -67,8 +67,28 @@ class FakeRouteStore:
         return True
 
     def load(self, route_id):
-        row = self.rows.get(route_id)
-        return row["final"] if row else None
+        found = self.load_with_constraints(route_id)
+        return found[0] if found else None
+
+    def load_with_constraints(self, route_id):
+        row = self.rows.get(route_id.partition(".")[0])
+        return (row["final"], row["constraints"]) if row else None
+
+
+class FakeFeedbackStore:
+    """route_feedback in a dict, one row per (route, install), as the unique index keeps it."""
+
+    def __init__(self):
+        self.rows = {}
+
+    def save(self, route_id, install_id, fb, final, constraints):
+        if not any(r.get("id") == route_id or f"{final.get('route_id')}.{r.get('rank')}" == route_id
+                   for r in final.get("routes") or []):
+            raise LookupError(route_id)
+        updated = (route_id, install_id) in self.rows
+        self.rows[(route_id, install_id)] = fb.model_dump(mode="json")
+        return {"created_at": "2026-11-10T08:00:00+00:00", "updated_at": "2026-11-10T08:00:00+00:00",
+                "updated": updated}
 
 
 @contextmanager
@@ -76,10 +96,11 @@ def fake_places():
     yield FakePlaces()
 
 
-def client_for(by_text=None, engine=None, store=None, parse_fn=None, route_store=None):
+def client_for(by_text=None, engine=None, store=None, parse_fn=None, route_store=None, feedback_store=None):
     parse_fn = parse_fn or fake_parse(by_text or {})
     app = create_app(token=TOKEN, parse_fn=parse_fn, places=fake_places, engine=engine or FakeEngine(),
                      route_store=FakeRouteStore() if route_store is None else route_store,
+                     feedback_store=FakeFeedbackStore() if feedback_store is None else feedback_store,
                      store=PendingStore() if store is None else store, health_fn=lambda: {"engine": True, "database": True,
                                                                        "parser": True}, warm=False)
     return TestClient(app), parse_fn
@@ -437,3 +458,114 @@ def test_the_usual_shape_comes_from_the_profile():
     b["profile"] = {**b["profile"], "usual_shape": "loop"}
     parsed = post(c, b)[0]
     assert parsed["constraints"]["shape"] == "loop" and eng.calls[0][0].shape == "loop"
+
+
+
+# ---- the app's features: install id, feedback, stored routes, run again, route type (decision 043) ------------------
+
+INSTALL = {"X-Loop-Install": "3f9c2b1e-7a4d-4e8b-9c1a-2b3c4d5e6f70"}
+ROUTE = {"id": "r_old00001.1", "rank": 1, "kind": "loop", "label": "a loop", "score": 80,
+         "distance": {"value": 3.0, "unit": "mi"},
+         "geometry": {"type": "LineString", "coordinates": [[-73.9799, 40.7438], [-73.9750, 40.7438],
+                                                            [-73.9750, 40.7470], [-73.9799, 40.7438]]}}
+
+
+def stored_client(**kw):
+    routes = FakeRouteStore()
+    routes.save("r_old00001", {"v": 1, "kind": "text"}, {"use_my_location": True, "distance_mi": 3.0},
+                {"event": "final", "v": 1, "route_id": "r_old00001", "routes": [ROUTE], "route": None})
+    feedbacks = FakeFeedbackStore()
+    c, _ = client_for(route_store=routes, feedback_store=feedbacks, **kw)
+    return c, routes, feedbacks
+
+
+def test_a_stored_route_is_fetched_by_its_own_id_with_its_line():
+    c, _, _ = stored_client()
+    got = c.get("/v1/routes/r_old00001.1", headers=AUTH)
+    assert got.status_code == 200 and got.json()["routes"][0]["geometry"] == ROUTE["geometry"]
+    assert c.get("/v1/routes/r_nothere.1", headers=AUTH).status_code == 404
+
+
+def test_a_rating_round_trip_and_a_later_change():
+    c, _, feedbacks = stored_client()
+    first = c.post("/v1/routes/r_old00001.1/feedback", headers=AUTH | INSTALL,
+                   json={"ran": True, "ran_at": "2026-11-10T07:30:00-05:00", "rating": None})
+    assert first.status_code == 200 and first.json()["updated"] is False
+    again = c.post("/v1/routes/r_old00001.1/feedback", headers=AUTH | INSTALL,
+                   json={"ran": True, "rating": "not_for_me", "reasons": ["crowded", "lights"], "note": "busy at 7"})
+    assert again.status_code == 200 and again.json()["updated"] is True
+    row = feedbacks.rows[("r_old00001.1", INSTALL["X-Loop-Install"])]
+    assert row["rating"] == "not_for_me" and row["reasons"] == ["crowded", "lights"]
+
+
+@pytest.mark.parametrize("payload, status", [
+    ({"ran": False, "rating": "good"}, 422),  # a rating needs the run
+    ({"ran": True, "rating": "great"}, 422),  # a verdict, not wording
+    ({"ran": True, "rating": "good", "reasons": ["too hilly"]}, 422),  # reasons are keys
+])
+def test_feedback_is_checked(payload, status):
+    c, _, _ = stored_client()
+    assert c.post("/v1/routes/r_old00001.1/feedback", headers=AUTH | INSTALL, json=payload).status_code == status
+
+
+def test_feedback_needs_the_install_id_and_a_known_route():
+    c, _, _ = stored_client()
+    body_ = {"ran": True, "rating": "good"}
+    assert c.post("/v1/routes/r_old00001.1/feedback", headers=AUTH, json=body_).status_code == 400
+    assert c.post("/v1/routes/r_old00001.1/feedback", headers=AUTH | {"X-Loop-Install": "bad id!"},
+                  json=body_).status_code == 400
+    assert c.post("/v1/routes/r_nothere.1/feedback", headers=AUTH | INSTALL, json=body_).status_code == 404
+    assert c.post("/v1/routes/r_old00001.1/feedback", json=body_, headers=INSTALL).status_code == 401
+
+
+def test_the_install_id_is_stored_with_a_build():
+    routes = FakeRouteStore()
+    c, _ = client_for({"5k": IDEAL["P01"]}, route_store=routes)
+    resp = c.post("/v1/runs", json=body("P01", text="5k"), headers=AUTH | INSTALL)
+    final = next(e for e in events(resp) if e["event"] == "final")
+    assert routes.rows[final["route_id"]]["request"]["install_id"] == INSTALL["X-Loop-Install"]
+
+
+class AgainEngine(FakeEngine):
+    def run_again(self, rc, past, route_id):
+        self.calls.append((rc, past))
+        entry = dict(ROUTE, id=f"{route_id}.1", geometry={"type": "LineString", "coordinates": [list(c) for c in past.coords]})
+        return {"event": "final", "v": 1, "route_id": route_id, "routes": [entry], "route": None, "notes": [],
+                "timing": {"run_again": past.id}}
+
+
+def test_run_again_returns_the_same_line_read_for_now():
+    eng = AgainEngine()
+    c, routes, _ = stored_client(engine=eng)
+    evs = post(c, body("P01", route_id="r_old00001.1", mode="exact"))
+    assert [e["event"] for e in evs] == ["parsed", "final", "done"]
+    assert evs[1]["routes"][0]["geometry"] == ROUTE["geometry"]  # exactly the stored line
+    rc, past = eng.calls[0]
+    assert rc.start_time == "06:40" and rc.start_date.isoformat() == "2026-11-03"  # the request's own clock: now
+    assert evs[1]["route_id"] in routes.rows
+
+
+def test_run_again_of_an_unknown_route_says_so():
+    c, _, _ = stored_client(engine=AgainEngine())
+    evs = post(c, body("P01", route_id="r_nothere.1", mode="exact"))
+    assert [e.get("code") for e in evs] == ["route_not_found"]
+
+
+@pytest.mark.parametrize("extra", [{"mode": "exact"}, {"mode": "exact", "route_id": "r_x.1", "text": "5k"}])
+def test_run_again_takes_the_route_id_alone(extra):
+    c, _, _ = stored_client(engine=AgainEngine())
+    assert [e.get("code") for e in post(c, body("P01", **extra))] == ["bad_request"]
+
+
+def test_the_apps_route_type_reaches_the_parse():
+    eng = FakeEngine()
+    c, _ = client_for({"3 mile loop": IDEAL["P05"]}, engine=eng)
+    evs = post(c, body("P05", text="3 mile loop", shape="out_and_back"))
+    assert evs[0]["constraints"]["shape"] == "out_and_back" and eng.calls[0][0].shape == "out_and_back"
+
+
+def test_one_way_without_an_end_asks_where_to_end():
+    c, _ = client_for({"5k": IDEAL["P01"]})
+    evs = post(c, body("P01", text="5k", shape="one_way"))
+    assert [e["event"] for e in evs] == ["parsed", "done"]
+    assert evs[0]["question"]["about"] == "end" and evs[0]["question"]["text"] == "Where do you want to end?"

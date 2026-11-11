@@ -384,6 +384,44 @@ class Engine:
                 "notes": distance_notes(rc, chosen, chosen[0].within_tolerance),
                 "timing": {"from_pool": old_route_id}}
 
+    def run_again(self, rc: RunConstraints, past, route_id: str) -> dict:
+        """"Run again" (decision 043): the stored route's own line, exactly, scored for now (crowds for this start
+        time, today's closures noted by the scorer). No routing, so the geometry can't change. The `final` payload,
+        with that one route."""
+        from api.generate import SHAPE_KINDS, Rejection, _evaluate, _Rules
+        from api.past_routes import is_closed
+        from api.routing import Route
+        t0 = time.perf_counter()
+        coords = [list(c[:2]) for c in past.coords]
+        start = Start(coords[0][1], coords[0][0], render("request.start.past_route"))
+        prefs = resolve_preferences(rc).values
+        try:
+            grid = self.grid_fn(start.lat, start.lon)
+        except psycopg.Error as exc:
+            raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
+        context_fn = self.context_for_fn(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment())
+        route = Route(distance_m=line_length_m(coords), time_s=0.0, coordinates=coords)
+        rules = _Rules(meters_to_miles(route.distance_m), prefs, (), context_fn)
+        label = past.label or render("route.past")
+        c = None  # what it is: a loop or out-and-back by its shape, else a run that ends elsewhere
+        for kind in ((None, "out_and_back", "a_to_b") if is_closed(coords) else ("a_to_b",)):
+            got = _evaluate("run_again", kind, label, route, rules, allowed=SHAPE_KINDS["any"])
+            if not isinstance(got, Rejection):
+                c = got
+                break
+        if c is None:  # a line no shape rule accepts (a ribbon): scored as a run that ends where it ends
+            c = _evaluate("run_again", "a_to_b", label, route, _Rules(rules.miles, prefs, (), context_fn,
+                                                                      ), allowed=())
+        if isinstance(c, Rejection):
+            raise EngineUnavailable(f"can't score the stored route: {c.reason}")
+        miles = round(meters_to_miles(route.distance_m), 2)
+        entry_ = entry(1, c, f"{route_id}.1")
+        return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
+                "provisional": False, "routes": [entry_],
+                "route": ml.route_file(c, 1, start.lat, start.lon, start.label, miles, rc, None, self.stretch_fn),
+                "pool_size": None, "pool": {"candidates": 1, "best_of": None}, "notes": [],
+                "timing": {"run_again": past.id}}
+
     def __post_init__(self):
         if self.feature_anchor_fn is None:
             self.feature_anchor_fn = ml.DB_FEATURE_ANCHOR_SOURCES

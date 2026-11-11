@@ -395,3 +395,13 @@ def test_an_a_to_b_run_to_a_neighborhood_uses_its_area():
         rc(distance_mi=None, end_place=hood), Start(*KIPS_POINT, "x"), lambda e: None, "r_w", end=EAST)
     last = final["routes"][0]["geometry"]["coordinates"][-1]
     assert last[0] < EAST[1] - 0.001  # finished on the way in, short of the neighborhood's point
+
+
+def test_run_again_keeps_the_stored_line_exactly():  # decision 043
+    past = square_route()
+    e = past_engine()
+    final = e.run_again(rc(distance_mi=1.5, start_time="07:10", start_date="2026-11-11"), past, "r_again")
+    (r,) = final["routes"]
+    assert r["geometry"]["coordinates"] == [list(c) for c in past.coords]  # no routing: the same line
+    assert r["id"] == "r_again.1" and final["timing"] == {"run_again": past.id}
+    assert final["route"] is not None and abs(r["distance"]["value"] - 4 * SQUARE_M / 1609.344) < 0.01

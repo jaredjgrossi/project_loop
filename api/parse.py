@@ -246,6 +246,7 @@ class Places(Protocol):
     def parks_near(self, lat: float, lon: float) -> list: ...
     def geocode(self, address: str, borough: str | None): ...  # -> (GeocodeResult | None, [boroughs])
     def past_route(self, route_id: str): ...  # -> past_routes.PastRoute | None (step 11)
+    def street_crossings(self, street, near) -> list: ...  # "Where on W 71st St?" options, when the choice matters
     def ferry_landings_along(self, coords) -> list[dict]: ...  # avoid entries with a place (step 11, H04)
 
 
@@ -295,6 +296,10 @@ class DbPlaces:
         from api.past_routes import ferry_landings_along
         return ferry_landings_along(coords, self.conn)
 
+    def street_crossings(self, street, near):
+        from api.places import street_crossings
+        return street_crossings(street, near, conn=self.conn)
+
     def geocode(self, address, borough):
         from api.geocoding import AmbiguousAddressError, GeocodeError, geocode
         try:
@@ -308,7 +313,7 @@ class DbPlaces:
 # ---- the request's context --------------------------------------------------------------------------------------
 
 
-SHAPES = ("any", "loop", "out_and_back")
+SHAPES = ("any", "loop", "out_and_back", "one_way")  # one_way: an A-to-B run (the app's route type)
 
 
 @dataclass
@@ -322,6 +327,7 @@ class Context:
     recent: list[dict]
     raw: str = ""  # the request text exactly as sent: span positions count from its first character
     usual_shape: str | None = None  # "any", "loop" or "out_and_back": when no shape is said (phone test, 2026-11-10)
+    shape: str | None = None  # the app's route type, picked before sending: beats the text (decision 043)
 
     @classmethod
     def from_request(cls, req: dict) -> "Context":
@@ -335,6 +341,7 @@ class Context:
                    location=(loc["lat"], loc["lon"]) if loc else None,
                    usual_mi=profile.get("usual_distance_mi"), usual_time=profile.get("usual_time"),
                    usual_shape=profile.get("usual_shape") if profile.get("usual_shape") in SHAPES else None,
+                   shape=req.get("shape") if req.get("shape") in SHAPES else None,
                    saved={p["id"]: p for p in profile.get("saved_places") or []},
                    recent=list(req.get("recent_routes") or []))
 
@@ -346,9 +353,14 @@ class Context:
             "location_known": self.location is not None,
             "saved_places": [{"id": i, "label": p.get("label")} for i, p in sorted(self.saved.items())],
             "recent_routes": [{"id": r["id"], "date": r["date"], "weekday": _weekday_of(r["date"]), "name": r["name"],
-                               "distance_mi": r.get("distance_mi"), "times_run": r.get("times_run")}
-                              for r in self.recent],
+                               "distance_mi": r.get("distance_mi"), "times_run": times_run(r)}
+                              | ({"saved": True} if r.get("saved") else {}) for r in self.recent],
         }, ensure_ascii=False)
+
+
+def times_run(route: dict) -> int:
+    """How often the runner ran a recent route: the app's ran_count, or times_run (decision 043)."""
+    return route.get("ran_count") or route.get("times_run") or 0
 
 
 def _weekday_of(iso: str) -> str:
@@ -382,6 +394,8 @@ class _Build:
     via_modes: list = field(default_factory=list)  # for each via chip, its loops.Mode (decision 035)
     reuse_ids: list = field(default_factory=list)  # the past routes the request may mean, before any question (step 11)
     avoid_from: list = field(default_factory=list)  # for each avoid chip, its item (one "ferry part" can be two piers)
+    one_way: str | None = None  # the source of a one-way route type ("said" from the app, "usual"): it needs an end
+    run_miles: float | None = None  # the run's length as far as known before the rules run: said, answered or usual
     amenity_from: list = field(default_factory=list)  # the same for amenity chips
     span_from: dict = field(default_factory=dict)  # a chip code set from another chip's words: chip id -> that id
     later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
@@ -509,6 +523,24 @@ def _saved_ref(b: _Build, saved_id: str) -> dict:
     return PlaceRef(**ref).model_dump(exclude_none=True)
 
 
+PARK_REACH = 0.45  # a park a run goes to and comes back from: at most this share of the run away
+CLEAR_WIN = 2.0  # the nearest park wins without a question when the next is at least this many times as far
+
+
+def _runnable_parks(b: _Build, parks: list, reach: bool) -> tuple[list, object | None]:
+    """'The park' with no major park within about 1 mi (R13): the runnable places, nearest first, and the one that
+    clearly wins, if any (decision 043). With `reach` (a run from elsewhere that goes to the park), a park farther
+    than PARK_REACH of the run doesn't fit the distance and isn't offered, unless nothing fits."""
+    miles = b.run_miles
+    fitting = [p for p in parks if not reach or miles is None or (p.distance_m or 0) <= miles * METERS_PER_MILE * PARK_REACH]
+    fitting = fitting or parks
+    if not fitting:
+        return [], None
+    if len(fitting) == 1 or (fitting[0].distance_m or 0) * CLEAR_WIN <= (fitting[1].distance_m or 0):
+        return fitting, fitting[0]
+    return fitting, None
+
+
 def _park_options(parks, target: str) -> list[tuple[str, dict, dict]]:
     """'Which park?': runnable places, nearest first, each with how far it is ("Central Park · 1.8 mi")."""
     return [("option.place.distance", {"name": p.name, "miles": f"{(p.distance_m or 0) / METERS_PER_MILE:.1f}"},
@@ -556,8 +588,11 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
         major = b.places.major_parks_near(*point) if point else []
         if major:
             return _ref(major[0])
-        options = _park_options(b.places.parks_near(*point) if point else [], target)
-        b.ask(about, "places", "question.place.which_park", options, allow_text=True, typed=typed)
+        parks, winner = _runnable_parks(b, b.places.parks_near(*point) if point else [], reach=False)
+        if winner is not None:
+            return _ref(winner)
+        b.ask(about, "places", "question.place.which_park", _park_options(parks, target), allow_text=True,
+              typed=typed)
     if kind == "address":
         b.lookups.append({"name": name, "role": role, "via": "geocoder"})
         chosen_borough = b.answers.get(f"borough:{target}")
@@ -576,6 +611,9 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
     # A named place (R12)
     b.lookups.append({"name": name, "role": role})
     found = b.places.lookup(name, near=near_area or ref_point)
+    if not found and near_area is not None:  # a street that doesn't meet the park: its point nearest the park, or
+        found = b.places.lookup(name, near=(near_area.lat, near_area.lon))  # the runner (phone test, 2026-11-10)
+        found = found or b.places.lookup(name, near=ref_point)
     if not found and ADDRESS_LIKE.match(name):  # "11 Madison Ave" recorded as a place: it's an address
         return _resolve_place(b, spec | {"kind": "address"}, role, ref_point, ref_borough, target=target)
     if not found:
@@ -583,6 +621,12 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
     chosen = found[0] if len(found) == 1 else b.places.pick(found, ref_borough)
     if chosen is None:
         b.ask(about, "places", "question.place.which", _options(found, target), typed=typed, name=name)
+    near = (near_area.lat, near_area.lon) if near_area is not None else ref_point
+    spots = b.places.street_crossings(chosen, near) if near and chosen.kind in ("street", "path") else []
+    if spots:  # a long street, far off: which part of it (phone test, 2026-11-10)
+        b.ask(about, "places", "question.place.where_on",
+              [("option.crossing", {"name": s.name}, {f"place:{target}": s}) for s in spots], typed=typed,
+              name=chosen.name)
     return _ref(chosen)
 
 
@@ -607,12 +651,15 @@ def _prefs(b: _Build, ext: dict) -> None:
         if ext.get(name):
             b.set(name, ext[name], "said")
     shape = {"loop_word": "any", "real_loop": "loop", "out_and_back": "out_and_back"}.get(ext.get("shape") or "")
-    if shape:  # D1, R10: a plain "loop" is any route back to the start
-        b.set("shape", shape, "said")
-    elif b.ctx.usual_shape:  # the profile's usual shape, when none is said
-        b.set("shape", b.ctx.usual_shape, "usual")
-    else:
-        b.set("shape", "any", "default")
+    source = "said"
+    if b.ctx.shape:  # the route type the runner picked in the app, before sending: it beats the words
+        shape = b.ctx.shape
+    elif not shape:  # D1, R10: a plain "loop" is any route back to the start; none said: the usual, or any
+        shape, source = (b.ctx.usual_shape, "usual") if b.ctx.usual_shape else ("any", "default")
+    if shape == "one_way":  # a run that ends somewhere else: the end place makes it one (an A-to-B run)
+        b.one_way = source
+        shape = "any"
+    b.set("shape", shape, source)
 
 
 def _cant(b: _Build, ext: dict) -> None:
@@ -692,7 +739,12 @@ def _vias(b: _Build, ext: dict) -> list:
         if v["kind"] == "the_park":
             major = b.places.major_parks_near(*point) if point else []
             if not major:
-                opts = _park_options(b.places.parks_near(*point) if point else [], target)
+                parks, winner = _runnable_parks(b, b.places.parks_near(*point) if point else [], reach=True)
+                if winner is not None:
+                    out.append((v, winner))
+                    b.via_from.append(i + 1)
+                    continue
+                opts = _park_options(parks, target)
                 b.ask("via", "places", "question.place.which_park", opts, typed=typed)
             out.append((v, major[0]))
             b.via_from.append(i + 1)
@@ -772,7 +824,7 @@ def _reuse(b: _Build, ext: dict) -> None:
         if not recent:
             b.set("familiar", "favor", "usual")
             return
-        hits, source = [max(recent, key=lambda x: (x.get("times_run") or 0, x["date"]))], "usual"
+        hits, source = [max(recent, key=lambda x: (times_run(x), bool(x.get("saved")), x["date"]))], "usual"
     elif r["kind"] == "weekday" and r.get("weekday"):
         same = [x for x in before if _weekday_of(x["date"]).casefold() == r["weekday"]]
         hits = same[:1]  # the most recent such day, never today
@@ -927,7 +979,8 @@ def _chips(b: _Build) -> list[dict]:
         else:
             chips.append(_chip(b, "c_time", "time", "chip.time.day", source, day=WEEKDAY_NAMES[day.weekday()],
                                time=c["start_time"]))
-    chips.append(_chip(b, "c_shape", "shape", f"chip.shape.{c.get('shape', 'any')}", src.get("shape", "default")))
+    shape_key = "one_way" if c.get("end_place") else c.get("shape", "any")  # an A-to-B run is one way
+    chips.append(_chip(b, "c_shape", "shape", f"chip.shape.{shape_key}", src.get("shape", "default")))
     if c.get("mode"):
         chips.append(_chip(b, "c_mode", "mode", f"chip.mode.{c['mode']}", src["mode"]))
     for name in PREFERENCES:
@@ -1030,6 +1083,8 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
     """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
     trace. The question's answer map goes into the trace, never to the phone."""
     b = _Build(ctx, places, answers=dict(answers or {}))
+    said_miles = _miles(ext.get("distance"))
+    b.run_miles = b.answers.get("distance") or (said_miles[0] if said_miles else None) or ctx.usual_mi
     _cant(b, ext)
     _prefs(b, ext)
     asked: list[dict] = []
@@ -1044,8 +1099,13 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
             asked.append(a.question)
 
     def end():
-        if ext.get("end"):
-            b.set("end_place", _resolve_place(b, ext["end"], "end", b.start_point, b.start_borough), "said")
+        spec = ext.get("end")
+        if spec is None and ("place:end" in b.answers or "text:end" in b.answers):  # "Where do you want to end?"
+            spec = {"kind": "place", "name": ""}
+        if spec:
+            b.set("end_place", _resolve_place(b, spec, "end", b.start_point, b.start_borough), "said")
+        elif b.one_way:  # one way, and no end named: ask for it (decision 043)
+            b.ask("end", "parser", "question.end.where", typed=_typed_place("end"))
 
     step(lambda: _time_and_day(b, ext.get("time"), ext.get("day")))
     step(lambda: _reuse(b, ext))

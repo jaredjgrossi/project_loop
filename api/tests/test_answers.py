@@ -83,8 +83,12 @@ def test_a_typed_place_replaces_the_one_that_was_asked_about():
 
 
 def test_picking_a_park():
-    out, ctx = asked("P20")  # no major park near Kips Bay: which park?
-    after = answer(out, ctx, option_id="a", case_id="P20")
+    from api.parse import resume
+    from api.tests.test_parse import CloseParks
+    ctx = Context.from_request(build_request(CASES["P20"], CONTEXTS))
+    out = build(IDEAL["P20"], ctx, CloseParks())  # two parks about as far: which park?
+    settled = answer_overrides(out["trace"]["answer_map"], "a", None, ctx)
+    after = resume(IDEAL["P20"], ctx, CloseParks(), {**out["trace"]["answers"], **settled})
     assert after["parsed"]["constraints"]["start_place"]["name"] == "East River Esplanade"
 
 

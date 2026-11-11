@@ -33,6 +33,8 @@ PLACES = {
     "west side highway": [pm("Hudson River Greenway", "path", "Manhattan", 40.7600, -74.0030)],
     "east river path": [pm("East River Greenway", "path", "Manhattan", 40.7400, -73.9720)],
     "1st ave & e 23rd st": [pm("1st Ave & E 23rd St", "crossing", "Manhattan", 40.7366, -73.9786)],
+    "w 71st st": [pm("West 71st Street", "street", "Manhattan", 40.7766, -73.9800)],
+    "71st st & columbus ave": [pm("Columbus Ave & W 71st St", "crossing", "Manhattan", 40.7772, -73.9790)],
     "2nd ave": [pm("2nd Ave", "street", "Manhattan", 40.7450, -73.9770)],
     "prospect park": [pm("Prospect Park", "park", "Brooklyn", 40.6602, -73.9690)],
     "grand army plaza": [pm("Grand Army Plaza", "square", "Brooklyn", 40.6742, -73.9700),
@@ -57,6 +59,9 @@ class FakePlaces:
         from api.past_routes import PastRoute
         line = PAST_LINES.get(route_id)
         return PastRoute(route_id, line) if line else None
+
+    def street_crossings(self, street, near):
+        return []
 
     def ferry_landings_along(self, coords):
         near = any(abs(lat - E34_LANDING[0]) * 110_574 < 100 and abs(lon - E34_LANDING[1]) * 84_300 < 100
@@ -177,6 +182,9 @@ IDEAL = {  # the extraction a correct model returns, per case
     "P48": ext(distance=mi(0.3), shape="loop_word"),
     "P49": ext(distance=mi(15), surface="paths",
                via=[{"name": "East River Path", "kind": "place", "whole_way": True}], cant=["whole_way"]),
+    "P51": ext(start=place("place", "W 71st St")),
+    "P52": ext(start=place("place", "W 71st St"), distance=mi(4)),
+    "P53": ext(start=place("place", "71st St & Columbus Ave"), distance=mi(5, "km")),
     "P50": ext(start=place("place", "Grand Army Plaza"),
                via=[{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": "Loop of"}]),
 }
@@ -241,6 +249,9 @@ QUOTES = {  # the runner's words behind each chip, per case (spans, 2026-11-09)
     "P48": said(("distance", "0.3 mi"), ("shape", "loop")),
     "P49": said(("distance", "15 miles"), ("via", "the east river path", 1), ("surface", "staying on the east river path")),
     "P50": said(("via", "Loop of Prospect Park", 1), ("start", "from Grand Army Plaza")),
+    "P51": said(("start", "west 71st st")),
+    "P52": said(("start", "W. 71st Street"), ("distance", "4 mi")),
+    "P53": said(("start", "71st and Columbus"), ("distance", "5k")),
 }
 for _cid, _q in QUOTES.items():
     IDEAL[_cid]["said"] = _q
@@ -460,11 +471,38 @@ def test_a_sparse_tool_input_reads_as_the_full_one():  # step 5b: the model leav
     assert TOOL["input_schema"]["required"] == []
 
 
-def test_which_park_offers_runnable_places_nearest_first_with_their_distance():  # P20; phone test 2026-11-09
-    out = _built("P20")
-    q = out["parsed"]["question"]
+class CloseParks(FakePlaces):
+    """Two runnable places about as far: no clear winner, so "Which park?" asks."""
+    def parks_near(self, lat, lon):
+        return [pm("East River Esplanade", "path", "Manhattan", 40.7449, -73.9705, distance_m=657),
+                pm("John V. Lindsay East River Park", "park", "Manhattan", 40.7180, -73.9750, distance_m=980)]
+
+
+def test_which_park_offers_runnable_places_nearest_first_with_their_distance():  # phone test 2026-11-09
+    ctx = Context.from_request(build_request(CASES["P20"], CONTEXTS))
+    q = build(IDEAL["P20"], ctx, CloseParks())["parsed"]["question"]
     assert q["text"] == "Which park?"
-    assert [o["text"] for o in q["options"]] == ["East River Esplanade · 0.4 mi", "Central Park · 1.8 mi"]
+    assert [o["text"] for o in q["options"]] == ["East River Esplanade · 0.4 mi",
+                                                  "John V. Lindsay East River Park · 0.6 mi"]
+
+
+def test_one_park_that_clearly_wins_is_taken_without_asking():  # decision 043
+    out = _built("P20")  # the esplanade at 0.4 mi, Central Park at 1.8: the nearer clearly wins
+    assert out["parsed"]["question"] is None
+    assert out["parsed"]["constraints"]["start_place"]["name"] == "East River Esplanade"
+
+
+def test_a_park_a_run_goes_to_must_fit_the_distance():
+    from api.parse import _Build, _runnable_parks
+    near, far = (pm("Near Park", "park", "Manhattan", 40.75, -73.98, distance_m=900),
+                 pm("Far Park", "park", "Manhattan", 40.78, -73.97, distance_m=1100))
+    b = _Build(Context.from_request(build_request(CASES["R09"], CONTEXTS)), FakePlaces())
+    b.run_miles = 2.0  # 0.45 of 2 mi is about 1450 m: both fit, neither clearly wins
+    assert _runnable_parks(b, [near, far], reach=True) == ([near, far], None)
+    b.run_miles = 2.4  # still both
+    assert _runnable_parks(b, [near, far], reach=True)[1] is None
+    b.run_miles = 1.4  # about 1010 m: only the near one fits, so it wins
+    assert _runnable_parks(b, [near, far], reach=True) == ([near], near)
 
 
 def test_the_usual_shape_applies_when_none_is_said():  # profile.usual_shape (phone test, 2026-11-10)
@@ -482,3 +520,75 @@ def test_a_said_shape_beats_the_usual_one():
     req["profile"] = {**req["profile"], "usual_shape": "out_and_back"}
     out = build(IDEAL["P05"], Context.from_request(req), FakePlaces())
     assert out["parsed"]["constraints"]["shape"] == "any"
+
+
+# ---- the app's route type and favorites (decision 043) -------------------------------------------------------------
+
+def _with(case_id, **fields):
+    req = build_request(CASES[case_id], CONTEXTS)
+    for k, v in fields.items():
+        req[k] = v
+    return Context.from_request(req)
+
+
+def test_the_apps_route_type_beats_the_words():
+    out = build(IDEAL["P05"], _with("P05", shape="out_and_back"), FakePlaces())  # "3 mile loop"
+    c = out["parsed"]["constraints"]
+    chip = next(ch for ch in out["parsed"]["chips"] if ch["field"] == "shape")
+    assert c["shape"] == "out_and_back" and "shape" not in c.get("sources", {})  # said: not listed as filled in
+    assert (chip["text"], chip["source"]) == ("Out and back", "said")
+
+
+def test_one_way_without_an_end_asks_where_to_end():
+    out = build(IDEAL["P01"], _with("P01", shape="one_way"), FakePlaces())
+    q = out["parsed"]["question"]
+    assert (q["about"], q["from"], q["text"]) == ("end", "parser", "Where do you want to end?")
+
+
+def test_one_way_with_an_end_builds_and_the_chip_says_one_way():
+    out = build(IDEAL["R01"], _with("R01", shape="one_way"), FakePlaces())  # ends at McCarren Park
+    assert out["parsed"]["question"] is None
+    assert next(ch["text"] for ch in out["parsed"]["chips"] if ch["field"] == "shape") == "One way"
+
+
+def test_one_way_end_answered_by_name():
+    from api.parse import answer_overrides, resume
+    ctx = _with("P01", shape="one_way")
+    out = build(IDEAL["P01"], ctx, FakePlaces())
+    settled = answer_overrides(out["trace"]["answer_map"], None, "McCarren Park", ctx)
+    after = resume(IDEAL["P01"], ctx, FakePlaces(), {**out["trace"]["answers"], **settled})
+    assert after["parsed"]["question"] is None
+    assert after["parsed"]["constraints"]["end_place"]["name"] == "McCarren Park"
+
+
+def test_a_usual_one_way_asks_for_the_end_too():
+    req = build_request(CASES["P01"], CONTEXTS)
+    req["profile"] = {**req["profile"], "usual_shape": "one_way"}
+    assert build(IDEAL["P01"], Context.from_request(req), FakePlaces())["parsed"]["question"]["about"] == "end"
+
+
+FAVORITES = [  # the eval contexts' recent routes, with rt_b saved as a favorite and renamed by the runner
+    {"id": "rt_a", "date": "2026-10-27", "name": "East River esplanade out-and-back", "distance_mi": 3.0,
+     "ran_count": 2},
+    {"id": "rt_c", "date": "2026-10-29", "name": "Gramercy street rectangle", "distance_mi": 3.1, "ran_count": 1},
+    {"id": "rt_b", "date": "2026-11-02", "name": "the Stuy loop", "distance_mi": 4.0, "saved": True,
+     "ran_count": 7},
+]
+
+
+def test_a_renamed_favorite_is_found_by_its_name():
+    ext_ = ext(reuse={"kind": "name", "weekday": None, "date": None, "name_words": "stuy loop", "longer": False,
+                      "reverse": False})
+    out = build(ext_, _with("H01", recent_routes=FAVORITES), FakePlaces())
+    assert out["parsed"]["constraints"]["reuse_route_id"] == "rt_b"
+
+
+def test_my_usual_is_the_most_run_by_ran_count():
+    out = build(IDEAL["H05"], _with("H05", recent_routes=FAVORITES), FakePlaces())
+    assert out["parsed"]["constraints"]["reuse_route_id"] == "rt_b"
+
+
+def test_claude_sees_favorites_and_ran_counts_but_no_lines():
+    seen = json.loads(_with("H05", recent_routes=FAVORITES).for_claude("my usual"))
+    assert seen["recent_routes"][2] == {"id": "rt_b", "date": "2026-11-02", "weekday": "Mon", "name": "the Stuy loop",
+                                        "distance_mi": 4.0, "times_run": 7, "saved": True}

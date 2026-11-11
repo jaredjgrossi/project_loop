@@ -1,0 +1,31 @@
+{
+  "id": "P51",
+  "seq": 52,
+  "category": "D",
+  "origin": "real",
+  "context": "C1",
+  "text": "west 71st st",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "PARSE · start_place=place:\"W 71st St\" (Manhattan, said) · distance_mi=3.1 (usual). A street given alone resolves to its point nearest the runner, listed (Jared's phone test, 2026-11-10; decision 043).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_place": {
+        "value": {
+          "place": "W 71st St",
+          "borough": "Manhattan"
+        },
+        "source": "said"
+      },
+      "distance_mi": {
+        "value": 3.1,
+        "source": "usual"
+      }
+    }
+  },
+  "must_not": [],
+  "who": "Jared"
+}
