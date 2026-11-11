@@ -44,3 +44,60 @@ def test_marker_features_are_points_with_distance_and_a_trust_label():
     turn = feats[-1]["properties"]
     assert turn["along_mi"] == pytest.approx(2500 / METERS_PER_MILE, abs=0.02)
     assert feats[0]["properties"]["along_mi"] == 1.0
+
+
+# ---- the main turnaround, and spurs (decision 044) -----------------------------------------------------------------
+
+def _north(points_m):
+    """[lon, lat] for points given as meters north of a fixed spot, with east offsets for side trips."""
+    lat0, lon0 = 40.78, -73.985
+    kx = 111_320 * math.cos(math.radians(lat0))
+    return [[lon0 + e / kx, lat0 + n / 110_574] for e, n in points_m]
+
+
+def _path(*legs, step=10):
+    """A route through (east, north) corners, a point every `step` meters."""
+    out = []
+    for (e0, n0), (e1, n1) in zip(legs, legs[1:]):
+        d = math.hypot(e1 - e0, n1 - n0)
+        k = max(int(d / step), 1)
+        out += [(e0 + (e1 - e0) * i / k, n0 + (n1 - n0) * i / k) for i in range(k)]
+    out.append(legs[-1])
+    return _north(out)
+
+
+# 4 km out and back north, with a 250 m dead-end spur east at 1 km out
+SPUR_ROUTE = _path((0, 0), (0, 1000), (250, 1000), (0, 1000), (0, 4000), (0, 0))
+
+
+def test_a_spur_is_not_the_turnaround():
+    from api.markers import spurs, turnarounds
+    (main,) = turnarounds(SPUR_ROUTE)
+    assert main["along_m"] == pytest.approx(1500 + 3000, abs=40)  # the far end, after the spur's 500 m
+    assert main["reach_m"] > 2000
+    (spur,) = spurs(SPUR_ROUTE)
+    assert spur["along_m"] == pytest.approx(1250, abs=40) and 150 <= spur["reach_m"] < 400
+
+
+def test_only_the_main_turnaround_is_marked():
+    from api.markers import marker_features
+    turns = [f for f in marker_features(SPUR_ROUTE) if f["properties"]["feature"] == "turnaround"]
+    assert len(turns) == 1 and turns[0]["properties"]["along_m"] == pytest.approx(4500, abs=40)
+
+
+def test_a_plain_out_and_back_has_one_turnaround_and_no_spur():
+    from api.markers import spurs, turnarounds
+    route = _path((0, 0), (0, 3000), (0, 0))
+    assert len(turnarounds(route)) == 1 and spurs(route) == []
+
+
+def test_a_jog_at_the_start_is_not_a_spur():
+    from api.markers import spurs
+    route = _path((0, 0), (0, -80), (0, 3000), (0, 0))  # the start point sits mid-block: first a step the other way
+    assert spurs(route) == []
+
+
+def test_a_short_reversal_is_part_of_the_line():  # a ramp or a footbridge approach, under 150 m
+    from api.markers import spurs, turnarounds
+    route = _path((0, 0), (0, 1000), (80, 1000), (0, 1000), (0, 4000), (0, 0))
+    assert spurs(route) == [] and len(turnarounds(route)) == 1

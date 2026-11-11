@@ -86,9 +86,11 @@ def generate_a_to_b(
     vias: Sequence[tuple[float, float]] = (),  # step 9: places to pass on the way, in order
     through: Sequence[tuple[dict, float, float | None]] = (),  # their rules (via.through_rules): pass or lap each
     along: Sequence = (),  # step 8b: streets not to run along (along.Along)
+    spurs_ok: bool = False,  # decision 044: following a past route
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along))
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along),
+                   spurs_ok)
     legs = [start, *vias, end]
     last = legs[-2]  # the detour goes between the last via (or the start) and the end
     straight = max(sum(_meters(a, b) for a, b in zip(legs, legs[1:])), 1.0)

@@ -84,5 +84,5 @@ def test_an_end_too_far_for_the_distance_asks():
 
 def test_no_distance_means_the_shortest_way():
     final, _ = build(None)
-    assert final["routes"][0]["label"] == "the shortest way"
+    assert final["routes"][0]["label"] == "One way, the shortest way"  # named from the kind (decision 044)
     assert final["notes"] == []

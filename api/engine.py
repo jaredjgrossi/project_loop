@@ -26,6 +26,7 @@ from api.geometry import line_length_m, outline
 from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
 from api.units import meters_to_miles
 from api.via import Via, features_on_vias, through_rules, tour, via_jobs
+from api.naming import display_name
 from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url
@@ -198,7 +199,7 @@ def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
     """One route of the top 3 as the fixture's `top3` holds it: outline, label, score and the measured distance, plus
     `id`, the same for the same route in every event of one build, so the app can tell a route that moved up from a
     new one."""
-    return {"id": route_key, "rank": rank, "kind": c.kind, "label": c.label, "score": round(c.score),
+    return {"id": route_key, "rank": rank, "kind": c.kind, "label": display_name(c.kind, c.label), "score": round(c.score),
             "distance": route_summary(c, [], [], {})["distance"],
             "geometry": {"type": "LineString", "coordinates": c.route.coordinates}}
 
@@ -401,7 +402,7 @@ class Engine:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
         context_fn = self.context_for_fn(prefs["lights"], grid, use_prior=self.use_prior, start=rc.start_moment())
         route = Route(distance_m=line_length_m(coords), time_s=0.0, coordinates=coords)
-        rules = _Rules(meters_to_miles(route.distance_m), prefs, (), context_fn)
+        rules = _Rules(meters_to_miles(route.distance_m), prefs, (), context_fn, spurs_ok=True)  # exactly as run
         label = past.label or render("route.past")
         c = None  # what it is: a loop or out-and-back by its shape, else a run that ends elsewhere
         for kind in ((None, "out_and_back", "a_to_b") if is_closed(coords) else ("a_to_b",)):
@@ -410,8 +411,7 @@ class Engine:
                 c = got
                 break
         if c is None:  # a line no shape rule accepts (a ribbon): scored as a run that ends where it ends
-            c = _evaluate("run_again", "a_to_b", label, route, _Rules(rules.miles, prefs, (), context_fn,
-                                                                      ), allowed=())
+            c = _evaluate("run_again", "a_to_b", label, route, rules, allowed=())
         if isinstance(c, Rejection):
             raise EngineUnavailable(f"can't score the stored route: {c.reason}")
         miles = round(meters_to_miles(route.distance_m), 2)
@@ -468,6 +468,8 @@ class Engine:
         route_fn, round_trip_fn, area_fn = self.routers_fn(zones, prefs["lights"], closures,
                                                            **({"alongs": alongs} if alongs else {}))
         along_kw = {"along": alongs} if alongs else {}  # step 8b: crossing is fine, running along isn't
+        if past_via is not None:  # decision 044: the route they ran keeps its spurs
+            along_kw["spurs_ok"] = True
         if end is not None and rc.end_place is not None and rc.end_place.area == "neighborhood":
             try:  # "3 miles to Williamsburg": finish once the route is a few hundred meters inside it (decision 042)
                 area = (self.area_fn or db_area)(end)
@@ -547,6 +549,12 @@ class Engine:
         except psycopg.Error as exc:
             raise EngineUnavailable(f"Postgres: {exc.__class__.__name__}") from exc
         chosen = result.candidates
+        shape_notes = []
+        if not chosen and rc.shape == "loop" and result.fallback:  # never a silent swap (decision 044)
+            chosen = result.fallback
+            kind = render(f"kind.{chosen[0].kind}")
+            shape_notes = [{"id": "n_s1", "key": "no_good_loop", "trust": "measured",
+                            "text": render("note.no_good_loop", kind=kind)}]
         if end is None:  # a shape edit can reuse these (not an A-to-B build: its kind doesn't change with shape)
             self.remember_pool(route_id, passed)
         route = (ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, miles, rc, result.best_of,
@@ -555,5 +563,6 @@ class Engine:
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
                 "routes": [entry(r, c, key(c)) for r, c in enumerate(chosen, 1)], "route": route,
                 "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of},
-                "notes": distance_notes(rc, chosen, result.within_tolerance) + along_notes(lost),
+                "notes": shape_notes + distance_notes(rc, chosen, bool(chosen) and chosen[0].within_tolerance)
+                + along_notes(lost),
                 "timing": result.timing}

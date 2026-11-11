@@ -103,12 +103,13 @@ def test_build_streams_top3_and_provisional_then_returns_final():
     final = engine(fake_generate(cands)).build(rc(), Start(40.7438, -73.9799, "My location"), sent.append, "r_1")
     assert [e["event"] for e in sent] == ["top3", "top3", "provisional"]
     assert all(e["route_id"] == "r_1" and e["v"] == 1 for e in sent)
-    assert [r["label"] for r in sent[1]["routes"]] == ["first", "second"]
+    assert [r["label"] for r in sent[1]["routes"]] == ["Loop", "Loop"]  # named from the kind (decision 044)
     assert final["event"] == "final" and final["pool_size"] == 17 and final["notes"] == []
     assert final["pool"] == {"candidates": 20, "best_of": 17}  # as the fixture's pool, so the app reads it unchanged
-    assert [r["label"] for r in final["routes"]] == ["first", "second"]
+    assert [r["label"] for r in final["routes"]] == ["Loop", "Loop"]
     props = final["route"]["features"][0]["properties"]
-    assert props["rank"] == 1 and props["label"] == "first" and "summary" in props and "request" in props
+    assert props["rank"] == 1 and props["label"] == "Loop" and props["plan"] == "first" and props["name"] == "Loop"
+    assert "summary" in props and "request" in props
 
 
 def test_the_engine_down_is_engine_unavailable():
@@ -180,7 +181,7 @@ def test_an_a_to_b_run_with_no_distance_is_the_shortest_way():
                                                                   "lat": EAST[0], "lon": EAST[1]}),
                                   Start(*KIPS_POINT, "x"), sent.append, "r_2", end=EAST)
     assert final["routes"][0]["kind"] == "a_to_b" and final["notes"] == []
-    assert final["route"]["features"][0]["properties"]["label"] == "the shortest way"
+    assert final["route"]["features"][0]["properties"]["label"] == "One way, the shortest way"
     assert any(e["event"] == "top3" for e in sent)
 
 
@@ -405,3 +406,33 @@ def test_run_again_keeps_the_stored_line_exactly():  # decision 043
     assert r["geometry"]["coordinates"] == [list(c) for c in past.coords]  # no routing: the same line
     assert r["id"] == "r_again.1" and final["timing"] == {"run_again": past.id}
     assert final["route"] is not None and abs(r["distance"]["value"] - 4 * SQUARE_M / 1609.344) < 0.01
+
+
+# ---- loop as a hard rule, and honest names (decision 044) ----------------------------------------------------------
+
+def test_loop_with_no_loop_shows_the_best_other_kind_and_says_so():
+    import dataclasses
+    from collections import Counter
+    from api.generate import GenerationResult
+    out_and_back = dataclasses.replace(candidate(label="out-and-back on Riverside Walk, heading 19 degrees"),
+                                       kind="out_and_back")
+
+    def no_loops(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        return GenerationResult(candidates=[], within_tolerance=False, grid=grid, generated=20,
+                                rejected=Counter({"unwanted_out_and_back": 1}), fallback=[out_and_back])
+    final = engine(no_loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_nl")
+    assert [r["kind"] for r in final["routes"]] == ["out_and_back"]
+    assert final["routes"][0]["label"] == "Out-and-back on Riverside Walk"
+    assert final["notes"][0]["key"] == "no_good_loop"
+    assert final["notes"][0]["text"] == "No good loop from here; showing the best out-and-back"
+
+
+def test_with_loops_the_fallback_is_never_used():
+    from collections import Counter
+    from api.generate import GenerationResult
+
+    def loops(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        return GenerationResult(candidates=[candidate()], within_tolerance=True, grid=grid, generated=20,
+                                rejected=Counter(), fallback=[candidate(label="other")])
+    final = engine(loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_l")
+    assert final["notes"] == [] and final["routes"][0]["label"] == "Loop on the street grid"

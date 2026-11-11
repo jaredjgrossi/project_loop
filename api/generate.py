@@ -32,6 +32,7 @@ from api.constraints import DEFAULTS
 from api.grid import MIN_GRID_STRENGTH, GridEstimate
 from api.closures import Closure, passed
 from api.along import runs_along
+from api.markers import spurs
 from api.hills import hill_metrics
 from api.geometry import covered_share, passes_through
 from api.nogo import NoGoZone, touched
@@ -50,7 +51,9 @@ DUPLICATE_SIMILARITY = 0.8
 ASPECTS = (1.0, 1.5, 2.5)  # long side : short side
 FALLBACK_SEEDS = range(8)
 OUT_AND_BACK_HEADINGS = (0, 90, 180, 270, 45, 135, 225, 315)  # degrees from the grid angle; along the grid first
-OUT_AND_BACK_MIN_RETRACED_PCT = 70.0  # less than this and the way back isn't the way out
+# Most of it retraced: an out-and-back, whatever made it (phone test, 2026-11-11, decision 044; was 70, which left
+# a route 67% retraced, with a small loop at the far end, called a loop).
+OUT_AND_BACK_MIN_RETRACED_PCT = 50.0
 A_TO_B_MAX_RETRACED_PCT = 25.0  # step 8, provisional: more than this and an A-to-B route doubles back
 
 RouteFn = Callable[[list[tuple[float, float]]], Route]  # (lat, lon) points -> route
@@ -65,7 +68,7 @@ MAX_ANCHOR_DIRECTIONS = {("familiar", "along"): 4, ("familiar", "straight"): 4, 
                          ("water", "straight"): 8}
 DEFAULT_ANCHOR_DIRECTIONS = 2
 SHAPE_KINDS = {  # which route kinds each RunConstraints.shape accepts; a lollipop starts and ends as a loop does
-    "loop": ("loop", "lollipop"),
+    "loop": ("loop",),  # a hard rule (decision 044): a lollipop is mostly retraced, so it isn't a loop
     "out_and_back": ("out_and_back",),
     "any": ("loop", "lollipop", "out_and_back"),
 }
@@ -105,6 +108,7 @@ class Rejection:
     method: str
     label: str
     reason: str
+    candidate: "Candidate | None" = None  # a route of a kind the shape rules out: kept for the "no good loop" note
 
 
 @dataclass
@@ -121,6 +125,8 @@ class GenerationResult:
     # duplicates dropped by the same rule as the top 3. None when no route came within the limit.
     best_of: int | None = None
     provisional: list[Candidate] = field(default_factory=list)  # the top N when flagged provisional (decision 018)
+    # Decision 044: the best routes of the kinds the shape ruled out, for a "no good loop from here" answer.
+    fallback: list[Candidate] = field(default_factory=list)
 
 
 # --- geometry ------------------------------------------------------------------------
@@ -241,6 +247,7 @@ class _Rules:
     # it must run along
     through: tuple[tuple[dict, float, float | None], ...] = ()
     along: tuple = ()  # step 8b: streets (along.Along) a route may cross but not run along
+    spurs_ok: bool = False  # decision 044: a past route rebuilt or run again keeps the spurs the runner ran
 
 
 def _classify(shape: ShapeMetrics) -> Kind | None:
@@ -274,12 +281,14 @@ def _evaluate(
         shape = shape_metrics(route.coordinates)
     except ValueError:
         return Rejection(method, label, "degenerate")
+    if not rules.spurs_ok and spurs(route.coordinates):  # decision 044: no padding with a quick out-and-back
+        return Rejection(method, label, "spur")
+    unwanted = False
     if kind is None:
         kind = _classify(shape)
         if kind is None:
             return Rejection(method, label, "too_thin")
-        if kind not in allowed:
-            return Rejection(method, label, f"unwanted_{kind}")
+        unwanted = kind not in allowed
     elif kind == "out_and_back":
         if shape.retraced_pct < OUT_AND_BACK_MIN_RETRACED_PCT:
             return Rejection(method, label, "not_out_and_back")
@@ -297,8 +306,8 @@ def _evaluate(
     context = rules.context_fn(route.coordinates) if rules.context_fn else None
     hills = hill_metrics(route.coordinates, route.elevation) if rules.prefs.get("hills") == "avoid" else None
     ranking = rank(kind, shape, rules.prefs, context, hills)
-    return Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking,
-                     context)
+    c = Candidate(method, label, route, shape, ranking.score, miss, abs(miss) <= TOLERANCE_PCT, kind, ranking, context)
+    return Rejection(method, label, f"unwanted_{kind}", candidate=c) if unwanted else c
 
 
 def _dedupe(ranked: list[Candidate], limit: int) -> list[Candidate]:
@@ -519,10 +528,12 @@ def generate_loops(
     extra_jobs: Callable[["_Rules"], list[tuple[int, Callable]]] | None = None,
     through: Sequence[tuple[dict, float, float | None]] = (),
     along: Sequence = (),  # step 8b: streets not to run along (along.Along)
+    spurs_ok: bool = False,  # decision 044: following a past route
 ) -> GenerationResult:
     target_m = miles_to_meters(miles)
     start = (lat, lon)
-    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along))
+    rules = _Rules(miles, prefs or DEFAULTS, tuple(avoid), context_fn, tuple(closures), tuple(through), tuple(along),
+                   spurs_ok)
     notes: list[str] = []
 
     def rectangle_job(spec: _Spec) -> Callable[[], Candidate | None]:
@@ -765,4 +776,5 @@ def run_and_finish(jobs: list[tuple[int, Callable]], workers: int, top_n: int, s
         timing=timing,
         best_of=best_of,
         provisional=stream.provisional or [],
+        fallback=_select([r.candidate for r, _ in outcomes if isinstance(r, Rejection) and r.candidate], top_n, "any"),
     )

@@ -243,9 +243,12 @@ def route_file(c: Candidate, rank: int, lat: float, lon: float, label: str, mile
                best_of: int | None, stretch_fn: Callable | None) -> dict:
     """One route as the app reads it (the fixture's `route`): the line with its shape, elevation, request and summary,
     then mile markers and turnarounds, then stretches and pieces by kind (decisions 014, 020, 023)."""
+    from api.naming import display_name
+    name = display_name(c.kind, c.label)
     geojson = route_to_geojson(
-        c.route, lat, lon, label, miles, c.shape.as_dict(),
-        extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": c.label, "score": round(c.score),
+        c.route, lat, lon, label, miles, c.shape.as_dict(), name=name,
+        extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": name, "plan": c.label,
+                          "score": round(c.score),
                           "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
                           "start_hour": constraints.start_hour, "request": request_items(constraints)},
     )

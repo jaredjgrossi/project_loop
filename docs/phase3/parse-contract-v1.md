@@ -195,6 +195,27 @@ Built in step 11 (decision 038):
 - **Via places (step 9):** every route passes every via place, within 30 m of a park's or a lake's outline, 60 m of a path or street, or 150 m of a point. With an end too, the route goes through the vias on its way there.
 - **Laps (decision 035):** an `around` via is a full lap, in the loop's running direction (counterclockwise for the four known loops), entered and left at the point nearest the way in. Every route runs along at least 90% of the lap's ring, within 30 m, and the lap counts toward the distance. Known loops run their curated ring (the Reservoir track 1.57 mi, the Central Park drive 6.05 mi, the Prospect Park drive 3.49 mi, measured from OSM); any other park or water runs its outline. A lap isn't run twice, so there are no out-and-backs through it.
 - **Route entries** in `top3`, `provisional` and `final` carry `id`, the same for the same route in every event of one build (step 6).
+- **Kinds and names are honest** (decision 044):
+  - `kind` is measured on the route's own line: `out_and_back` when 50% or more of it is retraced, else `lollipop`
+    (some retracing, with a loop) or `loop`; `a_to_b` for a one-way run.
+  - `label` (route entries, and `route`'s `label` and `name`) is a name built from that kind plus the place:
+    "Out-and-back on Riverside Walk", "Loop through Central Park", "Loop on the street grid", "One way along Domino
+    Park waterfront". It is never "loop" for a route that isn't one.
+  - `route`'s `plan` keeps how the generator made it ("loop on Riverside Walk, heading 19 degrees"), for logs only.
+  - The app's card, eyebrow and saved-route names should use `kind` and `label` as sent.
+- **`shape: "loop"` is a hard rule** (decision 044): loops only, no out-and-backs and no lollipops.
+  - If no loop fits within tolerance, the nearest loop comes back with the usual distance note.
+  - If no loop is found at all, the best other kind comes back, with `notes`: `{"key": "no_good_loop", "trust":
+    "measured", "text": "No good loop from here; showing the best out-and-back"}`. Never a silent swap.
+- **No padding with spurs** (decision 044): no route takes a quick out-and-back off its main line to make up
+  distance: a dead end it goes 150–400 m into and back, more than 300 m from the start or finish. A reversal under
+  150 m is part of the line (a ramp, a footbridge approach). A past route rebuilt or run again keeps the spurs
+  the runner ran.
+- **Turnaround markers** (`feature: "turnaround"`) mark only where the run turns: every dead end it reaches 400 m or
+  more into, and its farthest point if it turns there. Not spurs or short reversals; a round loop has none.
+- **Climb** (`summary.climb`, `route.elevation.gain_m` and `loss_m`) is read from the height every 0.1 mi through a
+  2 m band, in whole meters (decision 044). Summing every route point's height counted tile noise: 130.5 m for a
+  route that climbs about 50.
 - **`client.now`** may be UTC (`Z`); the server reads it in `client.tz` (step 6).
 - **`final`** also carries `pool` (`{candidates, best_of}`, the fixture's `pool`; step 6), `routes` (the top 3, as in `top3`), `route` (the #1 in full, the fixture's `route`: summary, markers, stretches and pieces), `pool_size`, `notes` (a distance miss with the nearest route and how far off, or no route; `trust: "measured"`) and `timing`.
 - **Can't-do lines from the engine:** `gap: "avoid_unknown"` for an area avoid that isn't on the no-go list. Nothing in Phase 3 is left for later: end places (step 8), via places (step 9), along-avoids (step 8b), hills (step 10), past routes and planned runs (step 11) all build, so `gap: "later"` no longer appears.

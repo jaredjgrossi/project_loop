@@ -131,7 +131,9 @@ def test_the_lap_rule_is_the_ring_and_a_share():
 def test_every_route_runs_the_whole_lap_and_fits_the_distance():
     v = lap_via()
     lap_m = 2400  # 4 x 600 m
-    result = run([v], 4.0)
+    # The lap and the 0.9 km each way to it: 2.6 mi. Longer runs need detours, which on this straight-line router are
+    # sharp V-shaped spurs, rejected since decision 044.
+    result = run([v], 2.7)
     assert result.candidates
     line = through_rules([v])[0][0]
     for c in result.candidates:

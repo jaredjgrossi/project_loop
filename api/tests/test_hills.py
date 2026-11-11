@@ -45,7 +45,7 @@ def test_down_and_up_counts_only_the_ups():
     coords = north(2 * MILE)
     n = len(coords) - 1
     elevation = [20 - 20 * i / (n / 2) if i <= n / 2 else 20 * (i - n / 2) / (n / 2) for i in range(n + 1)]
-    assert hill_metrics(coords, elevation).climb_m == pytest.approx(20, abs=0.5)
+    assert hill_metrics(coords, elevation).climb_m == pytest.approx(20, abs=2)  # the 2 m band costs about 1 m
 
 
 def test_no_elevation_is_not_scored_rather_than_flat():

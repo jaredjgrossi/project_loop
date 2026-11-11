@@ -128,6 +128,7 @@ def route_to_geojson(
     requested_miles: float,
     shape: dict | None = None,
     extra_properties: dict | None = None,
+    name: str = "Route",
 ) -> dict:
     """`shape` is ShapeMetrics.as_dict(); its fields are added to the route's properties."""
     actual_miles = meters_to_miles(route.distance_m)
@@ -138,7 +139,7 @@ def route_to_geojson(
                 "type": "Feature",
                 "geometry": {"type": "LineString", "coordinates": route.coordinates},
                 "properties": {
-                    "name": "Loop route",
+                    "name": name,  # decision 044: from the route's measured kind, never a fixed "Loop route"
                     "requested_miles": requested_miles,
                     "actual_miles": round(actual_miles, 3),
                     "percent_off": round(percent_off(requested_miles, actual_miles), 1),
