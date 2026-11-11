@@ -136,6 +136,10 @@ struct MainScreen: View {
                     .zIndex(10)
             }
         }
+        // The keyboard never shrinks the screen: the landing sheet grows with it on its own, and a
+        // smaller screen would push the header up while typing. Only the rating's note and a
+        // question's answer field need lifting, so the keyboard's safe area counts for those.
+        .ignoresSafeArea(model.rating == nil && model.pendingQuestion == nil ? .keyboard : [], edges: .bottom)
         .background(Palette.mapLand.color)
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
