@@ -159,6 +159,9 @@ struct YouSheet: View {
                             .frame(minHeight: Metrics.minTap)
                         }
                         .padding(.top, 14)
+                        #if DEBUG
+                        DesignLabCard().padding(.top, 26)
+                        #endif
                     }
                     .padding(.horizontal, Metrics.s24)
                     .padding(.bottom, 32)
