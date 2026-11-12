@@ -436,3 +436,37 @@ def test_with_loops_the_fallback_is_never_used():
                                 rejected=Counter(), fallback=[candidate(label="other")])
     final = engine(loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_l")
     assert final["notes"] == [] and final["routes"][0]["label"] == "Loop on the street grid"
+
+
+def test_a_shape_edit_after_a_via_build_reads_candidates_not_vias():  # full review 7.2: `passed` was rebound
+    from api.generate import Candidate
+    eng = via_engine()
+    start = Start(*KIPS_POINT, "x")
+    eng.build(rc(distance_mi=5.0, via_places=[via_ref(FAR_NORTH)], shape="any"), start, lambda e: None, "r_v3")
+    pool = eng.pools["r_v3"]
+    assert pool and all(isinstance(c, Candidate) for c in pool)  # never Via objects
+    final = eng.from_pool(rc(distance_mi=5.0, via_places=[via_ref(FAR_NORTH)], shape="loop"), start, "r_v3",
+                          lambda e: None, "r_v4")  # the edit the review saw fail with engine_unavailable
+    assert final is not None and final["routes"] and all(r["kind"] == "loop" for r in final["routes"])
+
+
+def test_the_via_features_never_see_candidates():  # the same rebinding fed candidates to features_on_vias
+    from api.generate import Candidate
+    seen = []
+
+    def spy_source(lat, lon, radius):
+        return []
+
+    def features_on_vias_spy(source, vias):
+        seen.append(vias)  # a reference to the live list: read later, on a worker thread
+        return lambda lat, lon, radius_m: []
+
+    import api.engine as engine_module
+    original = engine_module.features_on_vias
+    engine_module.features_on_vias = features_on_vias_spy
+    try:
+        eng = via_engine(feature_anchor_fn=[spy_source])
+        eng.build(rc(distance_mi=5.0, via_places=[via_ref(FAR_NORTH)]), Start(*KIPS_POINT, "x"), lambda e: None, "r_v5")
+    finally:
+        engine_module.features_on_vias = original
+    assert seen and all(isinstance(v, Via) for v in seen[0]) and not any(isinstance(v, Candidate) for v in seen[0])

@@ -548,12 +548,15 @@ class Engine:
             elif vias:  # through or along named places, back to the start (step 9)
                 sources = self.feature_anchor_fn or []
                 sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
-                passed = [v for v in vias if v.lap is None]  # features anchor routes only on vias passed, not laps
+                # features anchor routes only on vias passed, not laps. Not `passed`: that is the list of candidates
+                # on_candidate fills, and the shape-edit pool (full review 7.2).
+                passed_vias = [v for v in vias if v.lap is None]
                 result = self.generate_fn(
                     start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
                     shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
-                    anchor_fn=None, feature_anchor_fn=[features_on_vias(f, passed) for f in sources] if passed else [],
-                    area_route_fn=area_fn if sources and passed else None, on_top3=on_top3, on_candidate=on_candidate,
+                    anchor_fn=None,
+                    feature_anchor_fn=[features_on_vias(f, passed_vias) for f in sources] if passed_vias else [],
+                    area_route_fn=area_fn if sources and passed_vias else None, on_top3=on_top3, on_candidate=on_candidate,
                     only_anchored=True, extra_jobs=via_jobs(here, vias, miles, route_fn, shortest, rc.shape),
                     through=through, **along_kw)
             else:
