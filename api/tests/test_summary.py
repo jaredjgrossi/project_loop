@@ -115,3 +115,56 @@ def test_lights_a_mile_divide_by_the_distance_shown_not_the_routers_figure():
     assert s["lights_per_mile"]["value"] == round(n / (s["distance"]["meters"] / 1609.344), 1)
     assert s["lights_per_mile"]["value"] == pytest.approx(n / shown_miles, abs=0.05)
     assert s["lights_per_mile"]["value"] != round(n / (5200 / 1609.344), 1)
+
+
+# ---- the stretch list and the reason (UI review) -----------------------------------------------------------------------
+
+
+def test_the_way_lists_each_stretch_with_its_name_kind_and_distance():
+    c = candidate(CONTEXT)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    assert [(w["name"], w["kind"]) for w in s["way"]] == [("East 34th Street", "street"),
+                                                         ("East River Esplanade", "corridor"),
+                                                         ("East 34th Street", "street")]
+    assert [w["distance"]["meters"] for w in s["way"]] == [400, 4040, 360]
+    assert [w["distance"]["value"] for w in s["way"]] == [0.25, 2.51, 0.22] and s["way"][0]["distance"]["unit"] == "mi"
+    assert [(w["from_mile"], w["to_mile"]) for w in s["way"]][1] == (0.25, 2.76)
+    for w in s["way"]:  # the name is listed (OSM), the distance measured from the route's own geometry
+        assert w["distance"]["status"] == "measured" and w["distance"]["source"]
+        assert w["trust"] in ("verified", "listed", "seasonal_or_closed") and w["source"]
+
+
+def test_the_way_says_which_stretch_the_turnaround_is_on():
+    c = candidate(CONTEXT)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    assert [w.get("turnaround") for w in s["way"]] == [None, {"mile": 1.49, "meters": 2400}, None]
+    assert s["turnarounds"][0]["value"] == 1.49  # the same turnaround the summary lists
+
+
+def test_a_loop_has_a_way_and_no_turnaround():
+    c = candidate(CONTEXT)
+    s = route_summary(c, stretches(c.route.coordinates), [], ELEVATION)
+    assert len(s["way"]) == 3 and not any("turnaround" in w for w in s["way"])
+
+
+def test_the_summary_has_a_reason_from_its_own_numbers():
+    c = candidate(CONTEXT)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    assert s["reason"]["text"] == "60% on the waterfront, 12 lights, flat"
+    assert s["reason"]["status"] == "estimate" and s["reason"]["source"]
+
+
+def test_a_park_route_names_its_park_in_the_reason():
+    park = Label("park", "Central Park", "OSM park area a1", "listed")
+    c = candidate(CONTEXT)
+    labels = [park] * 242
+    comps = [{"waterfront": 0.0, "park": 4800.0, "path": 0.0, "street": 0.0}]
+    st = stretch_features(c.route.coordinates, labels, step_m=20, signals=[2], gains=[1.0], compositions=comps)
+    s = route_summary(c, st, [], {"status": "estimate", "source": "Terrain Tiles", "gain_m": 30.0})
+    assert s["reason"]["text"].startswith("100% through Central Park, 2 lights")
+
+
+def test_without_stretches_there_is_a_way_of_none_and_no_reason_claims():
+    c = candidate(CONTEXT)
+    s = route_summary(c, [], [], {"status": "not_scored"})
+    assert s["way"] == [] and s["reason"]["text"] is None

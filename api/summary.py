@@ -12,6 +12,7 @@ are sums over the stretches, so the stretches always add up to the summary. Labe
 from api.generate import Candidate
 from api.elevation import SOURCE as ELEVATION_SOURCE
 from api.hills import hill_metrics
+from api.reason import route_reason
 from api.route_context import COMPOSITION
 from api.segments import COMPOSITION_SOURCE, SIGNALS_COUNTED
 
@@ -29,6 +30,43 @@ def _value(value, unit: str | None, status: str, source: str, **extra) -> dict:
 
 def _not_scored(reason: str) -> dict:
     return {"value": None, "status": "not_scored", "reason": reason}
+
+
+def way_list(stretches: list[dict], turns: list[dict]) -> list[dict]:
+    """The route as the sheet's "The way" lists it (UI review): each stretch with its name, kind and distance, in order,
+    and `turnaround` ({mile, meters}) on the stretch the run turns on. The name is listed (OSM or the corridor
+    catalog); the distance is measured from the route's own geometry."""
+    out, start = [], 0
+    for s in stretches:
+        p = s["properties"]
+        fact = (p.get("facts") or [{}])[0]
+        length = p.get("length_m", 0)
+        end = start + length
+        item = {"name": p.get("name"), "kind": p.get("kind"), "from_mile": p.get("from_mile"),
+                "to_mile": p.get("to_mile"),
+                "distance": _value(round(length / METERS_PER_MILE, 2), "mi", "measured", DISTANCE_SOURCE, meters=length),
+                "status": "measured", "trust": fact.get("trust", "listed"), "source": fact.get("source", DISTANCE_SOURCE)}
+        out.append(item)
+        start = end
+    bounds = [0]
+    for item in out:
+        bounds.append(bounds[-1] + item["distance"]["meters"])
+    for t in turns:
+        along = t["along_m"]
+        k = next((i for i in range(len(out)) if bounds[i] <= along <= bounds[i + 1]), None)
+        if k is not None and "turnaround" not in out[k]:
+            out[k]["turnaround"] = {"mile": round(along / METERS_PER_MILE, 2), "meters": along}
+    return out
+
+
+def _park_name(stretches: list[dict]) -> str | None:
+    """The park the route runs most, by stretch name, or None when no stretch is labeled a park."""
+    totals: dict[str, float] = {}
+    for s in stretches:
+        p = s["properties"]
+        if p.get("kind") == "park":
+            totals[p["name"]] = totals.get(p["name"], 0.0) + p.get("length_m", 0)
+    return max(totals, key=totals.get) if totals else None
 
 
 BEST_OF_SOURCE = ("distinct routes that passed every hard rule within the distance limit, duplicates dropped as "
@@ -95,6 +133,12 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
 
     turns = [m["properties"] for m in markers if m["properties"].get("feature") == "turnaround"]
     out["turnarounds"] = [_value(t["along_mi"], "mi", "measured", t["source"], meters=t["along_m"]) for t in turns]
+    out["way"] = way_list(stretches, [t for t in (m["properties"] for m in markers) if t.get("feature") == "turnaround"])
+    shown = lambda key: out[key]["value"] if out[key]["status"] == "measured" else None  # noqa: E731
+    out["reason"] = route_reason(
+        waterfront_pct=shown("waterfront_pct"), park_pct=shown("park_pct"), park_name=_park_name(stretches),
+        lights=shown("signalized_crossings"), climb_m=out["climb"]["value"] if out["climb"]["status"] == "estimate" else None,
+        miles=miles)
     out["score"] = _value(round(c.score), None, "provisional", "combined ranking; weights not calibrated (decision 010)")
     out["rank"] = (_value(rank, None, "measured", BEST_OF_SOURCE, of=best_of) if rank is not None and best_of
                    else _not_scored("no route came within the distance limit"))

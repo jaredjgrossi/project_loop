@@ -323,3 +323,21 @@ def test_a_start_time_without_a_day_gets_the_next_day_it_comes_round(tmp_path, c
               now_fn=lambda: datetime(2026, 11, 3, 21, 0)) == 0
     assert seen["start"] == datetime(2026, 11, 4, 7, 0)  # 9 pm now: tomorrow, a Wednesday
     assert "Day: Wednesday 2026-11-04 (default)" in capsys.readouterr().out
+
+
+def test_the_route_file_is_named_after_the_stretch_it_runs_most(tmp_path):  # UI review: name the main stretch
+    stretch = {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+               "properties": {"feature": "stretch", "name": "East River Esplanade", "kind": "corridor", "length_m": 3800,
+                              "from_mile": 0.0, "to_mile": 2.4, "facts": [{"text": "On East River Esplanade",
+                                                                           "source": "test", "trust": "listed"}]}}
+    assert go(tmp_path, fake_generate([candidate()]), stretch_fn=lambda coords, ele, start: [stretch]) == 0
+    props = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]
+    assert props["name"] == props["label"] == "Loop on East River Esplanade"
+    assert props["plan"]  # the generator's own label stays, for the pool and the evals
+    assert props["summary"]["way"][0]["name"] == "East River Esplanade"
+
+
+def test_without_stretches_the_name_comes_from_the_generators_label(tmp_path):
+    assert go(tmp_path, fake_generate([candidate()])) == 0
+    props = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]
+    assert props["name"] == "Loop on the street grid"
