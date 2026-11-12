@@ -66,7 +66,7 @@ final class MainModel {
     // Come back (UI chat, 2026-11-10; ComeBack.swift)
     /// The route on the card: what Save, "I ran it" and the return prompt keep.
     var currentRoute: RouteIdentity?
-    /// The card's primary action: Send to watch, or "Run again" for a route opened from History.
+    /// The card's primary action: Share route, or "Run again" for a route opened from History.
     var cardMode: CardMode = .normal
     enum CardMode: Equatable { case normal, history }
     /// "How was it?": the route sheet shows the rating instead of the card.

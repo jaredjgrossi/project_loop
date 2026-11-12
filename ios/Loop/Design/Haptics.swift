@@ -1,6 +1,6 @@
 import UIKit
 
-/// The things that vibrate: the settle, mile ticks, success (Send to watch, a Good rating) and a saved
+/// The things that vibrate: the settle, mile ticks, success (a Good rating) and a saved
 /// route (brief, plus come back 2026-11-10). Nothing else does.
 @MainActor
 enum Haptics {
@@ -19,6 +19,6 @@ enum Haptics {
     /// The bookmark saves a route (come back, 2026-11-10).
     static func saved() { light.impactOccurred() }
 
-    /// "Send to watch" confirms.
+    /// A Good rating confirms.
     static func success() { notification.notificationOccurred(.success) }
 }

@@ -5,7 +5,6 @@ import SwiftUI
 struct RouteSheet: View {
     @Bindable var model: MainModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var sentConfirmed = false
 
     private var sheet: SheetState { model.sheet }
     @State private var readContentHeight: CGFloat = 0
@@ -76,7 +75,7 @@ struct RouteSheet: View {
                 .accessibilityHidden(progress < 0.5)
                 .hiddenWhen(progress == 0)
 
-            ActionRow(model: model, sentConfirmed: $sentConfirmed)
+            ActionRow(model: model)
                 .padding(.top, 12)
 
             // "How Loop read it": revealed past the open state, scrolling if it's long.
@@ -244,8 +243,8 @@ struct CardBlock: View {
                         .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
-                        if let detail = shown.detail {
-                            Text(CardText.reason(detail.summary))
+                        if let reason = shown.detail.flatMap({ CardText.reason($0.summary) }) {
+                            Text(reason)
                                 .typeStyle(.body)
                                 .foregroundStyle(Palette.inkSoft.color)
                                 .lineLimit(1)
@@ -412,12 +411,11 @@ struct TrustTap<Content: View>: View {
     }
 }
 
-/// The one primary action. Confirms at once with a success haptic and does nothing else (this slice).
-/// "I ran it" (outline, ink, with a check) beside the primary action: Send to watch, or "Run again"
+/// "I ran it" (outline, ink, with a check) beside the primary action: Share route, or "Run again"
 /// for a route opened from History.
 struct ActionRow: View {
     let model: MainModel
-    @Binding var sentConfirmed: Bool
+    @State private var shareItem: ShareItem?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -448,8 +446,17 @@ struct ActionRow: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                SendButton(confirmed: $sentConfirmed) { model.sentToWatch() }
+                ShareButton {
+                    if let url = model.gpxFileOfShown() { shareItem = ShareItem(url: url) }
+                }
             }
+        }
+        .sheet(item: $shareItem) { item in
+            ShareSheet(url: item.url) { completed in
+                shareItem = nil
+                if completed { model.sharedRoute() }
+            }
+            .presentationDetents([.medium, .large])
         }
     }
 }
@@ -557,23 +564,16 @@ struct RatingContent: View {
     }
 }
 
-struct SendButton: View {
-    @Binding var confirmed: Bool
+/// The primary action: opens the iOS share sheet with the route as a GPX file (AirDrop, Files, a
+/// running app). It says nothing is sent until the runner picks a place; no confirmation of its own.
+struct ShareButton: View {
     var onTap: () -> Void
 
     var body: some View {
-        Button {
-            onTap()
-            Haptics.success()
-            confirmed = true
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(2.5))
-                confirmed = false
-            }
-        } label: {
+        Button(action: onTap) {
             HStack(spacing: 8) {
-                if confirmed { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)) }
-                Text(confirmed ? "Sent to watch" : "Send to watch")
+                Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .semibold))
+                Text("Share route")
             }
             .typeStyle(.bodyStrong)
             .foregroundStyle(Palette.onAction.color)
@@ -582,6 +582,30 @@ struct SendButton: View {
             .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(confirmed ? "Sent to watch" : "Send to watch")
+        .accessibilityLabel("Share route")
+        .accessibilityHint("Opens the share sheet with this route as a GPX file")
     }
+}
+
+/// A file ready for the share sheet.
+struct ShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// UIKit's share sheet for one file.
+struct ShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    var onDone: (Bool) -> Void
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let vc = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        vc.completionWithItemsHandler = { _, completed, _, _ in
+            try? FileManager.default.removeItem(at: url)
+            onDone(completed)
+        }
+        return vc
+    }
+
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

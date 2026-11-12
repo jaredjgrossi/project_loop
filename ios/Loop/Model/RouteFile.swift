@@ -131,26 +131,32 @@ struct RouteFile: Decodable {
         let elevationM: Double
     }
 
-    /// A number with its trust label and where it came from.
+    /// A number with its trust label and where it came from. The server sends `value: null` with
+    /// status "not_scored" whenever it can't score something (no elevation, no stretches, crowds
+    /// outside 7 am to 8 pm and on Sundays): a missing value is normal, never a decode failure.
     struct Measure: Decodable {
-        let value: Double
+        let value: Double?
         let status: String
         let source: String?
         let unit: String?
         let meters: Double?
+
+        /// The route's length in miles. The one number a route can't do without: if the value is
+        /// missing, the measured metres stand in.
+        var miles: Double { value ?? (meters ?? 0) / 1609.344 }
     }
 
     struct CrowdMeasure: Decodable {
-        let value: Double
+        let value: Double?
         let status: String
-        let source: String
-        let notScoredPct: Double
+        let source: String?
+        let notScoredPct: Double?
     }
 
     struct RankMeasure: Decodable {
-        let value: Int
+        let value: Int?
         let status: String
-        let of: Int
+        let of: Int?
     }
 
     struct Summary: Decodable {

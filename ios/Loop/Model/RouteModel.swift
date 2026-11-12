@@ -243,7 +243,7 @@ struct LoopData {
 
         // Stretches: mile ranges from the file, mapped onto the route line in proportion
         // so they tile it exactly (the file's miles and the line length agree to a few metres).
-        let totalMi = summary.distance.value
+        let totalMi = summary.distance.miles
         let stretches: [Stretch] = features.compactMap { f in
             let p = f.properties
             guard p.feature == "stretch", let idx = p.stretch, let name = p.name,
@@ -288,7 +288,7 @@ struct LoopData {
         let detail = RouteDetail(
             line: line,
             kindText: CardText.kindText(summary.kind),
-            distanceMi: summary.distance.value,
+            distanceMi: summary.distance.miles,
             distanceTrust: Trust(summary.distance.status),
             stretches: stretches, drawn: drawn, miles: miles, turnaround: turnaround, start: start,
             profile: elevation.profile, profileTrust: Trust(elevation.status),
@@ -299,7 +299,7 @@ struct LoopData {
             return Candidate(
                 rank: t.rank,
                 line: t.rank == 1 ? line : Polyline(coords),
-                distanceMi: t.rank == 1 ? summary.distance.value : t.distance.value,
+                distanceMi: t.rank == 1 ? summary.distance.miles : t.distance.miles,
                 distanceTrust: Trust(t.rank == 1 ? summary.distance.status : t.distance.status),
                 distanceSource: t.rank == 1 ? summary.distance.source : t.distance.source,
                 kindText: CardText.kindText(t.kind),

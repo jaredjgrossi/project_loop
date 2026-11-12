@@ -283,7 +283,7 @@ extension MainModel {
             let k = key(for: r.id, rank: r.rank)
             keys.append(k)
             if byKey[k] == nil {
-                byKey[k] = Candidate(rank: k, line: Polyline(pts), distanceMi: r.distance.value,
+                byKey[k] = Candidate(rank: k, line: Polyline(pts), distanceMi: r.distance.miles,
                                      distanceTrust: Trust(r.distance.status), distanceSource: r.distance.source,
                                      kindText: CardText.kindText(r.kind), detail: nil)
             }

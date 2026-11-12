@@ -12,7 +12,7 @@ final class LandingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["By the water"].exists, "suggestions follow the runner's own runs")
         usual.tap()
 
-        XCTAssertTrue(app.buttons["Send to watch"].waitForExistence(timeout: 20), "the route's card opens")
+        XCTAssertTrue(app.buttons["Share route"].waitForExistence(timeout: 20), "the route's card opens")
         XCTAssertFalse(usual.isHittable, "the landing sheet slid away")
     }
 
