@@ -92,3 +92,45 @@ def test_piece_features_carry_kind_meters_and_the_stretch_they_sit_in():
     assert props[2]["from_mile"] == 0.56 and props[2]["to_mile"] == 0.62
     assert all(p["status"] == "measured" and p["source"] for p in props)
     assert feats[1]["geometry"] == {"type": "LineString", "coordinates": coords[15:46]}
+
+
+# ---- a runnable path is never named after the road beside it (UI review: "FDR Drive", "11th Avenue") -----------------
+
+# row: (ord, corridor id, corridor name, verified, park area, park name, by_water, nearest named way id and name,
+#       nearest named non-sidewalk path id and name, nearest way of any name: id, highway, footway tag, name)
+WATER = (1, None, None, None, None, None, True)
+
+
+def test_a_waterfront_sample_takes_the_paths_own_name_not_the_roads():
+    from api.segments import _label
+    lab = _label((*WATER, 7, "FDR Drive", 9, "East River Esplanade", 9, "cycleway", None, "East River Esplanade"))
+    assert (lab.kind, lab.name) == ("waterfront", "East River Esplanade") and "w9" in lab.source and lab.trust == "listed"
+
+
+def test_a_waterfront_sample_with_no_named_path_is_a_waterfront_path_never_the_road():
+    from api.segments import _label
+    lab = _label((*WATER, 7, "11th Avenue", None, None, 4, "footway", None, None))
+    assert (lab.kind, lab.name) == ("waterfront", "waterfront path")
+
+
+def test_an_unnamed_path_beside_a_road_is_a_path_not_the_road():
+    from api.segments import _label
+    row = (1, None, None, None, None, None, False, 7, "East 23rd Street", None, None, 4, "cycleway", None, None)
+    assert (_label(row).kind, _label(row).name) == ("path", "unnamed path")
+
+
+def test_a_sidewalk_is_the_roads_stretch_and_keeps_the_roads_name():
+    from api.segments import _label
+    row = (1, None, None, None, None, None, False, 7, "East 23rd Street", None, None, 4, "footway", "sidewalk", None)
+    assert (_label(row).kind, _label(row).name) == ("street", "East 23rd Street")
+
+
+def test_a_named_path_off_the_catalog_keeps_its_own_name():
+    from api.segments import _label
+    row = (1, None, None, None, None, None, False, 7, "FDR Drive", 9, "Bobby Wagner Walk", 9, "footway", None, "Bobby Wagner Walk")
+    assert (_label(row).kind, _label(row).name) == ("path", "Bobby Wagner Walk")
+
+
+def test_the_old_nine_field_rows_still_work():
+    from api.segments import _label
+    assert _label((1, None, None, None, None, None, False, 5, "East 23rd Street")).name == "East 23rd Street"
