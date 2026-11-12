@@ -631,11 +631,11 @@
     "fingerprint": "14b96968cf24"
    },
    {
-    "label": "loop on Bronx River Greenway, heading 56 degrees",
+    "label": "out-and-back both ways on Bronx River Greenway",
     "kind": "out_and_back",
-    "distance_m": 6494,
-    "score": 64.14,
-    "fingerprint": "07177b18826d"
+    "distance_m": 6548,
+    "score": 64.27,
+    "fingerprint": "fe1470d5441f"
    },
    {
     "label": "rectangle 2.5:1, +-",

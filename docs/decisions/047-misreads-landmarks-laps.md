@@ -58,6 +58,13 @@
   now wraps its routers once (`without_waypoint_spurs`, idempotent) so every route it builds is covered. The wrapper
   repeats up to three times while a moved waypoint still makes a spur. It isn't used for past routes.
 
+## Pinned rankings
+- One of 30 rows changed, and only its #2: grand-concourse | 4 mi | waits. "Loop on Bronx River Greenway, heading
+  56 degrees" (score 64.14) became "Out-and-back both ways on Bronx River Greenway" (64.27). #1 and #3 are the same lines.
+- Cause: the waypoint fix now repeats while a moved waypoint still makes a spur. A candidate that was dropped for a
+  leftover spur after one move now passes, and edges out the old #2 by 0.13.
+- Only that row is re-pinned.
+
 ## Tests
 - Unit: `test_parse.py` (named parks, generic parks, a park not found), `test_answers.py` ("here", the no-location
   question, a typed address for a via, a geocoder miss), `test_engine.py` (amenity line, lap entry), `test_via.py`

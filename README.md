@@ -32,12 +32,12 @@ flowchart LR
 
 | | |
 |---|---|
-| Parse evals (live Claude, 60 cases) | __PARSE__ |
+| Parse evals (live Claude, 60 cases) | 58 of 60 on the latest run (two older cases vary between runs) |
 | Cost of reading a sentence | about $0.00024 (Claude Haiku 5.5), median 1.4 s |
 | First route on the phone | about 1.3 s median; the full search takes longer and keeps improving the top 3 |
-| Pinned top 3 for 30 start and distance pairs | 30 of 30 unchanged since the last re-pin |
-| Unit tests | __UNIT__, none needing a database or network in CI |
-| Live route, place and crowd evals | about 400, run on the Mac against the real stack |
+| Pinned top 3 for 30 start and distance pairs | 30 of 30 match the pinned results |
+| Unit tests | 1,131, none needing a database or network in CI |
+| Live route, place, crowd and parse-harness evals | 395 of 396 on the latest run, against the real stack on the Mac (one needs private run data and skips) |
 
 Every bad route that turns up in testing becomes a case in [`evals/routes/test_rejected_routes.py`](evals/routes/test_rejected_routes.py).
 
