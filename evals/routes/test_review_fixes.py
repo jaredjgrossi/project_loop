@@ -157,3 +157,23 @@ def test_a_restroom_stop_is_said_to_be_unsupported_never_dropped():  # Q7: shown
     lines = [k for k in parsed["cant"] if k["gap"] == "later"]
     assert len(lines) == 1 and "restroom" in lines[0]["text"].lower()
     assert final["routes"]  # an honest line, and the run is still built
+
+
+# --- 4. GPX for the app's Share ------------------------------------------------------------------------------------------
+
+
+def test_a_built_route_downloads_as_gpx_through_the_stored_id():
+    import xml.etree.ElementTree as ET
+    client = _app(ext(distance=mi(3)))
+    evs = _post(client, _body(text="3 miles"))
+    final = next(e for e in evs if e["event"] == "final")
+    ns = {"g": "http://www.topografix.com/GPX/1/1"}
+    for route in final["routes"][:2]:  # every route of the build, by its own id
+        got = client.get(f"/v1/routes/{route['id']}/gpx", headers=TOKEN)
+        assert got.status_code == 200 and got.headers["content-type"].startswith("application/gpx+xml")
+        root = ET.fromstring(got.text)
+        assert len(root.findall(".//g:trkpt", ns)) == len(route["geometry"]["coordinates"])
+        names = [w.find("g:name", ns).text for w in root.findall("g:wpt", ns)]
+        assert names[0] == "Start" and "Mile 1" in names
+    first = client.get(f"/v1/routes/{final['route_id']}/gpx", headers=TOKEN)  # the build id: the first route
+    assert first.status_code == 200 and f"loop-{final['routes'][0]['id']}.gpx" in first.headers["content-disposition"]

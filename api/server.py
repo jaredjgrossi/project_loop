@@ -25,7 +25,7 @@ from datetime import datetime
 from typing import Literal
 
 import psycopg
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
@@ -501,6 +501,19 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         if found is None:
             raise HTTPException(status_code=404, detail="no such route")
         return found[0]
+
+    @app.get("/v1/routes/{route_id}/gpx", dependencies=[Depends(check_token)])
+    def route_gpx(route_id: str) -> Response:
+        """A stored route as a GPX file, for the app's Share: the line, the start, each mile and each turnaround.
+        `{route_id}` is a route's own id, or a build's (its first route)."""
+        from api.gpx import stored_gpx
+        found = stored_route(route_id)
+        made = stored_gpx(found[0], route_id) if found else None
+        if made is None:
+            raise HTTPException(status_code=404, detail="no such route")
+        filename, xml = made
+        return Response(content=xml, media_type="application/gpx+xml",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     @app.post("/v1/routes/{route_id}/feedback", dependencies=[Depends(check_token)])
     def feedback(route_id: str, body: AppFeedback, install: str | None = Depends(install_id_of)) -> dict:

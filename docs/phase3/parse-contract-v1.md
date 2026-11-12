@@ -271,6 +271,10 @@ Built in step 11 (decision 038):
   - Errors: HTTP 400 without the install id, 404 for an unknown route, 422 for a bad body, 401 without the token.
   - Stored in Phase 2's `route_feedback` (with `generated_routes` holding the route's line), so the ranking can be
     tuned with it later.
+- `GET /v1/routes/{id}/gpx` (decision 048): a stored route as a GPX file for the app's Share sheet. `application/gpx+xml`,
+  `Content-Disposition: attachment; filename="loop-<route id>.gpx"`. `{id}` is a route's own id or a build's (its first
+  route). It holds the line, a `Start` waypoint, `Mile n` waypoints and `Turnaround` waypoints, and no elevation.
+  Unknown: HTTP 404. Needs the token.
 - `GET /v1/health`: the server is up and the engine is ready.
 
 ## Copy
