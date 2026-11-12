@@ -46,8 +46,11 @@ struct LandingSheet: View {
                     .transition(.opacity)
             }
 
-            RequestField(model: model)
-                .background(bottomReader { setCollapsed($0) })
+            // Design lab A: the composer (grows to three lines, send arrow) in place of the field.
+            Group {
+                if DesignLab.shared.composer { ComposerField(model: model) } else { RequestField(model: model) }
+            }
+            .background(bottomReader { setCollapsed($0) })
 
             // The launch health check failed: one plain line, never a spinner.
             if model.serverDown {
@@ -76,7 +79,21 @@ struct LandingSheet: View {
                             model.shapeTouched = true
                         }
                         .padding(.top, 10)
-                        MatchList(model: model)
+                        if DesignLab.shared.composer {
+                            // Lab A: with nothing of the runner's own to list, examples to try;
+                            // otherwise the same rows, labelled as what they are.
+                            if model.fieldMatches.isEmpty || runs.isNewRunner {
+                                TryExamples(model: model, limit: 3).padding(.top, 16)
+                            } else {
+                                Text("Recent")
+                                    .typeStyle(.eyebrow)
+                                    .foregroundStyle(Palette.inkMuted.color)
+                                    .padding(.top, 16)
+                                MatchList(model: model)
+                            }
+                        } else {
+                            MatchList(model: model)
+                        }
                     }
                     .background(bottomReader { model.searchListMeasured($0) })
                     .transition(.opacity)
@@ -84,6 +101,13 @@ struct LandingSheet: View {
 
                 if !searching {
                 VStack(alignment: .leading, spacing: 0) {
+                    if DesignLab.shared.composer, runs.isNewRunner {
+                        // Lab A: a new runner sees what they can ask, not placeholder tiles.
+                        TryExamples(model: model, limit: 4, hidden: searching || expanded < 0.5)
+                            .padding(.top, 22)
+                            .background(bottomReader { setOpen($0) })
+                            .opacity(expanded)
+                    } else {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Your runs")
                             .typeStyle(.eyebrow)
@@ -110,6 +134,7 @@ struct LandingSheet: View {
                     }
                     .opacity(expanded)
                     .accessibilityHidden(expanded < 0.5 || searching)
+                    }
 
                     // The full list, revealed by pulling the sheet up past the open rest.
                     ForEach(runs.runs.dropFirst()) { log in
@@ -352,7 +377,8 @@ private struct TileRow: View {
                         model.send(s.request, reduceMotion: false)
                     }
                 }
-                SaveTile(side: side, hidden: hidden)
+                // Lab A: no Save tile (it does nothing until there is a route to save).
+                if !DesignLab.shared.composer { SaveTile(side: side, hidden: hidden) }
             }
         }
         .frame(height: Self.height(width: UIScreen.main.bounds.width - 2 * Metrics.s24))
