@@ -9,7 +9,7 @@ final class SheetDragPerfTests: XCTestCase {
         app.launchArguments = ["-LoopSettled"]   // start on a finished route, not the launch sequence
         app.launchArguments.append("-LoopOffline")
         app.launch()
-        XCTAssertTrue(app.buttons["Send to watch"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["Share route"].waitForExistence(timeout: 30))
         sleep(4)   // let the map tiles and style settle first
 
         let low = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.84))

@@ -8,7 +8,7 @@ final class SheetUITests: XCTestCase {
         app.launchArguments.append("-LoopOffline")
         app.launch()
 
-        let send = app.buttons["Send to watch"]
+        let send = app.buttons["Share route"]
         XCTAssertTrue(send.waitForExistence(timeout: 30))
         let lights = app.descendants(matching: .any)["3.6 lights a mile, measured"]
         XCTAssertFalse(lights.exists, "collapsed sheet hides the stats")

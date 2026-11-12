@@ -29,9 +29,17 @@ extension MainModel {
         if runs.isSaved(r) { runs.unsave(r) } else { runs.save(r); Haptics.saved() }
     }
 
-    /// "Send to watch" counts as viewing it, for the return prompt.
-    func sentToWatch() {
+    /// "Share route": the route as a GPX file for the share sheet (nil if there is no route or the
+    /// file can't be written).
+    func gpxFileOfShown() -> URL? {
+        guard let c = shown else { return nil }
         touch()
+        let name = currentRoute?.name ?? identityOfShown(archive: nil, routeId: nil)?.name ?? "Loop route"
+        return try? GPX.write(GPX.make(name: name, candidate: c), name: name)
+    }
+
+    /// A share finished (the runner picked a place): counts as viewing it, for the return prompt.
+    func sharedRoute() {
         if let r = currentRoute { runs.noteViewed(r) }
     }
 

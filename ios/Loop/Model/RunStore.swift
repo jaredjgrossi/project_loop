@@ -62,7 +62,7 @@ struct RunLog: Codable, Identifiable, Equatable {
     var rating: RunRating?
 }
 
-/// A route the runner looked at or sent to the watch: the return prompt asks about it next time.
+/// A route the runner looked at or shared: the return prompt asks about it next time.
 struct ViewedRoute: Codable, Equatable {
     var route: RouteIdentity
     var at: Date
@@ -316,7 +316,7 @@ final class RunStore {
 
     // MARK: The return prompt
 
-    /// A route was viewed or sent to the watch.
+    /// A route was viewed or shared.
     func noteViewed(_ r: RouteIdentity, at: Date = Date()) {
         viewed.removeAll { $0.route.key == r.key }
         viewed.insert(ViewedRoute(route: r, at: at), at: 0)
