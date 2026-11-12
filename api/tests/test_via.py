@@ -167,3 +167,48 @@ def test_a_lap_skips_a_spot_it_must_miss():  # step 11: "skip the ferry part" of
     parts = ring["coordinates"] if ring["type"] == "MultiLineString" else [ring["coordinates"]]
     left = sum(line_length_m(p) for p in parts)
     assert left == pytest.approx(full - 200, abs=5)  # 100 m each way from the corner
+
+
+# ---- a lap starts and ends where the way in meets the ring (full review 4.2, Q6) ---------------------------------------
+
+
+def _sw_corner(centre=NORTH, half_m=300):
+    return centre[0] - half_m / M_LAT, centre[1] - half_m / KX
+
+
+def _way_in_from_the_west():
+    """KIPS west to the ring's longitude, then north to the south-west corner: the ring is entered at that corner,
+    though the nearest ring point to KIPS as the crow flies is the middle of the south side."""
+    corner = _sw_corner()
+    return [[KIPS[1], KIPS[0]], [corner[1], KIPS[0]], [corner[1], corner[0]], [corner[1], corner[0] + 100 / M_LAT]]
+
+
+def test_the_entry_is_where_the_way_in_first_meets_the_ring():
+    from api.via import lap_entry
+    lat, lon = lap_entry(lap_via(), _way_in_from_the_west())
+    corner = _sw_corner()
+    assert math.hypot((lat - corner[0]) * M_LAT, (lon - corner[1]) * KX) < 20
+
+
+def test_a_way_in_that_never_meets_the_ring_has_no_entry():
+    from api.via import lap_entry
+    assert lap_entry(lap_via(), [[KIPS[1], KIPS[0]], [KIPS[1] + 0.001, KIPS[0]]]) is None
+
+
+def test_a_lap_with_an_entry_starts_and_ends_there_not_at_the_nearest_point():
+    from dataclasses import replace
+    corner = _sw_corner()
+    v = replace(lap_via(), entered=corner)
+    pts = v.stops(KIPS)
+    assert pts[0] == pytest.approx(pts[-1])
+    assert math.hypot((pts[0][0] - corner[0]) * M_LAT, (pts[0][1] - corner[1]) * KX) < 5
+    assert lap_via().stops(KIPS)[0][1] == pytest.approx(NORTH[1], abs=1e-3)  # without it: the middle of the south side
+
+
+def test_with_entries_sets_closed_laps_only():
+    from api.via import with_entries
+    open_lap = Via(NORTH[0], NORTH[1], "Past route", square(NORTH, 300), ring(), closed=False)
+    through = point_via()
+    out = with_entries([lap_via(), open_lap, through], _way_in_from_the_west())
+    assert out[0].entered is not None and out[1].entered is None and out[2].entered is None
+    assert with_entries([lap_via()], [[KIPS[1], KIPS[0]], [KIPS[1] + 0.001, KIPS[0]]])[0].entered is None

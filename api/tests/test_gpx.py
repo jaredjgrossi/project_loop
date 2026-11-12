@@ -48,3 +48,49 @@ def test_gpx_has_the_track_with_elevation_and_named_waypoints():
 def test_gpx_without_elevation_has_no_ele():
     xml = route_to_gpx("Flat", line([(0, 0), (500, 0)]), None, [])
     assert "<ele>" not in xml
+
+
+# ---- a stored route as a GPX file, for the app's Share (full review 3.2) -------------------------------------------------
+
+
+def _final():
+    out_back = line([(x, 0) for x in range(0, 3001, 50)] + [(x, 0) for x in range(2950, -1, -50)])  # ~3.7 mi
+    loop = line([(0, 0), (800, 0), (800, 800), (0, 800), (0, 0)])
+    route = lambda i, kind, label, coords: {"id": f"r_ab12cd34.{i}", "rank": i, "kind": kind, "label": label,  # noqa: E731
+                                            "score": 80, "geometry": {"type": "LineString", "coordinates": coords}}
+    return {"event": "final", "route_id": "r_ab12cd34", "routes": [route(1, "out_and_back", "Out-and-back on Riverside Walk", out_back),
+                                                                   route(2, "loop", "Loop on the street grid", loop)]}
+
+
+def test_a_build_id_gives_the_first_route_and_a_route_id_gives_that_route():
+    from api.gpx import stored_gpx
+    first = stored_gpx(_final(), "r_ab12cd34")
+    second = stored_gpx(_final(), "r_ab12cd34.2")
+    assert first and second
+    assert "Out-and-back on Riverside Walk" in first[1] and "Loop on the street grid" in second[1]
+    assert first[0] == "loop-r_ab12cd34.1.gpx" and second[0] == "loop-r_ab12cd34.2.gpx"  # the file names the route
+
+
+def test_an_unknown_route_has_no_gpx():
+    from api.gpx import stored_gpx
+    assert stored_gpx(_final(), "r_ab12cd34.9") is None
+    assert stored_gpx({"routes": []}, "r_ab12cd34") is None
+
+
+def test_the_file_is_valid_gpx_with_the_start_the_miles_and_the_turnaround():
+    from api.gpx import stored_gpx
+    root = ET.fromstring(stored_gpx(_final(), "r_ab12cd34.1")[1])
+    names = [w.find("g:name", NS).text for w in root.findall("g:wpt", NS)]
+    assert names[0] == "Start" and {"Mile 1", "Mile 2", "Mile 3", "Turnaround"} <= set(names)
+    pts = root.findall(".//g:trkpt", NS)
+    assert len(pts) > 100 and float(pts[0].get("lat")) == pytest.approx(LAT0, abs=1e-6)
+    assert root.find("g:metadata/g:name", NS).text.startswith("Out-and-back on Riverside Walk")
+    assert root.find(".//g:trkpt/g:ele", NS) is None  # elevation per point isn't stored: no invented numbers
+
+
+def test_a_label_with_markup_is_escaped():
+    from api.gpx import stored_gpx
+    final = _final()
+    final["routes"][0]["label"] = "Loop <on> Ben & Jerry's"
+    root = ET.fromstring(stored_gpx(final, "r_ab12cd34")[1])  # still well-formed XML
+    assert "Ben & Jerry's" in root.find("g:metadata/g:name", NS).text

@@ -212,3 +212,46 @@ def test_every_neighborhood_point_has_an_area(conn):
                               (SELECT 1 FROM neighborhood_areas n WHERE ST_Intersects(n.geom, p.geom))""").fetchone()[0]
     total = conn.execute("SELECT count(*) FROM places WHERE kind = 'neighborhood'").fetchone()[0]
     assert missing <= 0.05 * total, f"{missing} of {total} neighborhoods have no NTA"
+
+
+# ---- curated landmarks (decision 047; full review 4.2, Q4 and Q5). `make places` or `python -m etl.load_landmarks` ----
+
+LANDMARKS = [  # what a runner types -> (the landmark's name, its borough, where it is: lat, lon, within 150 m)
+    ("Metropolitan Museum of Art", "Metropolitan Museum of Art", "Manhattan", (40.7794, -73.9634)),
+    ("The Met", "Metropolitan Museum of Art", "Manhattan", (40.7794, -73.9634)),
+    ("Guggenheim", "Guggenheim Museum", "Manhattan", (40.7830, -73.9590)),
+    ("Whitney Museum", "Whitney Museum of American Art", "Manhattan", (40.7396, -74.0089)),
+    ("MoMA", "Museum of Modern Art", "Manhattan", (40.7614, -73.9776)),
+    ("Empire State Building", "Empire State Building", "Manhattan", (40.7484, -73.9857)),
+    ("Chrysler Building", "Chrysler Building", "Manhattan", (40.7516, -73.9755)),
+    ("Flatiron Building", "Flatiron Building", "Manhattan", (40.7411, -73.9897)),
+    ("One World Trade Center", "One World Trade Center", "Manhattan", (40.7127, -74.0134)),
+    ("Madison Square Garden", "Madison Square Garden", "Manhattan", (40.7505, -73.9934)),
+    ("Gracie Mansion", "Gracie Mansion", "Manhattan", (40.7757, -73.9437)),
+    ("Grant's Tomb", "Grant's Tomb", "Manhattan", (40.8133, -73.9631)),
+    ("American Museum of Natural History", "American Museum of Natural History", "Manhattan", (40.7813, -73.9740)),
+    ("Yankee Stadium", "Yankee Stadium", "Bronx", (40.8296, -73.9265)),
+    ("Barclays Center", "Barclays Center", "Brooklyn", (40.6826, -73.9752)),
+    ("Brooklyn Museum", "Brooklyn Museum", "Brooklyn", (40.6712, -73.9636)),
+    ("Citi Field", "Citi Field", "Queens", (40.7570, -73.8458)),
+]
+
+
+@pytest.mark.parametrize("typed, name, borough, at", LANDMARKS, ids=[x[0] for x in LANDMARKS])
+def test_a_landmark_is_found_by_the_name_a_runner_types(conn, typed, name, borough, at):
+    import math
+    m = one(conn, typed)
+    assert (m.name, m.kind, m.borough) == (name, "landmark", borough)
+    assert m.trust == "listed" and m.source.startswith("Loop curated landmarks")  # every fact carries a source and a label
+    assert math.hypot((m.lat - at[0]) * 110_574, (m.lon - at[1]) * 84_300) < 150, (m.lat, m.lon)
+
+
+def test_a_landmark_beats_a_shop_with_its_name_from_any_borough(conn):
+    for ref in ((40.6742, -73.9700), (40.8296, -73.9265), KIPS_BAY):  # Brooklyn, the Bronx, Manhattan
+        found = lookup("The Met", conn=conn, near=ref)
+        assert [m.kind for m in found] == ["landmark"], [(m.name, m.kind, m.borough) for m in found]
+
+
+def test_landmarks_leave_neighborhoods_alone(conn):
+    for name in ("Williamsburg", "Coney Island"):
+        assert any(m.kind == "neighborhood" for m in lookup(name, conn=conn)), name

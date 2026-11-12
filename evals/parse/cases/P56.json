@@ -1,0 +1,38 @@
+{
+  "id": "P56",
+  "seq": 57,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C3",
+  "text": "3 miles in Washington Square Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=3 (said) \u00b7 via_places=[place:\"Washington Square Park\"] (said) \u00b7 scenery=park_or_water (said).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Washington Square Park"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

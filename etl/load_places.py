@@ -9,6 +9,7 @@ Phase 3, step 2 (decision 026). One row per named place, each with its source an
 - street crossings: where two differently named roads share an OSM node, one point per crossing
 - subway stations from station_flow (MTA, decision 016), when that table is loaded
 - corridors from the corridor catalog (decision 012), when built
+- curated landmarks (etl/curated/landmarks.json, decision 047): the Met, the Empire State Building, stadiums
 - curated aliases and redirects (etl/curated/place_aliases.json) for everyday names OSM lacks ("Central Park
   Reservoir"; "West Side Highway" for the Hudson River Greenway)
 
@@ -31,6 +32,7 @@ import psycopg
 
 from api.places import display_name, name_variants, normalize, street_base
 from etl.load import database_url
+from etl.load_landmarks import load_landmarks
 from etl.load_osm import NYC_PBF, STATE_PBF, WORK_DIR, export_ways, snapshot_time
 
 CURATED_ALIASES = Path(__file__).resolve().parent / "curated" / "place_aliases.json"
@@ -390,6 +392,7 @@ def main() -> int:
             crossings = load_crossings(conn, loaded_at, snapshot)
             stations = load_stations(conn, loaded_at)
             corridors = load_corridors(conn, loaded_at)
+            landmarks = load_landmarks(conn, loaded_at)
             dropped = assign_boroughs(conn)
             curated = apply_curated_aliases(conn)
             fill_names(conn)
@@ -401,7 +404,7 @@ def main() -> int:
     for kind, n in counts:
         print(f"  {kind:<16} {n:7d}")
     print(f"  nodes read {len(nodes)}, areas read {len(areas)}; crossings {crossings}; MTA stations {stations}; "
-          f"corridors {corridors}; curated aliases {curated}; long paths by the water {waterfront}")
+          f"corridors {corridors}; curated landmarks {landmarks}; curated aliases {curated}; long paths by the water {waterfront}")
     print(f"  dropped {dropped} rows outside the five boroughs (New Jersey features in the extract)")
     return 0
 

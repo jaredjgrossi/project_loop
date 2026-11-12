@@ -77,6 +77,9 @@ M_PER_DEG_LAT = 110_574
 # Decision 045: a spur whose tip is this close to one of the route's own waypoints (beyond the waypoint's own distance
 # off the route, where GraphHopper snapped it) was made by that waypoint.
 SPUR_WAYPOINT_M = 30.0
+# A moved waypoint can still make a spur (a lap's closing point sits past where the way in meets the ring), so it
+# moves again, this many times at most; then the spur rule decides.
+MAX_WAYPOINT_MOVES = 3
 
 
 @dataclass(frozen=True)
@@ -167,25 +170,30 @@ def without_waypoint_spurs(router: Callable[..., Route]) -> Callable[..., Route]
     waypoint that sits off the way the streets go: from Kips Bay, the nearest point of the East River Esplanade is
     75 m south of E 34th St, where the streets reach it, and the waterfront route went there and back. Such a
     waypoint (every visit to it) moves to the spur's base, where the way out left the main line, and the route is
-    routed once more. The start and the end never move. A spur away from every waypoint is left as it is, for the
+    routed again, up to MAX_WAYPOINT_MOVES times while a moved waypoint still makes one. The start and the end never move. A spur away from every waypoint is left as it is, for the
     spur rule (decision 044)."""
+    if getattr(router, "no_waypoint_spurs", False):  # wrapped already (the engine wraps its routers once)
+        return router
+
     def route(points, *args):
         got = router(points, *args)
-        found = spurs(got.coordinates)
-        if not found:
-            return got
-        moved: dict[tuple[float, float], tuple[float, float]] = {}
-        for s in found:
-            tip = (s["lat"], s["lon"])
-            for p in points[1:-1]:
-                key = (p[0], p[1])
-                if key not in moved and _meters(tip, key) <= _off_route_m(key, got.coordinates) + SPUR_WAYPOINT_M:
-                    lon_b, lat_b = point_along(got.coordinates, s["along_m"] - s["reach_m"])
-                    moved[key] = (lat_b, lon_b)
-        if not moved:
-            return got
-        return router([moved.get((p[0], p[1]), p) for p in points], *args)
+        for _ in range(MAX_WAYPOINT_MOVES):
+            found = spurs(got.coordinates)
+            moved: dict[tuple[float, float], tuple[float, float]] = {}
+            for s in found:
+                tip = (s["lat"], s["lon"])
+                for p in points[1:-1]:
+                    key = (p[0], p[1])
+                    if key not in moved and _meters(tip, key) <= _off_route_m(key, got.coordinates) + SPUR_WAYPOINT_M:
+                        lon_b, lat_b = point_along(got.coordinates, s["along_m"] - s["reach_m"])
+                        moved[key] = (lat_b, lon_b)
+            if not moved:
+                break
+            points = [moved.get((p[0], p[1]), p) for p in points]
+            got = router(points, *args)
+        return got
 
+    route.no_waypoint_spurs = True
     return route
 
 

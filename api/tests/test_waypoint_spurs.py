@@ -97,3 +97,32 @@ def test_extra_router_arguments_pass_through():  # area_route_fn(points, area)
 
     without_waypoint_spurs(area_router)([_ll(0, 0), _ll(250, 1000), _ll(0, 4000), _ll(0, 0)], "the area")
     assert seen == ["the area", "the area"]
+
+
+class PocketNetwork(FakeNetwork):
+    """Every waypoint but the farthest is a pocket: the route reaches it, goes 250 m back and carries on. Moving the
+    waypoint to the spur's base leaves it a pocket 250 m nearer, as a lap's closing point was after one move."""
+
+    def __call__(self, points):
+        self.calls.append(list(points))
+        ns = [_en(p)[1] for p in points[1:-1]]
+        far = max(range(len(ns)), key=lambda k: ns[k])
+        corners = [(0, 0)]
+        for k, n in enumerate(ns):
+            corners.append((0, n))
+            if k != far:
+                corners.append((0, n - 250))
+        corners.append((0, 0))
+        return Route(distance_m=1.0, time_s=1.0, coordinates=_line(corners))
+
+
+def test_the_waypoint_keeps_moving_while_it_still_makes_a_spur_up_to_a_limit():
+    net = PocketNetwork()  # the pocket at 700 m moves to about 450, then about 190 (inside the start's end zone)
+    route = without_waypoint_spurs(net)([_ll(0, 0), _ll(0, 700), _ll(0, 3000), _ll(0, 0)])
+    assert len(net.calls) == 3 and spurs(route.coordinates) == []
+
+
+def test_it_gives_up_after_a_few_tries_and_leaves_the_spur_for_the_rule():
+    net = PocketNetwork()  # a pocket at 3 km needs a dozen moves
+    route = without_waypoint_spurs(net)([_ll(0, 0), _ll(0, 3000), _ll(0, 9000), _ll(0, 0)])
+    assert len(net.calls) == 1 + 3 and spurs(route.coordinates)  # the 044 rule then rejects it

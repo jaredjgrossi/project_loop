@@ -37,9 +37,14 @@ def causes(conn, candidate, when) -> set[str]:
 
 
 def kips_bay_3(when):
-    top = top_loops("kips-bay", 3, 3, use_prior=False, when=when)
-    by = {c.label.split(", heading")[0]: c for c in top}
-    assert SIMPLE in by and BOTH_WAYS in by, [c.label for c in top]
+    """The two waterfront out-and-backs these tests are about, from the first 20 candidates, not the top 3: whether
+    "both ways" ranks in the top 3 depends on the day's crowds (election day pushes it to 4th), and this eval is about
+    what the pulses do to each route, not their rank (stale after decision 045, full review 'What I ran')."""
+    pool = top_loops("kips-bay", 3, 20, use_prior=False, when=when)
+    by = {}
+    for c in pool:  # the best of each name: the pool is sorted best first
+        by.setdefault(c.label.split(", heading")[0], c)
+    assert SIMPLE in by and BOTH_WAYS in by, [c.label for c in pool]
     return by[SIMPLE], by[BOTH_WAYS]
 
 

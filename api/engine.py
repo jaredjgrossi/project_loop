@@ -9,23 +9,24 @@ the contract's payloads and adds `final`: the #1 in full, as the iPhone fixture'
 """
 
 import math
+import os
 import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import httpx
 import psycopg
 
 from api.constraints import RunConstraints, resolve_preferences, unsupported
 from api.copy import render
-from api.generate import TOLERANCE_PCT, Candidate, generate_loops
+from api.generate import TOLERANCE_PCT, Candidate, generate_loops, without_waypoint_spurs
 from api.geocoding import GeocodeError, geocode
 from api.geometry import line_length_m, outline
 from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
 from api.units import meters_to_miles
-from api.via import Via, features_on_vias, through_rules, tour, via_jobs
+from api.via import Via, features_on_vias, through_rules, tour, via_jobs, with_entries
 from api.naming import display_name
 from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
@@ -323,6 +324,11 @@ def _straight_m(a: tuple[float, float], b: tuple[float, float] | None) -> float:
     return math.hypot((b[1] - a[1]) * kx, (b[0] - a[0]) * 110_574)
 
 
+def prior_installs_from_env() -> frozenset:
+    """LOOP_PRIOR_INSTALL_IDS: the installs that may use the prior, comma separated (.env, git-ignored). Unset: none."""
+    return frozenset(i.strip() for i in os.environ.get("LOOP_PRIOR_INSTALL_IDS", "").split(",") if i.strip())
+
+
 def graphhopper_ready(timeout_s: float = 1.0) -> bool:
     try:
         return httpx.get(f"{graphhopper_url()}/health", timeout=timeout_s).status_code == 200
@@ -349,6 +355,17 @@ class Engine:
     past_route_fn: Callable = None  # route id -> past_routes.PastRoute | None; default saved_routes (step 11)
     pools: dict = None  # route id -> every candidate that passed, for the last POOLS_KEPT builds (shape edits)
     area_fn: Callable = None  # a neighborhood's point -> (its area, the area AREA_DEPTH_M inside), GeoJSON; db_area
+    # The installs whose runs are the prior (runner_prior, the reviewer's Apple Health corridors). None: no limit, as for
+    # the reviewer's own scripts and live evals; the server passes the LOOP_PRIOR_INSTALL_IDS list, so every other
+    # install, and a request with no install id, gets no "on a route you run" candidates and no familiarity score.
+    prior_installs: frozenset | None = None
+
+    def for_install(self, install_id: str | None) -> "Engine":
+        """The engine to build with for this install (full review 6.3): this one for an install on the prior list,
+        else a copy with the prior off. The copy shares the shape-edit pools."""
+        if self.prior_installs is None or install_id in self.prior_installs:
+            return self
+        return replace(self, use_prior=False, anchor_fn=None)
 
     def remember_pool(self, route_id: str, candidates: list) -> None:
         with _POOLS_LOCK:
@@ -425,6 +442,8 @@ class Engine:
     def __post_init__(self):
         if self.feature_anchor_fn is None:
             self.feature_anchor_fn = ml.DB_FEATURE_ANCHOR_SOURCES
+        if self.pools is None:
+            self.pools = {}  # shared by every for_install copy, so a shape edit finds the build it started from
 
     def build(self, rc: RunConstraints, start: Start, send: Callable[[dict], None], route_id: str,
               end: tuple[float, float] | None = None) -> dict:
@@ -470,6 +489,9 @@ class Engine:
         along_kw = {"along": alongs} if alongs else {}  # step 8b: crossing is fine, running along isn't
         if past_via is not None:  # decision 044: the route they ran keeps its spurs
             along_kw["spurs_ok"] = True
+        else:  # decision 045, and the direct way through a lap's waypoints (full review Q6): move our spurs
+            route_fn = without_waypoint_spurs(route_fn)
+            area_fn = without_waypoint_spurs(area_fn) if area_fn else area_fn
         if end is not None and rc.end_place is not None and rc.end_place.area == "neighborhood":
             try:  # "3 miles to Williamsburg": finish once the route is a few hundred meters inside it (decision 042)
                 area = (self.area_fn or db_area)(end)
@@ -489,6 +511,12 @@ class Engine:
         if end is not None or vias:  # the shortest way there, or round through the vias, comes first (rule 3)
             try:
                 shortest = route_fn(tour(here, vias, end))
+                # A lap starts and ends where the way in meets its ring, not at the ring point nearest the start
+                # as the crow flies (full review 4.2, Q6): route it again with the entry set.
+                entered = with_entries(vias, shortest.coordinates)
+                if entered != vias:
+                    vias = entered
+                    shortest = route_fn(tour(here, vias, end))
             except RoutingError as exc:
                 raise EngineUnavailable(f"GraphHopper: {exc}") from exc
             if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest.distance_m):
@@ -529,12 +557,15 @@ class Engine:
             elif vias:  # through or along named places, back to the start (step 9)
                 sources = self.feature_anchor_fn or []
                 sources = list(sources) if isinstance(sources, (list, tuple)) else [sources]
-                passed = [v for v in vias if v.lap is None]  # features anchor routes only on vias passed, not laps
+                # features anchor routes only on vias passed, not laps. Not `passed`: that is the list of candidates
+                # on_candidate fills, and the shape-edit pool (full review 7.2).
+                passed_vias = [v for v in vias if v.lap is None]
                 result = self.generate_fn(
                     start.lat, start.lon, miles, grid, route_fn=route_fn, round_trip_fn=round_trip_fn, top_n=TOP_N,
                     shape=rc.shape, prefs=prefs, avoid=zones, closures=closures, context_fn=context_fn,
-                    anchor_fn=None, feature_anchor_fn=[features_on_vias(f, passed) for f in sources] if passed else [],
-                    area_route_fn=area_fn if sources and passed else None, on_top3=on_top3, on_candidate=on_candidate,
+                    anchor_fn=None,
+                    feature_anchor_fn=[features_on_vias(f, passed_vias) for f in sources] if passed_vias else [],
+                    area_route_fn=area_fn if sources and passed_vias else None, on_top3=on_top3, on_candidate=on_candidate,
                     only_anchored=True, extra_jobs=via_jobs(here, vias, miles, route_fn, shortest, rc.shape),
                     through=through, **along_kw)
             else:

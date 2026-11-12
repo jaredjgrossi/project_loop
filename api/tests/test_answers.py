@@ -191,3 +191,82 @@ def test_parsed_says_how_far_the_run_can_reach(case_id, reach):
     if reach is not None:
         again = parsed_for_constraints(out["parsed"]["constraints"], ctx, None)
         assert again["reach_m"] == reach
+
+
+# ---- "here" as the answer to "Where should it start?" (full review 4.2, Q3) ---------------------------------------
+
+
+def _where_request(location):
+    req = build_request(CASES["P01"], CONTEXTS)
+    req["client"] = {**req["client"], "location": location}
+    req["profile"] = {**req["profile"], "saved_places": []}  # no home to fall back on
+    return req
+
+
+def _asked_where():
+    ctx = Context.from_request(_where_request(None))  # location off: the parser has to ask
+    out = build(ext(distance=mi(3)), ctx, FakePlaces())
+    assert out["parsed"]["question"]["text"] == "Where should it start?"
+    return out
+
+
+@pytest.mark.parametrize("typed", ["here", "Here", "right here", "my location", "My current location", "where I am",
+                                   "where i am now", "near me", "here."])
+def test_here_as_the_answer_means_the_current_location(typed):
+    out = _asked_where()
+    ctx = Context.from_request(_where_request({"lat": 40.7438, "lon": -73.9799, "accuracy_m": 15}))  # now it's on
+    settled = answer_overrides(out["trace"]["answer_map"], None, typed, ctx)
+    after = resume(ext(distance=mi(3)), ctx, FakePlaces(), {**out["trace"]["answers"], **settled})
+    p = after["parsed"]
+    assert p["question"] is None
+    assert p["constraints"]["use_my_location"] is True and "start_place" not in p["constraints"]  # never a place named Here
+    assert next(c for c in p["chips"] if c["field"] == "start")["source"] == "said"
+
+
+def test_here_with_the_location_off_says_so_instead_of_guessing():
+    out = _asked_where()
+    ctx = Context.from_request(_where_request(None))
+    settled = answer_overrides(out["trace"]["answer_map"], None, "here", ctx)
+    after = resume(ext(distance=mi(3)), ctx, FakePlaces(), {**out["trace"]["answers"], **settled})
+    q = after["parsed"]["question"]
+    assert q["about"] == "start" and "location" in q["text"].lower() and q["text"] != out["parsed"]["question"]["text"]
+
+
+def test_a_place_that_only_starts_with_here_is_still_a_place():
+    out = _asked_where()
+    ctx = Context.from_request(_where_request({"lat": 40.7438, "lon": -73.9799, "accuracy_m": 15}))
+    settled = answer_overrides(out["trace"]["answer_map"], None, "Hereford Park", ctx)
+    after = resume(ext(distance=mi(3)), ctx, FakePlaces(), {**out["trace"]["answers"], **settled})
+    assert after["parsed"]["question"]["text"].startswith("Couldn't find Hereford Park")
+
+
+# ---- a typed address for a via (full review 4.2, Q4: "10k past the Met then home" looped on "What's the address?") --------
+
+
+def test_a_typed_address_answers_a_via_question_instead_of_asking_again():
+    via = [{"name": "Nowhere Museum", "kind": "place", "whole_way": False}]
+    ctx = Context.from_request(build_request(CASES["P01"], CONTEXTS))
+    out = build(ext(distance=mi(10), via=via), ctx, FakePlaces())
+    assert out["parsed"]["question"]["about"] == "via"
+    settled = answer_overrides(out["trace"]["answer_map"], None, "11 Madison Ave", ctx)
+    after = resume(ext(distance=mi(10), via=via), ctx, FakePlaces(), {**out["trace"]["answers"], **settled})
+    p = after["parsed"]
+    assert p["question"] is None
+    ref = p["constraints"]["via_places"][0]
+    assert ref["name"] == "11 Madison Ave" and ref["source"] == "NYC GeoSearch" and ref["trust"] == "listed"
+    assert abs(ref["lat"] - 40.7415) < 1e-3
+
+
+def test_an_address_recorded_as_a_via_is_geocoded_like_a_start():
+    ctx = Context.from_request(build_request(CASES["P01"], CONTEXTS))
+    out = build(ext(distance=mi(6), via=[{"name": "11 Madison Ave", "kind": "place", "whole_way": False}]), ctx,
+                FakePlaces())
+    assert out["parsed"]["question"] is None
+    assert out["parsed"]["constraints"]["via_places"][0]["source"] == "NYC GeoSearch"
+
+
+def test_an_address_the_geocoder_cant_find_asks_again():
+    ctx = Context.from_request(build_request(CASES["P01"], CONTEXTS))
+    out = build(ext(distance=mi(6), via=[{"name": "999 Nowhere Rd", "kind": "place", "whole_way": False}]), ctx,
+                FakePlaces())
+    assert out["parsed"]["question"]["text"].startswith("Couldn't find 999 Nowhere Rd")

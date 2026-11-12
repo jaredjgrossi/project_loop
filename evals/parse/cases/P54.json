@@ -1,0 +1,38 @@
+{
+  "id": "P54",
+  "seq": 55,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "5 miles in Central Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=5 (said) \u00b7 via_places=[place:\"Central Park\"] (said) \u00b7 scenery=park_or_water (said). A named park is that park, never \"the nearest park\" (full review Q1; before it, Haiku's the_park threw the name away and the run went to the East River Esplanade).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 5,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Central Park"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

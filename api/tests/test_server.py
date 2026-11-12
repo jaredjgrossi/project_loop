@@ -526,6 +526,26 @@ def test_the_install_id_is_stored_with_a_build():
     assert routes.rows[final["route_id"]]["request"]["install_id"] == INSTALL["X-Loop-Install"]
 
 
+class PriorEngine(FakeEngine):
+    """Records which install each engine call was made for (full review 6.3: the prior is the reviewer's only)."""
+
+    def __init__(self):
+        super().__init__()
+        self.installs = []
+
+    def for_install(self, install):
+        self.installs.append(install)
+        return self
+
+
+def test_every_build_is_made_for_the_installs_own_engine():
+    eng = PriorEngine()
+    c, _ = client_for({"5k": IDEAL["P01"]}, engine=eng)
+    c.post("/v1/runs", json=body("P01", text="5k"), headers=AUTH | INSTALL)
+    c.post("/v1/runs", json=body("P01", text="5k"), headers=AUTH)  # no install id: the engine decides, as for a guest
+    assert eng.installs == [INSTALL["X-Loop-Install"], None]
+
+
 class AgainEngine(FakeEngine):
     def run_again(self, rc, past, route_id):
         self.calls.append((rc, past))
@@ -569,3 +589,19 @@ def test_one_way_without_an_end_asks_where_to_end():
     evs = post(c, body("P01", text="5k", shape="one_way"))
     assert [e["event"] for e in evs] == ["parsed", "done"]
     assert evs[0]["question"]["about"] == "end" and evs[0]["question"]["text"] == "Where do you want to end?"
+
+
+def test_a_stored_route_is_a_gpx_file_for_share():
+    c, _, _ = stored_client()
+    got = c.get("/v1/routes/r_old00001.1/gpx", headers=AUTH)
+    assert got.status_code == 200 and got.headers["content-type"].startswith("application/gpx+xml")
+    assert got.headers["content-disposition"] == 'attachment; filename="loop-r_old00001.1.gpx"'
+    assert got.text.startswith("<?xml") and "<trkpt" in got.text
+    assert c.get("/v1/routes/r_old00001/gpx", headers=AUTH).status_code == 200  # a build id: its first route
+
+
+def test_gpx_for_an_unknown_route_is_404_and_needs_the_token():
+    c, _, _ = stored_client()
+    assert c.get("/v1/routes/r_nothere.1/gpx", headers=AUTH).status_code == 404
+    assert c.get("/v1/routes/r_old00001.1/gpx").status_code == 401
+    assert c.get("/v1/routes/r_old00001.9/gpx", headers=AUTH).status_code == 404  # a route the build didn't have

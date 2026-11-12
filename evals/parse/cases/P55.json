@@ -1,0 +1,39 @@
+{
+  "id": "P55",
+  "seq": 56,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C2",
+  "text": "4 miles around Prospect Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=4 (said) \u00b7 via_places=[place:\"Prospect Park\", around] (said) \u00b7 scenery=park_or_water (said). With a named park there is no \"Which park?\" (full review Q2).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 4,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Prospect Park",
+            "mode": "around"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}
