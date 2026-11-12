@@ -44,12 +44,15 @@ FT_PER_M = 3.28084
 
 # Which row speaks for a group of rows that are one place.
 KIND_PRIORITY = ("park", "water", "square", "plaza", "bridge", "station", "subway_station", "path", "corridor",
-                 "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance", "neighborhood")
+                 "street", "crossing", "landmark", "tourism", "leisure", "amenity", "shop", "subway_entrance", "neighborhood")
 LINE_KINDS = ("street", "path", "bridge")
 # Kinds a partial name match keeps when any of them matched: a business or artwork that only shares words with a
 # landmark is not what the runner meant.
 LANDMARK_KINDS = ("park", "water", "square", "plaza", "bridge", "station", "subway_station", "path", "corridor",
-                  "street")
+                  "street", "landmark")
+# A curated landmark (etl/load_landmarks.py) beats a business or amenity sharing its name or alias: "The Met" is the
+# museum, not a shop called Met in the Bronx (decision 047).
+BUSINESS_KINDS = ("shop", "amenity", "leisure")
 
 _SUFFIX = {"street": "st", "st": "st", "avenue": "ave", "ave": "ave", "av": "ave", "boulevard": "blvd", "blvd": "blvd",
            "road": "rd", "rd": "rd", "place": "pl", "pl": "pl", "drive": "dr", "dr": "dr", "parkway": "pkwy",
@@ -399,6 +402,8 @@ def lookup(name: str, near: tuple[float, float] | PlaceMatch | None = None, near
             rows = _crossing_rows(conn, *crossing)
         if not rows:
             rows, exact = _name_rows(conn, q)
+            if any(r.kind == "landmark" for r in rows):
+                rows = [r for r in rows if r.kind not in BUSINESS_KINDS]
             if exact and is_streetlike(q) and any(r.kind in LINE_KINDS for r in rows):
                 rows = [r for r in rows if r.kind in LINE_KINDS]
             if not exact and any(r.kind in LANDMARK_KINDS for r in rows):  # "Penn Station", not "Penn Station Eagle"
@@ -473,7 +478,8 @@ def major_parks_near(lat: float, lon: float, radius_m: float = MAJOR_PARK_RADIUS
 # Which of two same-name places in one borough a runner means: the place, not the shop named after it (phone test,
 # 2026-11-10: "Which Williamsburg?" offered the neighborhood and a liquor store, both "Williamsburg, Brooklyn").
 SAME_NAME_ORDER = ("park", "water", "neighborhood", "square", "plaza", "bridge", "station", "subway_station", "path",
-                   "corridor", "street", "crossing", "tourism", "leisure", "amenity", "shop", "subway_entrance")
+                   "corridor", "street", "crossing", "landmark", "tourism", "leisure", "amenity", "shop",
+                   "subway_entrance")
 
 
 def one_per_name(matches: list[PlaceMatch]) -> list[PlaceMatch]:

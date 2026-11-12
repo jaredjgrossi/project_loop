@@ -21,12 +21,12 @@ import psycopg
 
 from api.constraints import RunConstraints, resolve_preferences, unsupported
 from api.copy import render
-from api.generate import TOLERANCE_PCT, Candidate, generate_loops
+from api.generate import TOLERANCE_PCT, Candidate, generate_loops, without_waypoint_spurs
 from api.geocoding import GeocodeError, geocode
 from api.geometry import line_length_m, outline
 from api.a_to_b import ask_miles, generate_a_to_b, shorter_than_the_shortest_way
 from api.units import meters_to_miles
-from api.via import Via, features_on_vias, through_rules, tour, via_jobs
+from api.via import Via, features_on_vias, through_rules, tour, via_jobs, with_entries
 from api.naming import display_name
 from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
@@ -489,6 +489,9 @@ class Engine:
         along_kw = {"along": alongs} if alongs else {}  # step 8b: crossing is fine, running along isn't
         if past_via is not None:  # decision 044: the route they ran keeps its spurs
             along_kw["spurs_ok"] = True
+        else:  # decision 045, and the direct way through a lap's waypoints (full review Q6): move our spurs
+            route_fn = without_waypoint_spurs(route_fn)
+            area_fn = without_waypoint_spurs(area_fn) if area_fn else area_fn
         if end is not None and rc.end_place is not None and rc.end_place.area == "neighborhood":
             try:  # "3 miles to Williamsburg": finish once the route is a few hundred meters inside it (decision 042)
                 area = (self.area_fn or db_area)(end)
@@ -508,6 +511,12 @@ class Engine:
         if end is not None or vias:  # the shortest way there, or round through the vias, comes first (rule 3)
             try:
                 shortest = route_fn(tour(here, vias, end))
+                # A lap starts and ends where the way in meets its ring, not at the ring point nearest the start
+                # as the crow flies (full review 4.2, Q6): route it again with the entry set.
+                entered = with_entries(vias, shortest.coordinates)
+                if entered != vias:
+                    vias = entered
+                    shortest = route_fn(tour(here, vias, end))
             except RoutingError as exc:
                 raise EngineUnavailable(f"GraphHopper: {exc}") from exc
             if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest.distance_m):

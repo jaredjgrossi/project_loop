@@ -134,12 +134,24 @@ How far from the start the run can get, in meters, to 10 m: half the longest the
   runner, or the other named place, labeled `listed` (decision 043). If the street is over 2.5 km long and that
   point is over 800 m away, the choice matters, so it asks `{"about": "start"|"end"|"via", "from": "places", "text":
   "Where on Amsterdam Ave?"}`, with up to four crossings, about 400 m apart, as options ("Amsterdam Ave & W 71st St").
+- **A named park is that park** (decision 047). "Central Park" or "Prospect Park" is looked up by name, whatever kind
+  Claude recorded; only "the park", "a nearby park" and the like take the nearest runnable place. A named park that isn't
+  found asks "Couldn't find X. What's the address?".
+- **"Here" as the answer to "Where should it start?"** ("here", "my location", "where I am", "near me") is the current
+  location, source `said`. With location off it asks: "I can't see where you are. Turn on location for Loop, or type a
+  place."
+- **An address as a via** ("past 1000 5th Ave") is geocoded like a start's, with the same borough question.
+- **Landmarks** (the Met, the Empire State Building, Yankee Stadium) are places of kind `landmark`, trust `listed`, source
+  "Loop curated landmarks (position from OpenStreetMap)". A landmark beats a shop with its name.
 - A place question never offers two options that read the same: of two places with one name in one borough, the place wins over a shop named after it (decision 042).
 - `chip_id` (2026-11-09): the chip the question is about, so the app can mark its words in the sentence; null when the runner said nothing about it ("How far?" after "what do you suggest"). When nothing was built for it yet ("Which 86th St?"), the event carries a chip for it made from the runner's own words, with its span.
 - While a question is open, no routes stream.
 
 ### Can't-do lines and notes
 - `cant`: `{"id", "gap", "text"}`, for example `{"id": "k_1", "gap": "G9", "text": "Can't plan around street lighting yet"}`.
+- `gap: "later"`, `key: "amenities"` (decision 047): a restroom or water stop was asked for. Loop doesn't plan stops yet:
+  "Can't plan a restroom or water stop along the route yet. The route is built without it". The `amenity` chips still
+  show what was understood. One line however many stops; the build isn't blocked.
 - `gap: "lap"` (decision 035): a lap Loop can't run, and the route passes the place instead: "Can't run laps of the McCarren Park track yet: it isn't in Loop's path data. These routes go to it", or "Can't run a lap of 2nd Ave: it isn't a loop. These routes go through it".
 - `notes`: `{"id", "key", "text", "trust"}`, for example `{"key": "fountains_seasonal", "text": "Fountains may be off for the season", "trust": "listed"}`.
 - Evals match on `gap` and `key`, never on wording, so the UI chat can rewrite the copy freely.

@@ -470,3 +470,47 @@ def test_the_via_features_never_see_candidates():  # the same rebinding fed cand
     finally:
         engine_module.features_on_vias = original
     assert seen and all(isinstance(v, Via) for v in seen[0]) and not any(isinstance(v, Candidate) for v in seen[0])
+
+
+# ---- amenities: said, so never silently dropped (full review 4.2, Q7) ------------------------------------------------
+
+
+def test_a_restroom_stop_gets_a_cant_line_and_the_route_is_still_built():
+    lines, blocked = before_build(rc(amenities=[{"kind": "restroom", "at_mile": 3, "within_mi": 0.5}]), zones=[])
+    assert [x["key"] for x in lines] == ["amenities"] and lines[0]["gap"] == "later"
+    assert "restroom" in lines[0]["text"].lower() and "water" in lines[0]["text"].lower()
+    assert not blocked  # an honest line, not a refusal: the run is built without the stop
+
+
+def test_a_water_stop_gets_the_same_line_once_however_many_stops():
+    two = [{"kind": "water", "at_mile": 1, "within_mi": 0.5}, {"kind": "restroom", "at_mile": 4, "within_mi": 0.5}]
+    lines, _ = before_build(rc(amenities=two), zones=[])
+    assert [x["key"] for x in lines] == ["amenities"]
+
+
+def test_no_amenity_no_line():
+    assert before_build(rc(), zones=[]) == ([], False)
+
+
+def test_a_lap_starts_where_the_way_in_meets_the_ring():  # full review 4.2, Q6: the Reservoir from the east
+    corner = (LAP_AT[0] - 300 / M_LAT, LAP_AT[1] - 300 / KX)  # the ring's south-west corner: the only way in
+    calls = []
+
+    def way_in_through_the_corner(points, custom_model=None):
+        calls.append(list(points))
+        if len(points) > 3:  # the start, the lap, the start: the way in goes through the corner first
+            points = [points[0], corner, *points[1:]]
+        return straight_route(points)
+
+    eng = engine(generate_loops_for_tests(), routers_fn=lambda z, l, c: (way_in_through_the_corner, None, area_route),
+                 vias_fn=lambda refs: [lap_via(LAP_AT, 300, "Test Loop") for _ in refs])
+    final = eng.build(rc(distance_mi=None, via_places=[lap_ref()]), Start(*KIPS_POINT, "x"), lambda e: None, "r_l3")
+    assert final["routes"]
+    last_tour = [c for c in calls if len(c) > 6][-1]  # the shortest way, routed again with the entry set
+    first_lap_point = last_tour[1]
+    assert abs(first_lap_point[0] - corner[0]) * M_LAT < 5 and abs(first_lap_point[1] - corner[1]) * KX < 5
+
+
+def generate_loops_for_tests():
+    from api.generate import generate_loops
+    return generate_loops

@@ -32,7 +32,7 @@ from api.constraints import PREFERENCES, PRESETS, PlaceRef, RunConstraints, fiel
 from api.copy import render
 from api.loops import loop_by_id, loop_named, mode_for, place_for
 from api.past_routes import FERRY_WORDS
-from api.places import is_streetlike, normalize
+from api.places import PlaceMatch, is_streetlike, normalize
 from api.spans import find_span
 
 PROMPT_VERSION = "parse_v7"  # v7 (2026-11-09, step 5b): unsaid fields are left out of the tool input.
@@ -527,6 +527,22 @@ PARK_REACH = 0.45  # a park a run goes to and comes back from: at most this shar
 CLEAR_WIN = 2.0  # the nearest park wins without a question when the next is at least this many times as far
 
 
+# Words that make "the park" generic: nothing in them names a place (full review 4.2, Q1 and Q2).
+GENERIC_PARK_WORDS = frozenset({"the", "a", "an", "any", "some", "park", "parks", "nearby", "near", "local", "closest",
+                                "nearest", "neighborhood", "neighbourhood", "big", "small", "little", "my", "our",
+                                "this", "that", "green", "space", "open"})
+
+
+def named_park(spec: dict) -> dict:
+    """Haiku records "Central Park" as kind the_park about as often as kind place. The code read the_park as "the
+    nearest park" and threw the name away: "5 miles in Central Park" ran the East River Esplanade. A the_park with a
+    name that has any word beyond the generic ones is a named place, looked up like any other."""
+    if spec.get("kind") == "the_park" and any(
+            w not in GENERIC_PARK_WORDS for w in re.findall(r"[a-z0-9']+", (spec.get("name") or "").casefold())):
+        return {**spec, "kind": "place"}
+    return spec
+
+
 def _runnable_parks(b: _Build, parks: list, reach: bool) -> tuple[list, object | None]:
     """'The park' with no major park within about 1 mi (R13): the runnable places, nearest first, and the one that
     clearly wins, if any (decision 043). With `reach` (a run from elsewhere that goes to the park), a park farther
@@ -565,6 +581,7 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
     """A place ref for a start, end or via spec, or a question (R12, R13, R14, R19). `target` names the spec for
     answers ("start", "end", "planned.start"); an answer settles it before any rule runs."""
     target = target or role
+    spec = named_park(spec)
     if f"place:{target}" in b.answers:  # an option was tapped
         return _ref(b.answers[f"place:{target}"])
     if f"text:{target}" in b.answers:  # a typed answer is a place name, or an address when it starts with a number
@@ -677,6 +694,17 @@ def _cant(b: _Build, ext: dict) -> None:
             b.cant.append({"id": f"k_{len(b.cant) + 1}", "gap": gap, "text": b.say(key)})
 
 
+# "Here" typed as an answer to "Where should it start?" is where the runner is, not a place called Here (a Greenpoint
+# bar, in the phone review's Q3).
+HERE_ANSWER = re.compile(r"^(?:right |just )?(?:here|here now|here and now|my (?:current )?location|(?:the )?current "
+                         r"location|where i am(?: now| right now)?|where i'm at|near me|around here|this spot|"
+                         r"i'm here|i am here)$")
+
+
+def is_here(typed: str | None) -> bool:
+    return bool(typed) and bool(HERE_ANSWER.match(re.sub(r"[^\w' ]+", " ", typed.casefold()).strip()))
+
+
 def _start(b: _Build, ext: dict, vias: list) -> None:
     """R16: today from the current location; a later day from home; otherwise ask. Named starts resolve (R12)."""
     spec = ext.get("start")
@@ -684,6 +712,12 @@ def _start(b: _Build, ext: dict, vias: list) -> None:
     later = day is not None and date.fromisoformat(day) > b.ctx.now.date()
     loc = b.ctx.location
     loc_borough = b.places.borough_at(*loc) if loc else None
+    if is_here(b.answers.get("text:start")):  # "here": where the runner is
+        if loc and loc_borough:
+            b.set("use_my_location", True, "said")
+            b.start_point, b.start_borough = loc, loc_borough
+            return
+        b.ask("start", "parser", "question.start.no_location", typed=_typed_place("start"))
     if "place:start" in b.answers or "text:start" in b.answers:  # the runner answered where to start
         spec = {"kind": "place", "name": ""}
     elif spec is None or spec["kind"] == "here":
@@ -721,12 +755,30 @@ def _start(b: _Build, ext: dict, vias: list) -> None:
     b.start_borough = ref.get("borough", ref_borough)
 
 
+def _geocoded_via(b: _Build, name: str, target: str, ref_borough: str | None) -> PlaceMatch:
+    """A via that's an address, as a place match, or a question: the same borough rules as a start's address (R19)."""
+    b.lookups.append({"name": name, "role": "via", "via": "geocoder"})
+    hit, boroughs = b.places.geocode(name, b.answers.get(f"borough:{target}"))
+    if hit is None and boroughs:
+        if ref_borough in boroughs:
+            hit, _ = b.places.geocode(name, ref_borough)
+        else:
+            b.ask("via", "places", "question.place.which",
+                  [("option.borough", {"borough": x}, {f"borough:{target}": x}) for x in boroughs],
+                  typed={"kind": "borough", "target": target, "boroughs": list(boroughs)}, name=name)
+    if hit is None:
+        b.ask("via", "places", "question.place.not_found", typed=_typed_place(target), name=name)
+    return PlaceMatch(name=name, kind="address", borough=hit.borough, lat=hit.lat, lon=hit.lon, matched=name,
+                      source="NYC GeoSearch", ids=())
+
+
 def _vias(b: _Build, ext: dict) -> list:
     """Resolve via places near the runner first (the start may depend on them). Returns (spec, match) pairs."""
     out = []
     point = b.ctx.location
     borough = b.places.borough_at(*point) if point else None
     for i, v in enumerate(ext.get("via") or []):
+        v = named_park(v)
         target = f"via.{i + 1}"
         typed = _typed_place(target)
         if f"place:{target}" in b.answers:  # an option was tapped
@@ -751,6 +803,10 @@ def _vias(b: _Build, ext: dict) -> list:
             continue
         b.lookups.append({"name": v["name"], "role": "via"})
         found = b.places.lookup(place_for(named) if named else v["name"], near=point)
+        if not found and ADDRESS_LIKE.match(v["name"]):  # "1000 5th Ave": geocoded like a start's address (Q4)
+            out.append((v, _geocoded_via(b, v["name"], target, borough)))
+            b.via_from.append(i + 1)
+            continue
         if not found:
             b.ask("via", "places", "question.place.not_found", typed=typed, name=v["name"])
         chosen = found[0] if len(found) == 1 else b.places.pick(found, borough)

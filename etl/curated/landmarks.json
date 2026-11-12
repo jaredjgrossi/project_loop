@@ -1,0 +1,413 @@
+{
+ "_doc": "Landmarks a New Yorker names that the places table lacks (decision 047): museums, icons, stadiums, theaters, cathedrals, campuses, stations. OSM maps most as building outlines or relations, which the places extract skips. Each position is a point inside the feature's OSM outline, checked against the NYC extract on 2026-11-12; none is a remembered coordinate. `aliases`: what runners call it. Places that already load from OSM (Rockefeller Center, Lincoln Center, Times Square, Grand Central, Penn Station) are not here. etl/load_landmarks.py loads this into `places` as kind `landmark`, trust `listed`.",
+ "landmarks": [
+  {
+   "name": "Metropolitan Museum of Art",
+   "aliases": [
+    "The Met",
+    "The Met Museum",
+    "Met Museum",
+    "Metropolitan Museum"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.77944,
+   "lon": -73.96338,
+   "what": "museum"
+  },
+  {
+   "name": "Guggenheim Museum",
+   "aliases": [
+    "The Guggenheim",
+    "Guggenheim",
+    "Solomon R. Guggenheim Museum"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.78299,
+   "lon": -73.95893,
+   "what": "museum"
+  },
+  {
+   "name": "Whitney Museum of American Art",
+   "aliases": [
+    "The Whitney",
+    "Whitney Museum",
+    "Whitney"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.73965,
+   "lon": -74.00892,
+   "what": "museum"
+  },
+  {
+   "name": "Museum of Modern Art",
+   "aliases": [
+    "MoMA",
+    "The MoMA",
+    "Museum of Modern Art"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.76161,
+   "lon": -73.9775,
+   "what": "museum"
+  },
+  {
+   "name": "American Museum of Natural History",
+   "aliases": [
+    "AMNH",
+    "Natural History Museum",
+    "Museum of Natural History"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.7811,
+   "lon": -73.97424,
+   "what": "museum"
+  },
+  {
+   "name": "Brooklyn Museum",
+   "aliases": [],
+   "borough": "Brooklyn",
+   "lat": 40.67095,
+   "lon": -73.96329,
+   "what": "museum"
+  },
+  {
+   "name": "Intrepid Sea, Air & Space Museum",
+   "aliases": [
+    "Intrepid Museum",
+    "The Intrepid",
+    "Intrepid"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.76473,
+   "lon": -74.00084,
+   "what": "museum"
+  },
+  {
+   "name": "Museum of the City of New York",
+   "aliases": [],
+   "borough": "Manhattan",
+   "lat": 40.79253,
+   "lon": -73.9518,
+   "what": "museum"
+  },
+  {
+   "name": "Brooklyn Botanic Garden",
+   "aliases": [
+    "Brooklyn Botanical Garden",
+    "BBG"
+   ],
+   "borough": "Brooklyn",
+   "lat": 40.66766,
+   "lon": -73.96363,
+   "what": "garden"
+  },
+  {
+   "name": "New York Botanical Garden",
+   "aliases": [
+    "NYBG",
+    "Botanical Garden"
+   ],
+   "borough": "Bronx",
+   "lat": 40.86224,
+   "lon": -73.87715,
+   "what": "garden"
+  },
+  {
+   "name": "Bronx Zoo",
+   "aliases": [
+    "The Bronx Zoo"
+   ],
+   "borough": "Bronx",
+   "lat": 40.8493,
+   "lon": -73.87714,
+   "what": "zoo"
+  },
+  {
+   "name": "Prospect Park Zoo",
+   "aliases": [],
+   "borough": "Brooklyn",
+   "lat": 40.6653,
+   "lon": -73.96502,
+   "what": "zoo"
+  },
+  {
+   "name": "Empire State Building",
+   "aliases": [
+    "The Empire State Building",
+    "Empire State"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.74844,
+   "lon": -73.98566,
+   "what": "landmark"
+  },
+  {
+   "name": "Chrysler Building",
+   "aliases": [
+    "The Chrysler Building"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.7516,
+   "lon": -73.97534,
+   "what": "landmark"
+  },
+  {
+   "name": "Flatiron Building",
+   "aliases": [
+    "The Flatiron Building"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.74106,
+   "lon": -73.98964,
+   "what": "landmark"
+  },
+  {
+   "name": "One World Trade Center",
+   "aliases": [
+    "One WTC",
+    "Freedom Tower",
+    "World Trade Center",
+    "1 World Trade Center"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.713,
+   "lon": -74.01319,
+   "what": "landmark"
+  },
+  {
+   "name": "Madison Square Garden",
+   "aliases": [
+    "MSG",
+    "The Garden"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75051,
+   "lon": -73.99352,
+   "what": "arena"
+  },
+  {
+   "name": "Radio City Music Hall",
+   "aliases": [
+    "Radio City"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75981,
+   "lon": -73.97928,
+   "what": "theater"
+  },
+  {
+   "name": "Carnegie Hall",
+   "aliases": [],
+   "borough": "Manhattan",
+   "lat": 40.76503,
+   "lon": -73.97989,
+   "what": "theater"
+  },
+  {
+   "name": "Apollo Theater",
+   "aliases": [
+    "The Apollo",
+    "Apollo"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.81009,
+   "lon": -73.94999,
+   "what": "theater"
+  },
+  {
+   "name": "Cathedral of St. John the Divine",
+   "aliases": [
+    "St. John the Divine",
+    "Saint John the Divine",
+    "Cathedral Church of St. John the Divine"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.80377,
+   "lon": -73.96178,
+   "what": "cathedral"
+  },
+  {
+   "name": "St. Patrick's Cathedral",
+   "aliases": [
+    "Saint Patrick's Cathedral",
+    "St Patrick's Cathedral"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75856,
+   "lon": -73.97636,
+   "what": "cathedral"
+  },
+  {
+   "name": "New York Public Library Main Branch",
+   "aliases": [
+    "NYPL Main Branch",
+    "Stephen A. Schwarzman Building",
+    "42nd Street Library",
+    "Main Library",
+    "New York Public Library main branch"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75334,
+   "lon": -73.98215,
+   "what": "library"
+  },
+  {
+   "name": "Gracie Mansion",
+   "aliases": [],
+   "borough": "Manhattan",
+   "lat": 40.77609,
+   "lon": -73.94308,
+   "what": "landmark"
+  },
+  {
+   "name": "Grant's Tomb",
+   "aliases": [
+    "General Grant National Memorial",
+    "Grants Tomb"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.81345,
+   "lon": -73.96305,
+   "what": "landmark"
+  },
+  {
+   "name": "Federal Hall",
+   "aliases": [
+    "Federal Hall National Memorial"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.70732,
+   "lon": -74.01025,
+   "what": "landmark"
+  },
+  {
+   "name": "Citi Field",
+   "aliases": [],
+   "borough": "Queens",
+   "lat": 40.75703,
+   "lon": -73.84576,
+   "what": "stadium"
+  },
+  {
+   "name": "Yankee Stadium",
+   "aliases": [],
+   "borough": "Bronx",
+   "lat": 40.82958,
+   "lon": -73.92652,
+   "what": "stadium"
+  },
+  {
+   "name": "Barclays Center",
+   "aliases": [],
+   "borough": "Brooklyn",
+   "lat": 40.68251,
+   "lon": -73.97525,
+   "what": "arena"
+  },
+  {
+   "name": "Arthur Ashe Stadium",
+   "aliases": [
+    "USTA Billie Jean King National Tennis Center",
+    "US Open"
+   ],
+   "borough": "Queens",
+   "lat": 40.7499,
+   "lon": -73.84704,
+   "what": "stadium"
+  },
+  {
+   "name": "Unisphere",
+   "aliases": [
+    "The Unisphere"
+   ],
+   "borough": "Queens",
+   "lat": 40.74638,
+   "lon": -73.84507,
+   "what": "landmark"
+  },
+  {
+   "name": "Hudson Yards",
+   "aliases": [
+    "The Vessel"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75339,
+   "lon": -74.00104,
+   "what": "landmark"
+  },
+  {
+   "name": "Washington Square Arch",
+   "aliases": [],
+   "borough": "Manhattan",
+   "lat": 40.73123,
+   "lon": -73.9971,
+   "what": "landmark"
+  },
+  {
+   "name": "United Nations Headquarters",
+   "aliases": [
+    "United Nations"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.74963,
+   "lon": -73.96739,
+   "what": "landmark"
+  },
+  {
+   "name": "South Street Seaport",
+   "aliases": [
+    "The Seaport"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.70575,
+   "lon": -74.00291,
+   "what": "landmark"
+  },
+  {
+   "name": "Columbia University",
+   "aliases": [],
+   "borough": "Manhattan",
+   "lat": 40.80775,
+   "lon": -73.96249,
+   "what": "campus"
+  },
+  {
+   "name": "New York University",
+   "aliases": [
+    "NYU"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.72921,
+   "lon": -73.99501,
+   "what": "campus"
+  },
+  {
+   "name": "Port Authority Bus Terminal",
+   "aliases": [
+    "Port Authority"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75686,
+   "lon": -73.99147,
+   "what": "station"
+  },
+  {
+   "name": "Moynihan Train Hall",
+   "aliases": [
+    "Moynihan Station"
+   ],
+   "borough": "Manhattan",
+   "lat": 40.75131,
+   "lon": -73.99533,
+   "what": "station"
+  },
+  {
+   "name": "Brooklyn Navy Yard",
+   "aliases": [],
+   "borough": "Brooklyn",
+   "lat": 40.70341,
+   "lon": -73.96991,
+   "what": "landmark"
+  }
+ ]
+}

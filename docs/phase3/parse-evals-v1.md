@@ -291,16 +291,16 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | A. Bare and vague | 4 | 1 | 2 |
 | B. Distance and units | 4 | 1 | 0 |
 | C. Time | 3 | 0 | 1 |
-| D. Start, end and places | 15 | 4 | 5 |
+| D. Start, end and places | 21 | 4 | 5 |
 | E. Avoid | 4 | 0 | 1 |
 | F. Preferences | 7 | 0 | 0 |
 | G. Training, Exploring and novelty | 6 | 2 | 3 |
 | H. Past routes | 5 | 2 | 5 |
 | I. Multi-part and contradictory | 3 | 0 | 0 |
 | J. Impossible and feasibility | 3 | 2 | 0 |
-| **Total** | **54** | **12** | **17** |
+| **Total** | **60** | **12** | **17** |
 
-The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
+The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
 
 Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, P40, P41 and P43. Each was covered by a real phrasing or another case, or was changed by a decision.
 

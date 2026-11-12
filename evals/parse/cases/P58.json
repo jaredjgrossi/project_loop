@@ -1,0 +1,39 @@
+{
+  "id": "P58",
+  "seq": 59,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C2",
+  "text": "4 mi around Fort Greene Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=4 (said) \u00b7 via_places=[place:\"Fort Greene Park\", around] (said) \u00b7 scenery=park_or_water (said).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 4,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Fort Greene Park",
+            "mode": "around"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

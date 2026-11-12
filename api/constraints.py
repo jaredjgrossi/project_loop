@@ -263,6 +263,8 @@ def with_default_date(c: RunConstraints, now: datetime) -> RunConstraints:
 
 
 _ENGINE_LATER = (  # (key, test): Phase 3 fields the engine can't build yet, in the order a caller reports them
+    # "bathroom near mile 3" parsed and showed as a chip, and the engine never read it (full review 4.2, Q7).
+    ("amenities", lambda c: bool(c.amenities)),
 )
 
 

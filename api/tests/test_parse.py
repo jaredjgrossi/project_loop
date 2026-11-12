@@ -37,6 +37,11 @@ PLACES = {
     "71st st & columbus ave": [pm("Columbus Ave & W 71st St", "crossing", "Manhattan", 40.7772, -73.9790)],
     "2nd ave": [pm("2nd Ave", "street", "Manhattan", 40.7450, -73.9770)],
     "prospect park": [pm("Prospect Park", "park", "Brooklyn", 40.6602, -73.9690)],
+    "central park": [pm("Central Park", "park", "Manhattan", 40.7826, -73.9656)],
+    "metropolitan museum of art": [pm("Metropolitan Museum of Art", "landmark", "Manhattan", 40.7794, -73.9634)],
+    "washington square park": [pm("Washington Square Park", "park", "Manhattan", 40.7308, -73.9973)],
+    "riverside park": [pm("Riverside Park", "park", "Manhattan", 40.8010, -73.9720)],
+    "fort greene park": [pm("Fort Greene Park", "park", "Brooklyn", 40.6906, -73.9744)],
     "grand army plaza": [pm("Grand Army Plaza", "square", "Brooklyn", 40.6742, -73.9700),
                          pm("Grand Army Plaza", "square", "Manhattan", 40.7644, -73.9737)],
 }
@@ -185,6 +190,14 @@ IDEAL = {  # the extraction a correct model returns, per case
     "P51": ext(start=place("place", "W 71st St")),
     "P52": ext(start=place("place", "W 71st St"), distance=mi(4)),
     "P53": ext(start=place("place", "71st St & Columbus Ave"), distance=mi(5, "km")),
+    "P54": ext(distance=mi(5), via=[{"name": "Central Park", "kind": "place", "whole_way": False}]),
+    "P55": ext(distance=mi(4), via=[{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": "around"}]),
+    "P56": ext(distance=mi(3), via=[{"name": "Washington Square Park", "kind": "place", "whole_way": False}]),
+    "P57": ext(distance=mi(5, "km"), via=[{"name": "Riverside Park", "kind": "place", "whole_way": False}]),
+    "P58": ext(distance=mi(4), via=[{"name": "Fort Greene Park", "kind": "place", "whole_way": False,
+                                       "word": "around"}]),
+    "P59": ext(distance=mi(10, "km"), end=place("saved", "home", saved_id="home"),
+               via=[{"name": "Metropolitan Museum of Art", "kind": "place", "whole_way": False}]),
     "P50": ext(start=place("place", "Grand Army Plaza"),
                via=[{"name": "Prospect Park", "kind": "place", "whole_way": False, "word": "Loop of"}]),
 }
@@ -249,6 +262,12 @@ QUOTES = {  # the runner's words behind each chip, per case (spans, 2026-11-09)
     "P48": said(("distance", "0.3 mi"), ("shape", "loop")),
     "P49": said(("distance", "15 miles"), ("via", "the east river path", 1), ("surface", "staying on the east river path")),
     "P50": said(("via", "Loop of Prospect Park", 1), ("start", "from Grand Army Plaza")),
+    "P54": said(("distance", "5 miles"), ("via", "Central Park", 1)),
+    "P55": said(("distance", "4 miles"), ("via", "around Prospect Park", 1)),
+    "P56": said(("distance", "3 miles"), ("via", "Washington Square Park", 1)),
+    "P57": said(("distance", "5k"), ("via", "Riverside Park", 1)),
+    "P58": said(("distance", "4 mi"), ("via", "around Fort Greene Park", 1)),
+    "P59": said(("distance", "10k"), ("via", "the Met", 1), ("end", "then home")),
     "P51": said(("start", "west 71st st")),
     "P52": said(("start", "W. 71st Street"), ("distance", "4 mi")),
     "P53": said(("start", "71st and Columbus"), ("distance", "5k")),
@@ -592,3 +611,34 @@ def test_claude_sees_favorites_and_ran_counts_but_no_lines():
     seen = json.loads(_with("H05", recent_routes=FAVORITES).for_claude("my usual"))
     assert seen["recent_routes"][2] == {"id": "rt_b", "date": "2026-11-02", "weekday": "Mon", "name": "the Stuy loop",
                                         "distance_mi": 4.0, "times_run": 7, "saved": True}
+
+
+# ---- named parks recorded as the_park (full review 4.2, Q1 and Q2) ----------------------------------------------------
+
+
+def _park_build(**kw):
+    ctx = Context.from_request(build_request(CASES["P01"], CONTEXTS))
+    return build(ext(**kw), ctx, FakePlaces())
+
+
+@pytest.mark.parametrize("name", ["Central Park", "central park"])
+def test_a_named_park_recorded_as_the_park_is_still_that_park(name):
+    out = _park_build(distance=mi(5), via=[{"name": name, "kind": "the_park", "whole_way": False}])
+    assert out["parsed"]["question"] is None
+    assert [v["name"] for v in out["parsed"]["constraints"]["via_places"]] == ["Central Park"]
+
+
+def test_a_named_park_as_the_start_is_looked_up_by_name():
+    out = _park_build(distance=mi(4), start=place("the_park", "Riverside Park"))
+    assert out["parsed"]["constraints"]["start_place"]["name"] == "Riverside Park"
+
+
+@pytest.mark.parametrize("name", ["the park", "a park", "park", "a nearby park", "the closest park", "my local park"])
+def test_a_generic_park_is_still_the_nearest_runnable_place(name):
+    out = _park_build(distance=mi(3), via=[{"name": name, "kind": "the_park", "whole_way": False}])
+    assert [v["name"] for v in out["parsed"]["constraints"]["via_places"]] == ["East River Esplanade"]
+
+
+def test_a_named_park_that_isnt_found_asks_instead_of_taking_the_nearest():
+    out = _park_build(distance=mi(5), via=[{"name": "Nowhere Park", "kind": "the_park", "whole_way": False}])
+    assert out["parsed"]["question"]["about"] == "via"  # "Couldn't find Nowhere Park", never a silent substitute

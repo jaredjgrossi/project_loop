@@ -1,0 +1,40 @@
+{
+  "id": "P59",
+  "seq": 60,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "10k past the Met then home",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=6.21 (said, 10 km) \u00b7 end_place=saved:home (said, \"then home\") \u00b7 via_places=[place:\"Metropolitan Museum of Art\"] (said). A landmark in the places table (decision 047); before it, \"Couldn't find Metropolitan Museum of Art\" (full review Q4).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 6.21,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Metropolitan Museum of Art"
+          }
+        ],
+        "source": "said"
+      },
+      "end_place": {
+        "value": {
+          "saved": "home"
+        },
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

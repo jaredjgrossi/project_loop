@@ -140,6 +140,7 @@ TEMPLATES: dict[str, str] = {
     "question.place.saved_unknown": "What's the {word}'s address?",
     "question.place.neighborhood": "Where in {name} should it start?",
     "question.start.where": "Where should it start?",
+    "question.start.no_location": "I can't see where you are. Turn on location for Loop, or type a place.",
     "question.start.subjective": "Which spot should it start at?",
     "question.end.subjective": "Which spot should it finish at?",
     "question.reuse.which": "Which one?",
@@ -165,6 +166,7 @@ TEMPLATES: dict[str, str] = {
     "cant.G9": "Can't plan around street lighting or safety yet",
     "cant.bike_lanes": "Can't avoid bike lanes yet",
     # ... and what the engine can't build yet (step 5; each later step removes its line). Gap "later".
+    "cant.later.amenities": "Can't plan a restroom or water stop along the route yet. The route is built without it",
     "cant.avoid_unknown": "Can't avoid {name} yet: it isn't on the list of places Loop can avoid",
     "cant.lap_unrouted": "Can't run laps of {name} yet: it isn't in Loop's path data. These routes go to it",
     "cant.around_shape": "Can't run a lap of {name}: it isn't a loop. These routes go through it",

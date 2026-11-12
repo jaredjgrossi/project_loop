@@ -1,0 +1,38 @@
+{
+  "id": "P57",
+  "seq": 58,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C3",
+  "text": "5k in Riverside Park",
+  "tags": [
+    "lookup",
+    "engine"
+  ],
+  "needs": [
+    "via"
+  ],
+  "doc": "PARSE \u00b7 distance_mi=3.11 (said, 5 km) \u00b7 via_places=[place:\"Riverside Park\"] (said) \u00b7 scenery=park_or_water (said).",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "distance_mi": {
+        "value": 3.11,
+        "source": "said"
+      },
+      "via_places": {
+        "value": [
+          {
+            "place": "Riverside Park"
+          }
+        ],
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": []
+}

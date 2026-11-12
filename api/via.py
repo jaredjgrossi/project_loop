@@ -49,6 +49,7 @@ class Via:
     closed: bool = True  # False: the lap is an open line, start to end (a past A-to-B route, step 11)
     phrase: str | None = None  # how labels name it ("along the route you ran"); default "through X", "with a lap of X"
     skip: tuple = ()  # (lat, lon, meters): spots on the lap the run must miss ("skip the ferry part", step 11)
+    entered: tuple | None = None  # (lat, lon): where the way in first meets a closed lap's ring (lap_entry)
 
     @property
     def point(self) -> tuple[float, float]:
@@ -62,7 +63,7 @@ class Via:
         """The waypoints that pass this via, coming from `came_from`: its point, or a full lap of its ring."""
         if self.lap is None:
             return [self.point]
-        pts = lap_points(self.lap, came_from, closed=self.closed)
+        pts = lap_points(self.lap, self.entered or came_from, closed=self.closed)
         return [pts[0], *(p for p in pts[1:-1] if not _in_skip(p, self.skip)), pts[-1]]
 
     def ring(self) -> dict:
@@ -87,6 +88,41 @@ def _minus_spots(line: dict, skip) -> dict:
     holes = shapely.union_all([Point((lon - lon0) * kx, (lat - lat0) * ky).buffer(r) for lat, lon, r in skip])
     left = shapely.transform(flat.difference(holes), lambda xy: xy / [kx, ky] + [lon0, lat0])
     return mapping(left)
+
+
+ENTRY_NEAR_M = 15.0  # a route point this close to the ring is on it
+
+
+def lap_entry(via: Via, coords: Sequence) -> tuple[float, float] | None:
+    """(lat, lon) where a way in first meets a closed lap's ring: the first point of `coords` ([lon, lat]) within
+    ENTRY_NEAR_M of it, or None when the way in never does.
+
+    A lap starts and ends at one point of its ring. Taking the ring point nearest the start as the crow flies put it
+    where no path comes in: the Reservoir track is entered by steps at its south-west end, and a lap from the east
+    started 180 m along the track from them, so the run went there and back at the end (full review 4.2, Q6)."""
+    import numpy as np
+    import shapely
+    from shapely.geometry import LineString, Point
+
+    if via.lap is None or not via.closed or not coords:
+        return None
+    lon0, lat0 = via.lap[0][:2]
+    origin, scale = np.array([lon0, lat0]), np.array([111_320 * math.cos(math.radians(lat0)), 110_574])
+    ring = shapely.transform(LineString([c[:2] for c in via.lap]), lambda xy: (xy - origin) * scale)
+    for c in coords:
+        if ring.distance(Point((np.array(c[:2]) - origin) * scale)) <= ENTRY_NEAR_M:
+            return c[1], c[0]
+    return None
+
+
+def with_entries(vias: Sequence[Via], coords: Sequence) -> list[Via]:
+    """The vias with each closed lap's entry set from the way in `coords` ([lon, lat]) took to reach it."""
+    from dataclasses import replace
+    out = []
+    for v in vias:
+        entry = lap_entry(v, coords) if v.lap is not None and v.closed else None
+        out.append(replace(v, entered=entry) if entry is not None else v)
+    return out
 
 
 def lap_points(ring: Sequence, came_from: tuple[float, float], step_m: float = LAP_STEP_M,
