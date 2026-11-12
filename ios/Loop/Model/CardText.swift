@@ -10,18 +10,24 @@ enum CardText {
     /// The waterfront band is chosen on the whole-number percent the card shows, so the
     /// sentence and the stat never disagree (59.6% shows as 60% and reads "Mostly by the water").
     /// `lightsPerMile` is the every-crossing value (`summary.lights_per_mile`), not the ranking's.
-    static func reason(waterfrontPct: Double, lightsPerMile: Double) -> String {
-        let shown = Int(waterfrontPct.rounded())
-        let lead: String
-        switch shown {
-        case 60...: lead = "Mostly by the water"
-        case 40..<60: lead = "About half by the water"
-        default: lead = "Mostly on streets"
+    /// With a number missing (not scored), the sentence says only what it knows; with neither, nil.
+    static func reason(waterfrontPct: Double?, lightsPerMile: Double?) -> String? {
+        let lead: String? = waterfrontPct.map {
+            switch Int($0.rounded()) {
+            case 60...: return "Mostly by the water"
+            case 40..<60: return "About half by the water"
+            default: return "Mostly on streets"
+            }
         }
-        return "\(lead): \(oneDecimal(lightsPerMile)) lights a mile."
+        switch (lead, lightsPerMile) {
+        case let (lead?, lights?): return "\(lead): \(oneDecimal(lights)) lights a mile."
+        case let (lead?, nil): return "\(lead)."
+        case let (nil, lights?): return "\(oneDecimal(lights)) lights a mile."
+        case (nil, nil): return nil
+        }
     }
 
-    static func reason(_ s: RouteFile.Summary) -> String {
+    static func reason(_ s: RouteFile.Summary) -> String? {
         reason(waterfrontPct: s.waterfrontPct.value, lightsPerMile: s.lightsPerMile.value)
     }
 
@@ -53,10 +59,14 @@ enum CardText {
     }
 
     static func stats(_ s: RouteFile.Summary) -> [Stat] {
+        // A value the server couldn't score shows a dash with its "not scored" label, never a zero.
         [
-            Stat(value: oneDecimal(s.lightsPerMile.value), label: "lights a mile", trust: Trust(s.lightsPerMile.status), source: s.lightsPerMile.source),
-            Stat(value: "\(Int(s.waterfrontPct.value.rounded()))%", label: "waterfront", trust: Trust(s.waterfrontPct.status), source: s.waterfrontPct.source),
-            Stat(value: "\(trimmed(s.climb.value)) m", label: "climb", trust: Trust(s.climb.status), source: s.climb.source),
+            Stat(value: s.lightsPerMile.value.map(oneDecimal) ?? "–", label: "lights a mile",
+                 trust: Trust(s.lightsPerMile.status), source: s.lightsPerMile.source),
+            Stat(value: s.waterfrontPct.value.map { "\(Int($0.rounded()))%" } ?? "–", label: "waterfront",
+                 trust: Trust(s.waterfrontPct.status), source: s.waterfrontPct.source),
+            Stat(value: s.climb.value.map { "\(trimmed($0)) m" } ?? "–", label: "climb",
+                 trust: Trust(s.climb.status), source: s.climb.source),
         ]
     }
 
