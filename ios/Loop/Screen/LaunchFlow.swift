@@ -207,6 +207,8 @@ extension MainModel {
         liveTask?.cancel()
         pendingQuestion = nil
         liveNotice = nil
+        lookedAt = 0
+        pickedRank = nil
         let z0 = zoom
         // Push in on the start while Loop reads, then keep drifting in slowly.
         requestCamera(.at(location, zoom: z0 + 1.4), animated: true, duration: 1.2)
@@ -244,7 +246,7 @@ extension MainModel {
     func startBuild(reduceMotion: Bool) {
         let t0 = CACurrentMediaTime()
         receiveEvent(.top3(data.candidates.map(\.rank)), at: t0)
-        requestCamera(.overview, animated: true, duration: 0.9)
+        if !holdsReachFrame { requestCamera(.overview, animated: true, duration: 0.9) }
         let drawTime = (shown?.line.length ?? 4800) / Motion.drawMetresPerSecond
         flow = Task { @MainActor [weak self] in
             func wait(_ t: TimeInterval) async -> Bool { try? await Task.sleep(for: .seconds(t)); return !Task.isCancelled }

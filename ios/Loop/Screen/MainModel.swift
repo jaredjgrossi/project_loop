@@ -9,7 +9,9 @@ import SwiftUI
 @MainActor
 final class MainModel {
     /// The routes on screen: the bundled file, or a live build's (replaced as events arrive).
-    var data: LoopData { didSet { resampled = [:] } }
+    var data: LoopData { didSet { resampled = [:]; alternateAnchors = [:] } }
+    /// Lab C: where each alternate's distance pill sits, by "shown>other".
+    @ObservationIgnored var alternateAnchors: [String: GeoPoint] = [:]
     /// The bundled route file, for builds without the server and the debug replays.
     let fixtureData: LoopData
 
@@ -28,7 +30,12 @@ final class MainModel {
     var otherRanks: [Int] { build.otherRanks }
     var cardRevealed: Bool { build.cardRevealed }
     var showsCount: Bool { build.showsCount }
-    var betterRouteAvailable: Bool { build.betterRank != nil }
+    /// Lab C: once the runner has opened one of the three themselves, the chip stays away.
+    var betterRouteAvailable: Bool {
+        build.betterRank != nil && !(DesignLab.shared.routes && pickedRank != nil && pickedRank == build.shownRank)
+    }
+    /// Lab C: the route the runner opened from the top three.
+    @ObservationIgnored var pickedRank: Int?
 
     // Sheet: its own observable, so only views pinned to it re-render while it moves.
     let sheet = SheetState()
@@ -174,6 +181,11 @@ final class MainModel {
     @ObservationIgnored var liveWatchdog: Task<Void, Never>?
     /// The launch health check failed: the landing sheet says so, with Try again.
     var serverDown = false
+    /// Lab B: routes the engine has looked at so far in this build (its `candidates` events).
+    var lookedAt = 0
+    @ObservationIgnored var lastLeaderAt: CFTimeInterval = 0
+    @ObservationIgnored private var heldTask: Task<Void, Never>?
+    @ObservationIgnored private var heldKeys: [Int]?
     @ObservationIgnored var liveParsedAt: CFTimeInterval?
     @ObservationIgnored var liveSentence = ""
     @ObservationIgnored var liveParseId: String?
@@ -251,7 +263,8 @@ final class MainModel {
     }
 
     var eyebrowText: String {
-        CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
+        if DesignLab.shared.routes { return labEyebrowText }
+        return CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
     }
 
     // MARK: Interaction
@@ -285,7 +298,65 @@ final class MainModel {
         }
     }
 
-    func receiveEvent(_ event: BuildEvent, at t: CFTimeInterval) { receive(event, at: t) }
+    func receiveEvent(_ event: BuildEvent, at t: CFTimeInterval) {
+        if DesignLab.shared.calmWait, holdForDwell(event, at: t) { return }
+        receive(event, at: t)
+    }
+
+    // MARK: Design lab B, "The wait" (design-review-v1, problem 3)
+
+    /// Lab C: the resting opacity of the other two routes, and the card's extra line for the name.
+    static let alternatesOpacity: Double = 0.6
+    static let titleLineHeight: CGFloat = 24
+
+    /// A leader stays on screen at least this long before the line morphs to a new one.
+    static let leaderDwell: TimeInterval = 1.0
+
+    /// True while the reach ring is the stage: open and not yet fading. Lab B keeps the camera on it.
+    var holdsReachFrame: Bool { DesignLab.shared.calmWait && reachStart != nil && reachFadeStart == nil }
+
+    /// Lab B: a new leader that arrives within `leaderDwell` of the last change waits its turn.
+    /// Only the newest waiting top 3 is kept; the flag or the final applies it at once. Returns
+    /// true when the event was held.
+    private func holdForDwell(_ event: BuildEvent, at t: CFTimeInterval) -> Bool {
+        switch event {
+        case let .top3(keys):
+            heldTask?.cancel()
+            heldTask = nil
+            guard let shown = build.shownRank, let lead = keys.first, lead != shown,
+                  !build.provisional, !build.touched else { return false }
+            let wait = Self.leaderDwell - (t - lastLeaderAt)
+            guard wait > 0.02 else { return false }
+            heldTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(wait))
+                guard let self, !Task.isCancelled else { return }
+                self.heldTask = nil
+                // A new build may have started meanwhile: only routes still on hand apply.
+                guard keys.allSatisfy({ self.data.candidate(rank: $0) != nil }), !self.build.provisional else { return }
+                self.receive(.top3(keys), at: CACurrentMediaTime())
+            }
+            heldKeys = keys
+            return true
+        case .provisional, .final:
+            if heldTask != nil, let keys = heldKeys {
+                heldTask?.cancel()
+                heldTask = nil
+                if case .provisional = event, keys.allSatisfy({ data.candidate(rank: $0) != nil }) {
+                    receive(.top3(keys), at: t)
+                }
+            }
+            return false
+        }
+    }
+
+    /// Lab B: one quiet line under the sentence while routes are being looked at. A fact the runner
+    /// didn't have a second ago; gone at the settle. Nothing while the request is being read.
+    var waitLine: String? {
+        guard DesignLab.shared.calmWait, requestText != nil, pendingQuestion == nil, liveNotice == nil,
+              !build.provisional, stage == .reading || stage == .building else { return nil }
+        if lookedAt > 0 { return "Looking at \(lookedAt) route\(lookedAt == 1 ? "" : "s")" }
+        return stage == .building ? "Looking at routes" : nil
+    }
     func playbackCancel() { playback?.cancel() }
 
     private func receive(_ event: BuildEvent, at t: CFTimeInterval) {
@@ -293,11 +364,13 @@ final class MainModel {
         let wasShown = build.shownRank
         let wasBounds = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
         build.apply(event, at: t)
+        if build.shownRank != wasShown { lastLeaderAt = t }
         frameVersion += 1
         // A new leader, the flag, or a final that changed the route: glide to fit it again.
         switch event {
         case .top3:
-            if wasShown != nil, build.shownRank != wasShown { autoFitRoute(duration: 0.6) }
+            // Lab B: the reach ring is the stage; no camera move per leader.
+            if wasShown != nil, build.shownRank != wasShown, !holdsReachFrame { autoFitRoute(duration: 0.6) }
         case .provisional:
             autoFitRoute(duration: SheetState.settleDuration)
         case .final:
@@ -324,8 +397,9 @@ final class MainModel {
     // MARK: Read-out, edit mode and the editor
 
     func applyReadOutToSheet() {
-        sheet.extra = (readOut?.cant.isEmpty ?? true) ? 0 : 26
-        if !(readOut?.hasReadIt ?? false) { sheet.readHeight = nil }
+        // Lab C: one more line on the card, for the route's name.
+        sheet.extra = ((readOut?.cant.isEmpty ?? true) ? 0 : 26) + (DesignLab.shared.routes ? Self.titleLineHeight : 0)
+        if !(readOut?.hasReadIt ?? false), !DesignLab.shared.routes { sheet.readHeight = nil }
         sheet.refreshRest()
     }
 
@@ -516,9 +590,11 @@ final class MainModel {
         var frame = RouteFrame()
         frame.reach = reachFrame(now: now, reduceMotion: reduceMotion)
         (frame.candidates, frame.candidateOpacity) = candidateFrame(now: now, reduceMotion: reduceMotion)
-        let outline = reduceMotion
+        var outline = reduceMotion
             ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
             : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)
+        // Lab C: after the settle the other two stay, a little stronger, as routes you can open.
+        if routesAreChoosable { outline = Self.alternatesOpacity }
         frame.othersOpacity = outline
         frame.others = outline > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
         guard let shown else {

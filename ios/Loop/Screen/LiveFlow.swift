@@ -69,6 +69,8 @@ extension MainModel {
         liveReachM = nil
         liveKeys = [:]
         liveOutlines = []
+        lookedAt = 0
+        pickedRank = nil
         liveRouteId = nil
         liveParseId = nil
         liveParsedAt = nil
@@ -228,6 +230,7 @@ extension MainModel {
                 liveOutlines.append((o.points.map { GeoPoint(lon: $0[0], lat: $0[1]) }, now))
             }
             if liveOutlines.count > 120 { liveOutlines.removeFirst(liveOutlines.count - 120) }
+            if DesignLab.shared.calmWait { lookedAt += c.candidates.count }
             frameVersion += 1
 
         case let .top3(r):
@@ -285,7 +288,7 @@ extension MainModel {
             if byKey[k] == nil {
                 byKey[k] = Candidate(rank: k, line: Polyline(pts), distanceMi: r.distance.miles,
                                      distanceTrust: Trust(r.distance.status), distanceSource: r.distance.source,
-                                     kindText: CardText.kindText(r.kind), detail: nil)
+                                     kindText: CardText.kindText(r.kind), detail: nil, label: r.label)
             }
         }
         guard !keys.isEmpty else { return }
@@ -295,7 +298,8 @@ extension MainModel {
         if first {
             stage = .building
             locationPulsing = false
-            requestCamera(.overview, animated: true, duration: 0.9)
+            // Lab B: stay on the reach ring; the one fit comes at the settle.
+            if !holdsReachFrame { requestCamera(.overview, animated: true, duration: 0.9) }
         }
     }
 
@@ -329,7 +333,7 @@ extension MainModel {
         let remapped = built.candidates.map { c in
             Candidate(rank: key(for: ids[c.rank] ?? nil, rank: c.rank), line: c.line, distanceMi: c.distanceMi,
                       distanceTrust: c.distanceTrust, distanceSource: c.distanceSource,
-                      kindText: c.kindText, detail: c.detail)
+                      kindText: c.kindText, detail: c.detail, label: c.label)
         }
         let keys = f.routes.sorted { $0.rank < $1.rank }.map { key(for: $0.id, rank: $0.rank) }
         let hour = built.request.startHourText

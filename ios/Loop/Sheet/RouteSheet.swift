@@ -81,8 +81,13 @@ struct RouteSheet: View {
             // "How Loop read it": revealed past the open state, scrolling if it's long.
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    ReadItSection(model: model)
-                        .id("readit")
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Lab C: the way, stretch by stretch, above "How Loop read it".
+                        if DesignLab.shared.routes { WaySection(model: model) }
+                        ReadItSection(model: model)
+                            .id("readit")
+                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(GeometryReader { g in
                             Color.clear
                                 .onAppear { readContentHeight = g.size.height }
@@ -113,7 +118,8 @@ struct RouteSheet: View {
 
     /// The read rest fits the list, up to just under the header.
     private func updateReadHeight(_ content: CGFloat) {
-        guard model.readOut?.hasReadIt == true, content > 0 else { sheet.readHeight = nil; return }
+        let hasWay = DesignLab.shared.routes && model.shownDetail != nil
+        guard model.readOut?.hasReadIt == true || hasWay, content > 0 else { sheet.readHeight = nil; return }
         let screen = UIScreen.main.bounds.height
         sheet.readHeight = min(sheet.openHeight + content, screen - model.headerBottom - 12)
     }
@@ -183,7 +189,7 @@ struct OpenSection: View {
                              onScrubStart: { model.touch() },
                              onSelectMile: { model.selectMile($0) })
                     .padding(.top, 12)
-                StatRow(stats: CardText.stats(detail.summary))
+                StatRow(stats: DesignLab.shared.routes ? CardText.statsInFeet(detail.summary) : CardText.stats(detail.summary))
                     .padding(.top, 10)
                 // One sentence, only when a stretch is moderate or busy; otherwise no line.
                 if let crowd = CardText.crowdSentence(detail, startTime: model.data.request.startHourText) {
@@ -217,12 +223,17 @@ struct CardBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if DesignLab.shared.routes {
+                // Lab C: which of the three this is, and what kind; a tap opens the next.
+                RouteEyebrow(model: model)
+            } else {
             Text(model.eyebrowText)
                 .typeStyle(.eyebrow)
                 .foregroundStyle(Palette.inkMuted.color)
                 .frame(height: 14)
                 .contentTransition(.opacity)
                 .animation(reduceMotion ? nil : Motion.textArrive, value: model.eyebrowText)
+            }
 
             Group {
                 if model.cardRevealed, let shown = model.shown {
@@ -243,10 +254,27 @@ struct CardBlock: View {
                         .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
-                        if let reason = shown.detail.flatMap({ CardText.reason($0.summary) }) {
+                        // Lab C: the route's name, so it can be said and remembered.
+                        if DesignLab.shared.routes {
+                            Text(model.shownTitle ?? " ")
+                                .typeStyle(.bodyStrong)
+                                .foregroundStyle(Palette.ink.color)
+                                .lineLimit(1)
+                                .frame(height: MainModel.titleLineHeight, alignment: .bottomLeading)
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : Motion.textArrive, value: model.shownTitle)
+                        }
+                        if let reason = shown.detail.flatMap({ DesignLab.shared.routes ? CardText.reasonWithParks($0.summary) : CardText.reason($0.summary) }) {
                             Text(reason)
                                 .typeStyle(.body)
                                 .foregroundStyle(Palette.inkSoft.color)
+                                .lineLimit(1)
+                                .padding(.top, 4)
+                        } else if DesignLab.shared.routes, model.showsCount, shown.detail == nil {
+                            // Only the top route comes with lights, climb and stretches for now.
+                            Text("Lights and climb come with route 1 for now.")
+                                .typeStyle(.body)
+                                .foregroundStyle(Palette.inkMuted.color)
                                 .lineLimit(1)
                                 .padding(.top, 4)
                         }

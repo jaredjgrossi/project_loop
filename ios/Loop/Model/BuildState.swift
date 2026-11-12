@@ -129,6 +129,16 @@ struct BuildState: Equatable {
         betterRank = nil
     }
 
+    /// Design lab C: the runner opens another of the top three. The line morphs to it; from here
+    /// the shown route is the runner's choice, so nothing swaps under them.
+    mutating func show(_ rank: Int, at t: TimeInterval) {
+        guard engineTop3.contains(rank), let shown = shownRank, rank != shown else { return }
+        morph = Morph(from: shown, to: rank, start: t)
+        shownRank = rank
+        touched = true
+        betterRank = nil
+    }
+
     /// Share of the shown route drawn at `t`: constant speed from when it first arrived.
     func drawnFraction(at t: TimeInterval, length: Double, metresPerSecond: Double) -> Double {
         guard let start = drawStart, length > 0 else { return 0 }

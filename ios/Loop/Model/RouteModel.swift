@@ -205,6 +205,8 @@ struct Candidate: Identifiable {
     var distanceSource: String? = nil
     let kindText: String
     let detail: RouteDetail?
+    /// The engine's name for the route ("Out-and-back on East River Esplanade"), when it sent one.
+    var label: String? = nil
     var id: Int { rank }
 }
 
@@ -303,7 +305,8 @@ struct LoopData {
                 distanceTrust: Trust(t.rank == 1 ? summary.distance.status : t.distance.status),
                 distanceSource: t.rank == 1 ? summary.distance.source : t.distance.source,
                 kindText: CardText.kindText(t.kind),
-                detail: t.rank == 1 ? detail : nil)
+                detail: t.rank == 1 ? detail : nil,
+                label: t.label)
         }.sorted { $0.rank < $1.rank }
 
         bestOf = file.pool.bestOf

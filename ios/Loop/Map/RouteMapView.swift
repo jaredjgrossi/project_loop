@@ -513,14 +513,27 @@ struct RouteMapView: UIViewRepresentable {
         private func mapTapped(at tap: CGPoint) {
             // Typing in the landing field: a tap on the map ends editing, nothing more.
             if model.searchMode { model.endTyping(); return }
-            guard let map = mapView?.mapboxMap, let line = model.shown?.line, model.shownDetail != nil else { return }
+            guard let map = mapView?.mapboxMap, let line = model.shown?.line else { return }
             let projected = line.points.map { map.point(for: $0.coordinate) }
-            if let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
+            if model.shownDetail != nil,
+               let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
                hit.distance <= RouteHit.tolerance {
                 model.selectPoint(alongM: hit.alongM)
-            } else {
-                model.clearSelection()
+                return
             }
+            // Lab C: a tap on one of the other two routes opens it.
+            if model.routesAreChoosable {
+                for rank in model.otherRanks {
+                    guard let other = model.data.candidate(rank: rank)?.line else { continue }
+                    let pts = other.points.map { map.point(for: $0.coordinate) }
+                    if let hit = RouteHit.nearest(to: tap, projected: pts, cumulative: other.cumulative),
+                       hit.distance <= RouteHit.tolerance {
+                        model.showRoute(rank: rank)
+                        return
+                    }
+                }
+            }
+            model.clearSelection()
         }
 
         func handle(_ request: CameraRequest) {
@@ -554,7 +567,9 @@ struct RouteMapView: UIViewRepresentable {
                 target = CameraOptions(center: point.coordinate, padding: .zero, zoom: zoom)
             case let .circle(center, radiusM):
                 let ring = RouteFrame.circle(center, radiusM: radiusM, points: 32).map(\.coordinate)
-                let padding = UIEdgeInsets(top: model.headerBottom + 20, left: 24, bottom: 60, right: 24)
+                // Lab B: room for the "Looking at N routes" line under the sentence.
+                let top = model.headerBottom + (DesignLab.shared.calmWait ? 46 : 20)
+                let padding = UIEdgeInsets(top: top, left: 24, bottom: 60, right: 24)
                 target = try? map.camera(for: ring, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
                                          maxZoom: 17, offset: nil)
             case let .above(point, bottom, zoom):

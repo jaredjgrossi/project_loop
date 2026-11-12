@@ -454,6 +454,8 @@ private struct MarkerLayer: View {
     var body: some View {
         ZStack(alignment: .top) {
             MarkerOverlay(model: model)
+            // Lab C: a distance pill on each of the other two routes.
+            if DesignLab.shared.routes { AlternatesOverlay(model: model) }
             SelectionOverlay(model: model)
         }
         .opacity(1 - model.sheet.readProgress)

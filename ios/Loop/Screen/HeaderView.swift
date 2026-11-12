@@ -59,10 +59,23 @@ struct HeaderView: View {
                     if model.editMode { Rectangle().fill(Palette.focusRing.color).frame(height: 2) }
                 }
                 .transition(reduceMotion ? .identity : .opacity.combined(with: .offset(y: 8)))
+                // Lab B: how many routes Loop has looked at, while it looks.
+                if let line = model.waitLine {
+                    Text(line)
+                        .typeStyle(.label)
+                        .foregroundStyle(Palette.inkMuted.color)
+                        .monospacedDigit()
+                        .contentTransition(reduceMotion ? .identity : .numericText())
+                        .animation(reduceMotion ? nil : Motion.textArrive, value: line)
+                        .padding(.top, -2)
+                        .transition(.opacity)
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
             }
         }
         .padding(.horizontal, Metrics.s24)
         .padding(.top, 4)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: model.waitLine == nil)
     }
 }
 
