@@ -526,6 +526,26 @@ def test_the_install_id_is_stored_with_a_build():
     assert routes.rows[final["route_id"]]["request"]["install_id"] == INSTALL["X-Loop-Install"]
 
 
+class PriorEngine(FakeEngine):
+    """Records which install each engine call was made for (full review 6.3: the prior is the reviewer's only)."""
+
+    def __init__(self):
+        super().__init__()
+        self.installs = []
+
+    def for_install(self, install):
+        self.installs.append(install)
+        return self
+
+
+def test_every_build_is_made_for_the_installs_own_engine():
+    eng = PriorEngine()
+    c, _ = client_for({"5k": IDEAL["P01"]}, engine=eng)
+    c.post("/v1/runs", json=body("P01", text="5k"), headers=AUTH | INSTALL)
+    c.post("/v1/runs", json=body("P01", text="5k"), headers=AUTH)  # no install id: the engine decides, as for a guest
+    assert eng.installs == [INSTALL["X-Loop-Install"], None]
+
+
 class AgainEngine(FakeEngine):
     def run_again(self, rc, past, route_id):
         self.calls.append((rc, past))

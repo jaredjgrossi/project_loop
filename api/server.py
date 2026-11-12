@@ -33,7 +33,7 @@ from starlette.concurrency import run_in_threadpool
 from api.constraints import RunConstraints
 from api.copy import render
 from api.engine import (BadStart, Engine, EngineQuestion, EngineUnavailable, before_build, end_for, graphhopper_ready,
-                        new_route_id, start_for)
+                        new_route_id, prior_installs_from_env, start_for)
 from api.parse import Context, DbPlaces, answer_overrides, parse, parsed_for_constraints, resume
 from api.pending import Pending, PendingStore
 from api.feedback import AppFeedback, PgFeedbackStore
@@ -198,7 +198,11 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         raise RuntimeError("LOOP_TOKEN isn't set. Add a line LOOP_TOKEN=<random> to .env (see docs/phase3/ios-wiring.md).")
     parse_fn = parse_fn or parse
     places = places or _db_places()
-    engine = Engine() if engine is None else engine
+    engine = Engine(prior_installs=prior_installs_from_env()) if engine is None else engine
+
+    def engine_for(install: str | None):
+        """The reviewer's Apple Health prior is for their install only (full review 6.3); fakes have no such rule."""
+        return engine.for_install(install) if hasattr(engine, "for_install") else engine
     store = PendingStore() if store is None else store
     route_store = PgRouteStore() if route_store is None else route_store
     feedbacks = PgFeedbackStore() if feedback_store is None else feedback_store
@@ -298,7 +302,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         return a.shape != b.shape and a.model_dump(mode="json", exclude=ignore) == b.model_dump(mode="json",
                                                                                                exclude=ignore)
 
-    def build_planned(rc: RunConstraints, planned: dict, kept: dict, location, saved) -> dict:
+    def build_planned(rc: RunConstraints, planned: dict, kept: dict, location, saved, install=None) -> dict:
         """The `planned` event (contract; D6): the second run built for its day, from its own start (home on a
         later day, R16), stored like any build so its route_id works later. Built quietly: only `planned` is
         streamed. If it can't be built now, the event still carries its day and constraints, with a note, and the
@@ -312,7 +316,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                              "start_time": p.start_time},
                  "notes": []}
         try:
-            final = engine.build(p, start_for(p, location, saved), lambda e: None, pid, end=end_for(p, saved))
+            final = engine_for(install).build(p, start_for(p, location, saved), lambda e: None, pid,
+                                              end=end_for(p, saved))
         except (EngineQuestion, EngineUnavailable, BadStart):
             final = None
         if final is None or not final["routes"]:
@@ -371,8 +376,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         yield _event(parsed)
         route_id = new_route_id()
         try:
-            final = await run_in_threadpool(engine.run_again, RunConstraints.model_validate(constraints), past,
-                                            route_id)
+            final = await run_in_threadpool(engine_for(install).run_again, RunConstraints.model_validate(constraints),
+                                            past, route_id)
         except EngineUnavailable:
             yield _error("engine_unavailable")
             return
@@ -433,9 +438,9 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
             try:
                 final = None
                 if shape_only_edit(req, parsed["constraints"]):  # same request, another shape: from the old pool
-                    final = engine.from_pool(rc, start, req.route_id, send, route_id)
+                    final = engine_for(install).from_pool(rc, start, req.route_id, send, route_id)
                 if final is None:
-                    final = engine.build(rc, start, send, route_id, end=end)
+                    final = engine_for(install).build(rc, start, send, route_id, end=end)
                 built[route_id] = parsed["constraints"]
                 while len(built) > 50:
                     built.pop(next(iter(built)))
@@ -446,7 +451,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                 route_store.save(route_id, stored_request(kept, kind, parsed["parse_id"], install), stored, final)
                 send(final)
                 if rc.planned is not None:  # D6, step 11: the second run, built for its own day, after the first
-                    send(build_planned(rc, stored.get("planned") or {}, kept, location, saved))
+                    send(build_planned(rc, stored.get("planned") or {}, kept, location, saved, install))
             except EngineQuestion as q:  # e.g. the end is farther than the distance: ask, and keep the parse open
                 pid = f"p_{secrets.token_hex(4)}"
                 store.put(Pending(parse_id=pid, question_id=q.question["id"], ext=trace.get("extraction") or {},

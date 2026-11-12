@@ -9,11 +9,12 @@ the contract's payloads and adds `final`: the #1 in full, as the iPhone fixture'
 """
 
 import math
+import os
 import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import httpx
 import psycopg
@@ -323,6 +324,11 @@ def _straight_m(a: tuple[float, float], b: tuple[float, float] | None) -> float:
     return math.hypot((b[1] - a[1]) * kx, (b[0] - a[0]) * 110_574)
 
 
+def prior_installs_from_env() -> frozenset:
+    """LOOP_PRIOR_INSTALL_IDS: the installs that may use the prior, comma separated (.env, git-ignored). Unset: none."""
+    return frozenset(i.strip() for i in os.environ.get("LOOP_PRIOR_INSTALL_IDS", "").split(",") if i.strip())
+
+
 def graphhopper_ready(timeout_s: float = 1.0) -> bool:
     try:
         return httpx.get(f"{graphhopper_url()}/health", timeout=timeout_s).status_code == 200
@@ -349,6 +355,17 @@ class Engine:
     past_route_fn: Callable = None  # route id -> past_routes.PastRoute | None; default saved_routes (step 11)
     pools: dict = None  # route id -> every candidate that passed, for the last POOLS_KEPT builds (shape edits)
     area_fn: Callable = None  # a neighborhood's point -> (its area, the area AREA_DEPTH_M inside), GeoJSON; db_area
+    # The installs whose runs are the prior (runner_prior, the reviewer's Apple Health corridors). None: no limit, as for
+    # the reviewer's own scripts and live evals; the server passes the LOOP_PRIOR_INSTALL_IDS list, so every other
+    # install, and a request with no install id, gets no "on a route you run" candidates and no familiarity score.
+    prior_installs: frozenset | None = None
+
+    def for_install(self, install_id: str | None) -> "Engine":
+        """The engine to build with for this install (full review 6.3): this one for an install on the prior list,
+        else a copy with the prior off. The copy shares the shape-edit pools."""
+        if self.prior_installs is None or install_id in self.prior_installs:
+            return self
+        return replace(self, use_prior=False, anchor_fn=None)
 
     def remember_pool(self, route_id: str, candidates: list) -> None:
         with _POOLS_LOCK:
@@ -425,6 +442,8 @@ class Engine:
     def __post_init__(self):
         if self.feature_anchor_fn is None:
             self.feature_anchor_fn = ml.DB_FEATURE_ANCHOR_SOURCES
+        if self.pools is None:
+            self.pools = {}  # shared by every for_install copy, so a shape edit finds the build it started from
 
     def build(self, rc: RunConstraints, start: Start, send: Callable[[dict], None], route_id: str,
               end: tuple[float, float] | None = None) -> dict:
