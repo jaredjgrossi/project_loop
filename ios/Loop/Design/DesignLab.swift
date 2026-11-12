@@ -22,6 +22,19 @@ final class DesignLab {
         case routes
         /// A helper for A: show the home sheet as a runner with no runs of their own sees it.
         case asNewRunner
+        /// D: while Loop looks, everything is pencil; at the flag the winner is inked, miles stamp
+        /// in, the distance rolls up, and the phone plays one pattern for the whole move.
+        case ink
+        /// D+ (wildcard): a tilted drafting-table camera at the settle, paper grain, and sound.
+        case inkWild
+        /// E: fly the route at street height, in the light of the hour it's planned for.
+        case flyover
+        /// E+ (wildcard): drag to scrub the flight, tap to pause, and a paper-model city.
+        case flyoverWild
+        /// F: after "I ran it", the run draws onto the map of every run and the totals roll.
+        case arrival
+        /// F+ (wildcard): a poster of every run, for the share sheet.
+        case arrivalWild
 
         var id: String { rawValue }
 
@@ -31,6 +44,12 @@ final class DesignLab {
             case .calmWait: return "B · The wait"
             case .routes: return "C · Reading the route"
             case .asNewRunner: return "A · As a new runner"
+            case .ink: return "D · Pencil, then ink"
+            case .inkWild: return "D+ · Wildcard: tilt, grain, sound"
+            case .flyover: return "E · Fly the route"
+            case .flyoverWild: return "E+ · Wildcard: scrub, paper city"
+            case .arrival: return "F · The run joins your map"
+            case .arrivalWild: return "F+ · Wildcard: the poster"
             }
         }
 
@@ -40,6 +59,12 @@ final class DesignLab {
             case .calmWait: return "Camera holds the reach ring, fewer leader swaps, a live count"
             case .routes: return "All three routes, kind and name on the card, the way as a list"
             case .asNewRunner: return "With A on: the home sheet as someone with no runs sees it"
+            case .ink: return "Candidates and leader in graphite; the winner inks in at the flag, with a haptic pattern"
+            case .inkWild: return "Adds a tilted camera at the settle, paper grain over the screen, a brush-and-knock sound"
+            case .flyover: return "A play button on the card flies the route in 3D, lit for the planned hour"
+            case .flyoverWild: return "Adds drag to scrub and tap to pause; buildings as a cream paper model"
+            case .arrival: return "After a rating, the run draws onto every run so far and the totals roll"
+            case .arrivalWild: return "Adds a shareable poster of every run (ends trimmed 200 m)"
             }
         }
     }
@@ -84,4 +109,8 @@ final class DesignLab {
     var composer: Bool { isOn(.composer) }
     var calmWait: Bool { isOn(.calmWait) }
     var routes: Bool { isOn(.routes) }
+    /// A wildcard switch turns its own moment on too.
+    var ink: Bool { isOn(.ink) || isOn(.inkWild) }
+    var flyover: Bool { isOn(.flyover) || isOn(.flyoverWild) }
+    var arrival: Bool { isOn(.arrival) || isOn(.arrivalWild) }
 }

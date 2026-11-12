@@ -25,6 +25,7 @@ struct MarkerOverlay: View {
                            let place = placements[m.mile], selection?.covers(place.center) != true {
                             MarkLeader(placement: place)
                             MileMarkButton(mile: m.mile) { model.tapMile(m.mile) }
+                                .modifier(StampIn(active: DesignLab.shared.ink))
                                 .position(place.center)
                         }
                     }
@@ -32,7 +33,7 @@ struct MarkerOverlay: View {
                 if let t = detail.turnaround, model.isDrawn(alongM: t.alongM), let p = model.screenPoint(t.point) {
                     TurnaroundRing(pulseID: model.pulseID)
                         .position(p)
-                    if showDetailMarks, let c = labels.turn { MapLabel(text: "Turn").position(c) }
+                    if showDetailMarks, let c = labels.turn { MapLabel(text: "Turn").modifier(StampIn(active: DesignLab.shared.ink)).position(c) }
                 }
             }
             // Every candidate starts at the same place, so the start shows as soon as a route does.

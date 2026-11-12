@@ -59,6 +59,9 @@ struct MainScreen: View {
             }
 
             HeaderView(model: model, trailing: debugTrailing)
+                .opacity(model.fly.active ? 0 : 1)
+                .allowsHitTesting(!model.fly.active)
+                .animation(reduceMotion ? nil : Motion.crossfade, value: model.fly.active)
                 .background(GeometryReader { g in
                     Color.clear
                         .onAppear { model.headerBottom = g.frame(in: .global).maxY }
@@ -143,6 +146,13 @@ struct MainScreen: View {
                     .transition(.opacity)
             }
 
+            // Signature moment E: the flyover's caption, progress and way out.
+            if model.fly.active {
+                FlyoverOverlay(model: model).zIndex(5)
+            }
+            // D+ (wildcard): paper grain over everything, so map and type sit on one sheet.
+            if DesignLab.shared.isOn(.inkWild) { PaperGrain().zIndex(9) }
+
             if model.logoShown {
                 LaunchLogo()
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -154,6 +164,8 @@ struct MainScreen: View {
             LookAroundScreen(scene: target.scene, title: target.title)
         }
         .sheet(isPresented: $model.youShown) { YouSheet(model: model) }
+        // Signature moment F: the run joins the map of every run.
+        .fullScreenCover(item: $model.arrival) { state in ArrivalView(model: model, state: state) }
         // Back in the foreground on the home sheet: the return prompt, if a route is waiting.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, model.stage == .landing, model.returnPrompt == nil {
@@ -203,7 +215,7 @@ struct MainScreen: View {
         }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
-        let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
+        let settledArgs = ["-LoopFly", "-LoopArrive", "-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
             model.requestText = model.data.request.text
             var read = ReadOut.simulated(model.data.request.text, data: model.data, file: nil)
@@ -280,6 +292,20 @@ struct MainScreen: View {
                 model.toggleReason("crowded")
                 model.toggleReason("other")
             }
+        }
+        if args.contains("-LoopFly") {
+            // Recordings: start the flyover once the route has settled.
+            while !model.mapReady { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(2.5))
+            model.startFlyover()
+        }
+        if args.contains("-LoopArrive") {
+            // Recordings: "I ran it", then Good, which brings the arrival up.
+            while !model.mapReady { try? await Task.sleep(for: .seconds(0.2)) }
+            try? await Task.sleep(for: .seconds(2.0))
+            model.ranIt()
+            try? await Task.sleep(for: .seconds(1.4))
+            model.rateGood()
         }
         if args.contains("-LoopSaved") {
             try? await Task.sleep(for: .seconds(1.0))
@@ -458,6 +484,6 @@ private struct MarkerLayer: View {
             if DesignLab.shared.routes { AlternatesOverlay(model: model) }
             SelectionOverlay(model: model)
         }
-        .opacity(1 - model.sheet.readProgress)
+        .opacity(model.fly.active ? 0 : 1 - model.sheet.readProgress)
     }
 }

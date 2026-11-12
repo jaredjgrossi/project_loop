@@ -109,6 +109,10 @@ struct RouteSheet: View {
         .padding(.horizontal, Metrics.s24)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: -6) {
+                // Signature moment E: fly the route.
+                if DesignLab.shared.flyover, model.shownDetail != nil, model.build.final {
+                    PreviewButton { model.startFlyover() }
+                }
                 if model.currentRoute != nil { BookmarkButton(saved: model.isCurrentSaved) { model.toggleSave() } }
                 CloseCardButton { model.goHome() }
             }
@@ -241,9 +245,16 @@ struct CardBlock: View {
                         // No trust word beside "mi": tapping the distance shows it (and the source).
                         TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                if DesignLab.shared.ink, shown.distanceTrust?.isEstimate != true {
+                                    // Signature moment D: the distance rolls up and lands with the ink.
+                                    RollingDistance(target: shown.distanceMi,
+                                                    duration: model.inkDuration(lengthM: shown.line.length),
+                                                    roll: !reduceMotion && model.inkIsMoving(now: CACurrentMediaTime()))
+                                } else {
                                 Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
                                     .typeStyle(.numeralXL)
                                     .foregroundStyle(Palette.ink.color)
+                                }
                                 Text("mi")
                                     .typeStyle(.numeralL)
                                     .foregroundStyle(Palette.unitInk.color)

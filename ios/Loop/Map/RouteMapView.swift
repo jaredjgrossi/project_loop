@@ -16,6 +16,8 @@ struct CameraRequest: Equatable {
         /// Centre a point in the map area between the header and `bottom` points from the screen's
         /// bottom (the landing sheet and keyboard); keeps the zoom unless one is given.
         case above(GeoPoint, bottom: CGFloat, zoom: Double?)
+        /// Signature moment E: a full camera pose (the flyover's start).
+        case pose(GeoPoint, zoom: Double, bearing: Double, pitch: Double)
     }
     var id = 0
     var kind: Kind = .overview
@@ -213,13 +215,17 @@ struct RouteMapView: UIViewRepresentable {
             static let warmWater = "loop-warm-water"
             static let warmPark = "loop-warm-park"
             static let candidates = "loop-candidates"
+            static let candidates2 = "loop-candidates-2"
+            static let pencilSource = "loop-pencil"
+            static let pencil = "loop-pencil"
+            static let pencil2 = "loop-pencil-2"
             static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource, Ids.pencilSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -276,6 +282,28 @@ struct RouteMapView: UIViewRepresentable {
             cands.lineEmissiveStrength = .constant(1)
             cands.slot = slot
             try? map.addLayer(cands)
+            // Design lab D: pencil. A second, thinner stroke a hair to one side makes a line read
+            // as sketched; the current best gets the same treatment, heavier.
+            var cands2 = LineLayer(id: Ids.candidates2, source: Ids.candidatesSource)
+            cands2.lineWidth = .constant(0.9)
+            cands2.lineOffset = .constant(1.6)
+            cands2.lineCap = .constant(.round)
+            cands2.lineJoin = .constant(.round)
+            cands2.lineOpacity = .constant(0)
+            cands2.lineEmissiveStrength = .constant(1)
+            cands2.slot = slot
+            try? map.addLayer(cands2)
+            for (id, width, offset, opacity) in [(Ids.pencil, 2.4, 0.0, 0.62), (Ids.pencil2, 1.1, 1.9, 0.3)] {
+                var l = LineLayer(id: id, source: Ids.pencilSource)
+                l.lineWidth = .constant(width)
+                l.lineOffset = .constant(offset)
+                l.lineCap = .constant(.round)
+                l.lineJoin = .constant(.round)
+                l.lineOpacity = .constant(opacity)
+                l.lineEmissiveStrength = .constant(1)
+                l.slot = slot
+                try? map.addLayer(l)
+            }
 
             // The casing is one line for the whole route (feature kind "casing"), under every run.
             var casing = LineLayer(id: Ids.casing, source: Ids.routeSource)
@@ -351,7 +379,10 @@ struct RouteMapView: UIViewRepresentable {
             set(Ids.base, "line-color", Palette.routeStreet)
             set(Ids.pathBed, "line-color", Palette.routeCasing)
             set(Ids.reachRing, "line-color", Palette.action)
-            set(Ids.candidates, "line-color", Palette.action)
+            set(Ids.candidates, "line-color", lastFrame?.sketch == true ? Palette.ink : Palette.action)
+            set(Ids.candidates2, "line-color", Palette.ink)
+            set(Ids.pencil, "line-color", Palette.ink)
+            set(Ids.pencil2, "line-color", Palette.ink)
             try? map.setLayerProperty(for: Ids.reachDim, property: "fill-color", value: Palette.reachDim.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmWater, property: "fill-color", value: Palette.warmWater.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
@@ -365,6 +396,7 @@ struct RouteMapView: UIViewRepresentable {
         @objc private func tick() {
             guard styleReady, let mapView, let map = mapView.mapboxMap else { return }
             placeOrnaments()
+            flyTick(CACurrentMediaTime())
             if let pending = pendingCamera, mapView.bounds.width > 0 {
                 pendingCamera = nil
                 move(pending)
@@ -406,9 +438,19 @@ struct RouteMapView: UIViewRepresentable {
                 let features = frame.candidates.map { Feature(geometry: LineString($0.map(\.coordinate))) }
                 map.updateGeoJSONSource(withId: Ids.candidatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
-            if frame.candidateOpacity != lastFrame?.candidateOpacity {
-                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity",
-                                          value: frame.candidateOpacity * Self.candidateBoost(dark: dark))
+            if frame.sketch != lastFrame?.sketch {
+                try? map.setLayerProperty(for: Ids.candidates, property: "line-color",
+                                          value: (frame.sketch ? Palette.ink : Palette.action).hex(dark: dark))
+            }
+            if frame.candidateOpacity != lastFrame?.candidateOpacity || frame.sketch != lastFrame?.sketch {
+                // Graphite reads a little stronger than faint indigo at the same weight.
+                let o = frame.candidateOpacity * (frame.sketch ? 1.5 : Self.candidateBoost(dark: dark))
+                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity", value: min(1, o))
+                try? map.setLayerProperty(for: Ids.candidates2, property: "line-opacity", value: frame.sketch ? min(1, o * 0.55) : 0)
+            }
+            if frame.pencil != lastFrame?.pencil {
+                let features = frame.pencil.count >= 2 ? [Feature(geometry: LineString(frame.pencil.map(\.coordinate)))] : []
+                map.updateGeoJSONSource(withId: Ids.pencilSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
             if frame.othersOpacity != lastFrame?.othersOpacity {
                 try? map.setLayerProperty(for: Ids.others, property: "line-opacity", value: frame.othersOpacity)
@@ -468,8 +510,72 @@ struct RouteMapView: UIViewRepresentable {
             let marks: CGFloat = 16
             let padding = UIEdgeInsets(top: model.headerBottom + 24 + marks, left: 24 + marks,
                                        bottom: sheetHeight + 40 + marks, right: 24 + marks)
-            return try? map.camera(for: coords, camera: CameraOptions(padding: .zero), coordinatesPadding: padding,
+            // D+ (wildcard): the settled route on a tilted table, looking along it.
+            let camera = model.heroTilt
+                ? CameraOptions(padding: .zero, bearing: model.heroBearing, pitch: 48)
+                : CameraOptions(padding: .zero)
+            return try? map.camera(for: coords, camera: camera, coordinatesPadding: padding,
                                    maxZoom: 16.5, offset: nil)
+        }
+
+        /// The flyover looks ahead: the runner sits in the lower third of the screen.
+        static func flyPadding(_ size: CGSize) -> UIEdgeInsets {
+            UIEdgeInsets(top: size.height * 0.40, left: 0, bottom: 0, right: 0)
+        }
+
+        // MARK: Signature moment E: the flyover
+
+        private var flyStyleOn = false
+
+        /// Each frame of the flight: move along the route, turn the camera to the way ahead, tick at
+        /// each mile. Buildings and the hour's light come on with the flight and go with it.
+        private func flyTick(_ now: CFTimeInterval) {
+            let fly = model.fly
+            guard let mapView, let map = mapView.mapboxMap else { return }
+            if fly.active != flyStyleOn {
+                flyStyleOn = fly.active
+                applyFlyStyle(fly.active)
+            }
+            guard fly.active, fly.cameraLive, let line = model.shown?.line else { return }
+            let dt = fly.lastTick.map { min(0.05, max(0, now - $0)) } ?? 0
+            fly.lastTick = now
+            if fly.playing {
+                let next = min(fly.endM, fly.alongM + fly.speed * dt)
+                if next != fly.alongM { fly.alongM = next }
+                if next >= fly.endM { model.finishFlyover(); return }
+            }
+            let mile = Int(fly.alongM / 1609.344)
+            if mile > fly.lastMile { InkHaptics.shared.playMile() }
+            fly.lastMile = mile
+            let here = line.point(at: fly.alongM)
+            let ahead = line.point(at: min(line.length, fly.alongM + 150))
+            let behind = line.point(at: max(0, fly.alongM - 30))
+            var turn = (behind.bearing(to: ahead) - fly.heading).truncatingRemainder(dividingBy: 360)
+            if turn > 180 { turn -= 360 }
+            if turn < -180 { turn += 360 }
+            // The camera swings round a corner over about half a second; a scrub turns it faster.
+            let k = dt > 0 ? 1 - exp(-dt / (fly.playing ? 0.55 : 0.18)) : (fly.playing ? 0 : 0.35)
+            fly.heading = (fly.heading + turn * k + 360).truncatingRemainder(dividingBy: 360)
+            map.setCamera(to: CameraOptions(center: here.coordinate, padding: Self.flyPadding(mapView.bounds.size),
+                                            zoom: MainModel.flyZoom, bearing: fly.heading, pitch: MainModel.flyPitch))
+        }
+
+        private func applyFlyStyle(_ on: Bool) {
+            guard MapStyle.hasToken, let map = mapView?.mapboxMap else { return }
+            guard on else { applyStandardConfig(); return }
+            func set(_ key: String, _ value: Any) {
+                try? map.setStyleImportConfigProperty(for: "basemap", config: key, value: value)
+            }
+            set("show3dObjects", true)
+            if DesignLab.shared.isOn(.flyoverWild) {
+                // E+ (wildcard): a paper-model city. Buildings in the sheet's own paper colour under
+                // plain daylight, so they read as folded card with soft shadows. (Standard's
+                // monochrome theme was tried first: it turns the city charcoal.)
+                set("lightPreset", "day")
+                set("colorBuildings", Palette.surfaceSheet.hex(dark: dark))
+            } else if !dark {
+                set("lightPreset", model.flyLight.preset)
+            }
         }
 
         /// While the route card moves (drag or settle), the fit follows its height every frame, so
@@ -576,8 +682,16 @@ struct RouteMapView: UIViewRepresentable {
                 // Camera padding moves the centre into the area left between the header and the sheet.
                 let padding = UIEdgeInsets(top: model.headerBottom, left: 0, bottom: min(bottom, size.height - model.headerBottom - 40), right: 0)
                 target = CameraOptions(center: point.coordinate, padding: padding, zoom: zoom.map { CGFloat($0) })
+            case let .pose(point, zoom, bearing, pitch):
+                target = CameraOptions(center: point.coordinate, padding: Self.flyPadding(size), zoom: zoom,
+                                       bearing: bearing, pitch: pitch)
             }
-            guard let target else { return }
+            guard var target else { return }
+            // Every move but the flyover's pose and the tilted hero fit lands flat and north-up.
+            if case .pose = request.kind {} else if !(model.heroTilt && request.kind == .overview) {
+                target.bearing = 0
+                target.pitch = 0
+            }
             // A new move replaces any running one (an unfinished drift would otherwise pull the
             // camera back to where it was heading).
             mapView.camera.cancelAnimations()

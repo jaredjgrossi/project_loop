@@ -89,6 +89,8 @@ struct TypeStyle {
 /// Tracking on numeral-xl, wordmark and body-strong is the D mockup's.
 extension TypeStyle {
     static let numeralXL = TypeStyle(family: .fraunces, size: 56, lineHeight: 56, weight: 380, tracking: -0.02, tabularNumerals: true)
+    /// Design lab only (signature moments): the one display-size numeral, for a total that fills the screen.
+    static let display = TypeStyle(family: .fraunces, size: 88, lineHeight: 84, weight: 340, tracking: -0.03, tabularNumerals: true)
     static let numeralL = TypeStyle(family: .fraunces, size: 24, lineHeight: 26, weight: 400, tabularNumerals: true)
     /// Small numerals (the landing's temperature): quieter than the wordmark.
     static let numeralS = TypeStyle(family: .fraunces, size: 18, lineHeight: 22, weight: 400, tabularNumerals: true)

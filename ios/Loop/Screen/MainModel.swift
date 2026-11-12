@@ -181,6 +181,11 @@ final class MainModel {
     @ObservationIgnored var liveWatchdog: Task<Void, Never>?
     /// The launch health check failed: the landing sheet says so, with Try again.
     var serverDown = false
+    /// Signature moment E: the flyover's own state (its own observable: it changes every frame).
+    let fly = FlyState()
+    @ObservationIgnored var flyTask: Task<Void, Never>?
+    /// Signature moment F: the arrival screen is up for this run.
+    var arrival: ArrivalState?
     /// Lab B: routes the engine has looked at so far in this build (its `candidates` events).
     var lookedAt = 0
     @ObservationIgnored var lastLeaderAt: CFTimeInterval = 0
@@ -378,10 +383,17 @@ final class MainModel {
             if build.shownRank != wasShown || now?.differs(from: wasBounds) == true { autoFitRoute(duration: 0.5) }
         }
         if build.settleAt != nil, wasSettled == nil {
-            pulseID += 1
-            Haptics.settle()
+            if DesignLab.shared.ink, !UIAccessibility.isReduceMotionEnabled {
+                // Signature moment D: the settle is one move (ink, ticks, a knock), not one tap.
+                inkSettle()
+            } else {
+                pulseID += 1
+                Haptics.settle()
+            }
         }
     }
+
+    func bumpPulse() { pulseID += 1 }
 
     /// "A better route came in" → switch, morphing from the route on screen.
     func acceptBetterRoute() {
@@ -570,6 +582,7 @@ final class MainModel {
     /// True while the route is still drawing or morphing (the map redraws every frame).
     func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
         if waitIsMoving(now: now, reduceMotion: reduceMotion) { return true }
+        if !reduceMotion, inkIsMoving(now: now) { return true }
         guard !reduceMotion, let shown else { return false }
         if build.outlineOpacity(at: now, peak: 1, fade: Motion.outlineFade) > 0, build.provisional { return true }
         if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
@@ -617,6 +630,7 @@ final class MainModel {
             frame.casing = drawn.casing
             frame.lead = drawn.lead
         }
+        if DesignLab.shared.ink { applyInk(&frame, shown: shown, now: now, reduceMotion: reduceMotion) }
         return frame
     }
 }

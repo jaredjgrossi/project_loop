@@ -62,6 +62,11 @@ extension MainModel {
         let value = RunRating(verdict: .good)
         runs.rate(r.runId, value)
         if let log = runs.runs.first(where: { $0.id == r.runId }) { sendFeedback(log, rating: value) }
+        if DesignLab.shared.arrival {
+            closeRating()
+            arrival = ArrivalState(id: r.runId)   // signature moment F plays its own pattern
+            return
+        }
         Haptics.success()
         closeRating()
     }
@@ -85,6 +90,7 @@ extension MainModel {
         runs.rate(r.runId, value)
         if let log = runs.runs.first(where: { $0.id == r.runId }) { sendFeedback(log, rating: value) }
         closeRating()
+        if DesignLab.shared.arrival { arrival = ArrivalState(id: r.runId) }
     }
 
     /// "Not now", or after rating: the card comes back (the run stays marked).

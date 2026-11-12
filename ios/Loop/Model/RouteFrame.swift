@@ -27,6 +27,10 @@ struct RouteFrame: Equatable {
     var lead: [Segment] = []
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
+    /// Design lab D: the current best as a graphite line, before and under the ink.
+    var pencil: [GeoPoint] = []
+    /// Design lab D: candidates drawn as pencil (graphite, a doubled stroke) instead of faint indigo.
+    var sketch = false
 
     /// The wait: the reach ring (dim outside, warm parks and water inside) and candidate lines.
     struct Reach: Equatable {
