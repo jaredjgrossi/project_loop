@@ -196,6 +196,39 @@ def before_build(rc: RunConstraints, zones=None) -> tuple[list[dict], bool]:
     return lines, any(k in BLOCKING for k in later)
 
 
+def shape_status(requested: str, chosen: list[Candidate]) -> dict:
+    """Whether the routes shown are the shape asked for (UI review: "a flag when the requested shape couldn't be met").
+    `requested`: any, loop, out_and_back, or one_way for a run to an end. A loop that couldn't be found and came back
+    as the best out-and-back is {"requested": "loop", "met": false, "shown": ["out_and_back"]}; the
+    `no_good_loop` note says it in words."""
+    from api.generate import SHAPE_KINDS
+    kinds = sorted({c.kind for c in chosen})
+    met = bool(chosen) and (requested in ("any", "one_way") or all(k in SHAPE_KINDS[requested] for k in kinds))
+    return {"requested": requested, "met": met, "shown": kinds}
+
+
+def route_files(chosen: list[Candidate], start: "Start", miles: float, rc: RunConstraints, best_of: int | None,
+                stretch_fn: Callable | None) -> list[dict]:
+    """The route file (summary, markers, stretches and pieces) for each chosen route, built side by side: each
+    reads the database for its own stretches (UI review: routes 2 and 3 had no stats)."""
+    from concurrent.futures import ThreadPoolExecutor
+    if not chosen:
+        return []
+    with ThreadPoolExecutor(max_workers=len(chosen)) as pool:
+        return list(pool.map(lambda ic: ml.route_file(ic[1], ic[0], start.lat, start.lon, start.label, miles, rc,
+                                                      best_of, stretch_fn), enumerate(chosen, 1)))
+
+
+def with_files(chosen: list[Candidate], files: list[dict], keys: dict) -> list[dict]:
+    """The routes of a `final`: each as in `top3`, named from its file, with the file itself (decision 049)."""
+    out = []
+    for r, (c, f) in enumerate(zip(chosen, files), 1):
+        e = entry(r, c, keys[id(c)])
+        e["label"] = f["features"][0]["properties"]["label"]
+        out.append({**e, "file": f})
+    return out
+
+
 def entry(rank: int, c: Candidate, route_key: str | None = None) -> dict:
     """One route of the top 3 as the fixture's `top3` holds it: outline, label, score and the measured distance, plus
     `id`, the same for the same route in every event of one build, so the app can tell a route that moved up from a
@@ -393,11 +426,11 @@ class Engine:
         routes = [entry(r, c, keys[id(c)]) for r, c in enumerate(chosen, 1)]
         send({"event": "top3", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
               "provisional": False, "routes": routes})
-        route = ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, rc.distance_mi, rc, best_of,
-                              self.stretch_fn)
+        files = route_files(chosen, start, rc.distance_mi, rc, best_of, self.stretch_fn)
         self.remember_pool(route_id, pool)  # another edit can start from this one
         return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
-                "provisional": False, "routes": routes, "route": route, "pool_size": best_of,
+                "provisional": False, "routes": with_files(chosen, files, keys), "route": files[0],
+                "shape": shape_status(rc.shape, chosen), "pool_size": best_of,
                 "pool": {"candidates": len(pool), "best_of": best_of},
                 "notes": distance_notes(rc, chosen, chosen[0].within_tolerance),
                 "timing": {"from_pool": old_route_id}}
@@ -432,11 +465,10 @@ class Engine:
         if isinstance(c, Rejection):
             raise EngineUnavailable(f"can't score the stored route: {c.reason}")
         miles = round(meters_to_miles(route.distance_m), 2)
-        entry_ = entry(1, c, f"{route_id}.1")
+        files = route_files([c], start, miles, rc, None, self.stretch_fn)
         return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
-                "provisional": False, "routes": [entry_],
-                "route": ml.route_file(c, 1, start.lat, start.lon, start.label, miles, rc, None, self.stretch_fn),
-                "pool_size": None, "pool": {"candidates": 1, "best_of": None}, "notes": [],
+                "provisional": False, "routes": with_files([c], files, {id(c): f"{route_id}.1"}), "route": files[0],
+                "shape": shape_status(rc.shape, [c]), "pool_size": None, "pool": {"candidates": 1, "best_of": None}, "notes": [],
                 "timing": {"run_again": past.id}}
 
     def __post_init__(self):
@@ -588,11 +620,12 @@ class Engine:
                             "text": render("note.no_good_loop", kind=kind)}]
         if end is None:  # a shape edit can reuse these (not an A-to-B build: its kind doesn't change with shape)
             self.remember_pool(route_id, passed)
-        route = (ml.route_file(chosen[0], 1, start.lat, start.lon, start.label, miles, rc, result.best_of,
-                               self.stretch_fn) if chosen else None)
+        files = route_files(chosen, start, miles, rc, result.best_of, self.stretch_fn)
         return {"event": "final", "v": 1, "route_id": route_id,
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
-                "routes": [entry(r, c, key(c)) for r, c in enumerate(chosen, 1)], "route": route,
+                "routes": with_files(chosen, files, {id(c): key(c) for c in chosen}),
+                "route": files[0] if files else None,
+                "shape": shape_status("one_way" if end is not None else rc.shape, chosen),
                 "pool_size": result.best_of, "pool": {"candidates": result.generated, "best_of": result.best_of},
                 "notes": shape_notes + distance_notes(rc, chosen, bool(chosen) and chosen[0].within_tolerance)
                 + along_notes(lost),
