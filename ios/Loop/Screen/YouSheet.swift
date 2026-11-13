@@ -322,12 +322,8 @@ struct SavedTile: View {
                     .overlay(RouteThumbnail(shape: saved.shape, lineWidth: 2.4, dot: 7)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
                     .frame(width: side, height: side)
-                Text(saved.name)
-                    .typeStyle(.label)
-                    .foregroundStyle(Palette.ink.color)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(width: side + 10)
+                // No wider than the tile: in this scrolling row a wider label was cut off at the edge.
+                TileLabel(name: saved.name, side: side)
             }
         }
         .frame(width: side)

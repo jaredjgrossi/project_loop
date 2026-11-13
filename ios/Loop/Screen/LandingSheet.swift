@@ -380,9 +380,7 @@ private struct RunTile: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
                     .frame(width: side, height: side)
                 VStack(spacing: 0) {
-                    Text(name)
-                        .typeStyle(.label)
-                        .foregroundStyle(Palette.ink.color)
+                    TileLabel(name: name, side: side, overhang: detail == nil ? 5 : 0)
                     if let detail {
                         Text(detail)
                             .typeStyle(.label)
@@ -402,6 +400,35 @@ private struct RunTile: View {
         .accessibilityHint(shape == nil ? "Sends this request" : "Shows this route")
         .accessibilityHidden(hidden)
         .allowsHitTesting(!hidden)
+    }
+}
+
+/// The name under a tile. As wide as the tile, so a long name wraps inside it and never runs
+/// into its neighbour or off the edge of a scrolling row. A name that fits on one line with up
+/// to `overhang` points to spare on each side keeps its line ("3 mi from here" is a hair wider
+/// than its tile). A long unbreakable word tightens, then shrinks a little, before it truncates.
+struct TileLabel: View {
+    let name: String
+    let side: CGFloat
+    var overhang: CGFloat = 0
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            Text(name)
+                .typeStyle(.label)
+                .lineLimit(1)
+                .fixedSize()
+            Text(name)
+                .typeStyle(.label)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .allowsTightening(true)
+                .minimumScaleFactor(0.88)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: side)
+        }
+        .foregroundStyle(Palette.ink.color)
+        .frame(width: side + 2 * overhang)
     }
 }
 
