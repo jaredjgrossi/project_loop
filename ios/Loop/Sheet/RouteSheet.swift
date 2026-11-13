@@ -8,6 +8,11 @@ struct RouteSheet: View {
 
     private var sheet: SheetState { model.sheet }
     @State private var readContentHeight: CGFloat = 0
+    /// A drag is either the sheet's (vertical) or a swipe between routes (horizontal), decided by its
+    /// first movement, so the two never fight.
+    @State private var dragAxis: Axis?
+    /// The card's sideways travel while swiping between routes.
+    @State private var swipeX: CGFloat = 0
 
     var body: some View {
         let height = sheet.height
@@ -62,6 +67,8 @@ struct RouteSheet: View {
             CardBlock(model: model)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
+                .offset(x: swipeX)
+                .opacity(1 - min(0.5, abs(swipeX) / 160))
 
             // The open content is always laid out at full size; dragging only clips and fades it,
             // so nothing is inserted mid-drag. Hidden (still laid out) when fully closed, so
@@ -132,12 +139,52 @@ struct RouteSheet: View {
     private var drag: some Gesture {
         DragGesture(minimumDistance: 6, coordinateSpace: .global)
             .onChanged { v in
+                if dragAxis == nil {
+                    dragAxis = RouteSwipe.axis(of: v.translation, canSwipe: model.routeChoices.count > 1 && !sheet.isMoving)
+                }
+                if dragAxis == .horizontal {
+                    // Rubber-bands at the first and last route.
+                    let step = v.translation.width < 0 ? 1 : -1
+                    let edge = (model.shownIndex.map { model.routeChoices.indices.contains($0 + step) } ?? false) == false
+                    swipeX = reduceMotion ? 0 : v.translation.width * (edge ? 0.2 : 0.6)
+                    return
+                }
                 if !sheet.isMoving { model.touch() }
                 sheet.drag(translation: v.translation.height)
             }
             .onEnded { v in
-                model.sheetDragEnded(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion)
+                defer { dragAxis = nil }
+                guard dragAxis == .horizontal else {
+                    model.sheetDragEnded(predictedTranslation: v.predictedEndTranslation.height, animated: !reduceMotion)
+                    return
+                }
+                let step = v.translation.width < 0 ? 1 : -1
+                if RouteSwipe.commits(translation: v.translation.width, predicted: v.predictedEndTranslation.width),
+                   model.showNeighbour(step), !reduceMotion {
+                    // The new route arrives from the side the runner swiped toward.
+                    Haptics.mileTick()
+                    var jump = Transaction(animation: nil)
+                    jump.disablesAnimations = true
+                    withTransaction(jump) { swipeX = CGFloat(step) * 36 }
+                    DispatchQueue.main.async { withAnimation(.easeOut(duration: 0.22)) { swipeX = 0 } }
+                    return
+                }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) { swipeX = 0 }
             }
+    }
+}
+
+/// The rules for a drag on the card: sideways changes route, anything else is the sheet's.
+enum RouteSwipe {
+    /// Decided by a drag's first movement: sideways only when it is clearly more sideways than up or
+    /// down and there is another route to go to.
+    static func axis(of translation: CGSize, canSwipe: Bool) -> Axis {
+        canSwipe && abs(translation.width) > abs(translation.height) * 1.2 ? .horizontal : .vertical
+    }
+
+    /// A swipe changes route past 48 pt, or with a quick flick.
+    static func commits(translation: CGFloat, predicted: CGFloat) -> Bool {
+        abs(translation) > 48 || abs(predicted) > 160
     }
 }
 
@@ -199,12 +246,6 @@ struct OpenSection: View {
                     .accessibilityLabel("\(crowd) \(trust.text)")
                 }
             }
-        } else if model.cardRevealed, !model.liveMode {
-            Text("Details for this route aren't in the saved file.")
-                .typeStyle(.label)
-                .foregroundStyle(Palette.inkMuted.color)
-                .padding(.top, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -213,29 +254,41 @@ struct OpenSection: View {
 /// Eyebrow, distance and reason: the 96 pt block shared by both states.
 struct CardBlock: View {
     let model: MainModel
+    @State private var showDirections = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(model.eyebrowText)
-                .typeStyle(.eyebrow)
-                .foregroundStyle(Palette.inkMuted.color)
-                .frame(height: 14)
-                .contentTransition(.opacity)
-                .animation(reduceMotion ? nil : Motion.textArrive, value: model.eyebrowText)
+            HStack(spacing: 0) {
+                Text(model.eyebrowText)
+                    .typeStyle(.eyebrow)
+                    .foregroundStyle(Palette.inkMuted.color)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : Motion.textArrive, value: model.eyebrowText)
+                Spacer(minLength: 8)
+                RouteDots(model: model)
+                    .padding(.trailing, 96)   // clear of the bookmark and the ×
+            }
+            .frame(height: 14)
 
             Group {
                 if model.cardRevealed, let shown = model.shown {
                     VStack(alignment: .leading, spacing: 0) {
                         // No trust word beside "mi": tapping the distance shows it (and the source).
-                        TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
-                                    .typeStyle(.numeralXL)
-                                    .foregroundStyle(Palette.ink.color)
-                                Text("mi")
-                                    .typeStyle(.numeralL)
-                                    .foregroundStyle(Palette.unitInk.color)
+                        HStack(spacing: 8) {
+                            TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
+                                        .typeStyle(.numeralXL)
+                                        .foregroundStyle(Palette.ink.color)
+                                    Text("mi")
+                                        .typeStyle(.numeralL)
+                                        .foregroundStyle(Palette.unitInk.color)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                            if let detail = shown.detail, !Directions.steps(for: detail).isEmpty {
+                                DirectionsButton { showDirections = true }
                             }
                         }
                         .frame(height: 56)
@@ -243,12 +296,38 @@ struct CardBlock: View {
                         .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
-                        if let reason = shown.detail.flatMap({ CardText.reason($0.summary) }) {
-                            Text(reason)
-                                .typeStyle(.body)
-                                .foregroundStyle(Palette.inkSoft.color)
-                                .lineLimit(1)
-                                .padding(.top, 4)
+                        // The route's name from the server, once `final` has measured it (top3 names can change).
+                        // Its room is held from the first card, so the sheet doesn't jump.
+                        if shown.name != nil {
+                            Text(model.showsCount ? CardText.nameLine(shown.name ?? "") : "")
+                                .typeStyle(.bodyStrong)
+                                .foregroundStyle(Palette.ink.color)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, minHeight: 24, alignment: .topLeading)
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : Motion.textArrive, value: model.showsCount ? shown.name : nil)
+                        }
+                        if let detail = shown.detail, let reason = CardText.reasonLine(detail.summary) {
+                            // The server's reason line carries its trust label and source on tap.
+                            TrustTap(trust: detail.summary.reason?.text == nil ? nil : detail.summary.reason?.status.map(Trust.init),
+                                     source: detail.summary.reason?.source) {
+                                Text(reason)
+                                    .typeStyle(.body)
+                                    .foregroundStyle(Palette.inkSoft.color)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.top, 4)
+                        }
+                        // The route type asked for wasn't found: said plainly, once `final` arrives.
+                        if let note = model.shapeNote {
+                            HStack(spacing: 8) {
+                                Circle().strokeBorder(Palette.inkMuted.color, lineWidth: 1.5).frame(width: 9, height: 9)
+                                Text(note).typeStyle(.label).foregroundStyle(Palette.inkSoft.color).lineLimit(1)
+                            }
+                            .frame(height: 26, alignment: .bottom)
+                            .accessibilityElement(children: .combine)
                         }
                         // An unmet ask, named in one line; tapping it opens "How Loop read it".
                         if let line = CardText.cantCardLine(model.readOut?.cant.map(\.gap) ?? []) {
@@ -275,6 +354,46 @@ struct CardBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 96 + model.sheet.extra, alignment: .top)
+        .sheet(isPresented: $showDirections) {
+            if let shown = model.shown, let detail = shown.detail {
+                DirectionsSheet(name: shown.name ?? "", distanceMi: shown.distanceMi,
+                                steps: Directions.steps(for: detail)) { showDirections = false }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Palette.surfaceSheet.color)
+            }
+        }
+    }
+}
+
+/// Where the card is among the routes: one small dot each, after `final`. A position indicator only;
+/// swipe the card sideways to change route (the dots aren't buttons: too small to tap, phone 2026-11-13).
+/// VoiceOver adjusts it up and down. Hidden with a single route.
+struct RouteDots: View {
+    let model: MainModel
+
+    var body: some View {
+        let choices = model.routeChoices
+        if choices.count > 1, let index = model.shownIndex {
+            HStack(spacing: 6) {
+                ForEach(Array(choices.enumerated()), id: \.element) { i, _ in
+                    Circle()
+                        .fill(i == index ? Palette.ink.color : Palette.grabber.color)
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .frame(height: 14)
+            .animation(.easeOut(duration: 0.15), value: index)
+            .accessibilityElement()
+            .accessibilityLabel("Route \(index + 1) of \(choices.count)")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: model.showNeighbour(1)
+                case .decrement: model.showNeighbour(-1)
+                @unknown default: break
+                }
+            }
+        }
     }
 }
 

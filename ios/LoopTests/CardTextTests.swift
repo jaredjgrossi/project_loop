@@ -22,8 +22,10 @@ final class CardTextTests: XCTestCase {
     }
 
     func testEyebrow() {
-        XCTAssertEqual(CardText.eyebrow(kind: "TRAINING", bestOf: nil), "TRAINING")
-        XCTAssertEqual(CardText.eyebrow(kind: "TRAINING", bestOf: 31), "TRAINING · BEST OF 31")
+        XCTAssertEqual(CardText.eyebrow(kind: "OUT AND BACK", position: nil, of: nil), "OUT AND BACK")
+        XCTAssertEqual(CardText.eyebrow(kind: "OUT AND BACK", position: 1, of: 1), "OUT AND BACK", "one route has no position")
+        XCTAssertEqual(CardText.eyebrow(kind: "OUT AND BACK", position: 1, of: 3), "1 OF 3 · OUT AND BACK")
+        XCTAssertEqual(CardText.kindText("a_to_b"), "ONE WAY")
         XCTAssertEqual(CardText.kindText("out_and_back"), "OUT AND BACK")
         XCTAssertEqual(CardText.kindText("loop"), "LOOP")
     }
@@ -32,11 +34,11 @@ final class CardTextTests: XCTestCase {
         let data = try LoopData(file: RouteFile.loadBundled())
         let s = data.candidate(rank: 1)!.detail!.summary
         let stats = CardText.stats(s)
-        XCTAssertEqual(stats.map(\.value), ["3.6", "51%", "8 m"])
+        XCTAssertEqual(stats.map(\.value), ["3.6", "51%", "26 ft"])
         XCTAssertEqual(stats.map(\.label), ["lights a mile", "waterfront", "climb"])
         XCTAssertEqual(stats.map(\.trust.raw), ["measured", "measured", "estimate"])
         // Trust words hidden: measured values bare, estimates with "≈".
-        XCTAssertEqual(stats.map(\.shown), ["3.6", "51%", "≈ 8 m"])
+        XCTAssertEqual(stats.map(\.shown), ["3.6", "51%", "≈ 26 ft"])
         XCTAssertTrue(stats.allSatisfy { $0.source?.isEmpty == false }, "every number keeps its source for the popover")
         // One sentence, only for moderate or busy stretches.
         XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),

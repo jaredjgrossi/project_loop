@@ -8,9 +8,9 @@ final class TrustPopoverUITests: XCTestCase {
         app.launchArguments.append("-LoopOffline")
         app.launch()
 
-        let climb = app.buttons["8 m climb, estimate"]
+        let climb = app.buttons["26 ft climb, estimate"]
         XCTAssertTrue(climb.waitForExistence(timeout: 30))
-        XCTAssertTrue(app.staticTexts["≈ 8 m"].exists, "an estimate carries ≈")
+        XCTAssertTrue(app.staticTexts["≈ 26 ft"].exists, "an estimate carries ≈")
         XCTAssertFalse(app.staticTexts["measured"].exists, "no trust words by default")
         climb.tap()
         XCTAssertTrue(app.staticTexts["Estimate"].waitForExistence(timeout: 3), "the popover names the trust word")

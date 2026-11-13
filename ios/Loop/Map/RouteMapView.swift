@@ -201,6 +201,11 @@ struct RouteMapView: UIViewRepresentable {
             static let routeSource = "loop-route"
             static let othersSource = "loop-others"
             static let others = "loop-others-dots"
+            static let alternatesSource = "loop-alternates"
+            static let alternates = "loop-alternates-lines"
+            static let arrowsSource = "loop-arrows"
+            static let arrows = "loop-arrows-symbols"
+            static let arrowImage = "loop-arrow"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
             static let base = "loop-route-base"
@@ -217,9 +222,26 @@ struct RouteMapView: UIViewRepresentable {
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
+        /// A thin chevron pointing along the line (right, before the map rotates it), drawn as a mask
+        /// so the layer colours it.
+        private static func arrowIcon() -> UIImage {
+            let size = CGSize(width: 10, height: 10)
+            return UIGraphicsImageRenderer(size: size).image { ctx in
+                let g = ctx.cgContext
+                g.setStrokeColor(UIColor.black.cgColor)
+                g.setLineWidth(1.5)
+                g.setLineCap(.round)
+                g.setLineJoin(.round)
+                g.move(to: CGPoint(x: 3, y: 1.8))
+                g.addLine(to: CGPoint(x: 7, y: 5))
+                g.addLine(to: CGPoint(x: 3, y: 8.2))
+                g.strokePath()
+            }.withRenderingMode(.alwaysTemplate)
+        }
+
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.alternatesSource, Ids.arrowsSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -236,6 +258,15 @@ struct RouteMapView: UIViewRepresentable {
             others.lineDasharray = .constant([0.01, 2.2])   // round dots
             others.slot = slot
             try? map.addLayer(others)
+
+            // The routes the runner can still open: thin, solid, faint. Never dashed (dashes mean "path").
+            var alternates = LineLayer(id: Ids.alternates, source: Ids.alternatesSource)
+            alternates.lineWidth = .constant(2)
+            alternates.lineCap = .constant(.round)
+            alternates.lineJoin = .constant(.round)
+            alternates.lineOpacity = .constant(0)
+            alternates.slot = slot
+            try? map.addLayer(alternates)
 
             // The wait: warm water and parks (from Mapbox Streets' own shapes, token only), the dim
             // outside the reach ring, the ring, and the candidate lines. All under the route.
@@ -317,6 +348,23 @@ struct RouteMapView: UIViewRepresentable {
             lead.lineJoin = .constant(.round)
             lead.slot = slot
             try? map.addLayer(lead)
+
+            // Direction: thin chevrons in the route's own colour along the first pass, a little wider
+            // than the line so they read as arrowheads growing from it. Phone, 2026-11-13: big haloed
+            // ones were bulky, tiny notches in the casing colour looked unintentional. Spaced in screen
+            // points, so they thin out when zoomed out.
+            try? map.addImage(Self.arrowIcon(), id: Ids.arrowImage, sdf: true)
+            var arrows = SymbolLayer(id: Ids.arrows, source: Ids.arrowsSource)
+            arrows.iconImage = .constant(.name(Ids.arrowImage))
+            arrows.symbolPlacement = .constant(.line)
+            arrows.symbolSpacing = .constant(72)
+            arrows.iconRotationAlignment = .constant(.map)
+            arrows.iconAllowOverlap = .constant(true)
+            arrows.iconIgnorePlacement = .constant(true)
+            arrows.iconSize = .constant(1)
+            arrows.iconOpacity = .constant(0)
+            arrows.slot = slot
+            try? map.addLayer(arrows)
             recolorRouteLayers(map)
         }
 
@@ -343,10 +391,12 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
             }
             // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
-            for id in [Ids.casing, Ids.base, Ids.pathBed, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
+            for id in [Ids.casing, Ids.base, Ids.pathBed, Ids.lead, Ids.others, Ids.alternates] + DrawKind.allCases.map(Ids.kind) {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
+            try? map.setLayerProperty(for: Ids.arrows, property: "icon-color", value: (dark ? Palette.routeStreet : Palette.routeWater).hex(dark: dark))
+            try? map.setLayerProperty(for: Ids.arrows, property: "icon-emissive-strength", value: 1.0)
             set(Ids.lead, "line-color", Palette.routeWater)
             set(Ids.base, "line-color", Palette.routeStreet)
             set(Ids.pathBed, "line-color", Palette.routeCasing)
@@ -356,7 +406,8 @@ struct RouteMapView: UIViewRepresentable {
             try? map.setLayerProperty(for: Ids.warmWater, property: "fill-color", value: Palette.warmWater.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
-            set(Ids.others, "line-color", Palette.routeStreet)
+            set(Ids.others, "line-color", Palette.routeOther)
+            set(Ids.alternates, "line-color", Palette.routeOther)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
         }
 
@@ -400,6 +451,24 @@ struct RouteMapView: UIViewRepresentable {
                     Feature(geometry: LineString($0.map(\.coordinate)))
                 }
                 map.updateGeoJSONSource(withId: Ids.othersSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.arrows != lastFrame?.arrows {
+                let features = frame.arrows.filter { $0.count >= 2 }.map {
+                    Feature(geometry: LineString($0.map(\.coordinate)))
+                }
+                map.updateGeoJSONSource(withId: Ids.arrowsSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.arrowsOpacity != lastFrame?.arrowsOpacity {
+                try? map.setLayerProperty(for: Ids.arrows, property: "icon-opacity", value: frame.arrowsOpacity)
+            }
+            if frame.alternates != lastFrame?.alternates {
+                let features = frame.alternates.filter { $0.count >= 2 }.map {
+                    Feature(geometry: LineString($0.map(\.coordinate)))
+                }
+                map.updateGeoJSONSource(withId: Ids.alternatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.alternatesOpacity != lastFrame?.alternatesOpacity {
+                try? map.setLayerProperty(for: Ids.alternates, property: "line-opacity", value: frame.alternatesOpacity)
             }
             if frame.reach != lastFrame?.reach { drawReach(map, frame.reach) }
             if frame.candidates != lastFrame?.candidates {
@@ -518,6 +587,16 @@ struct RouteMapView: UIViewRepresentable {
             if let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
                hit.distance <= RouteHit.tolerance {
                 model.selectPoint(alongM: hit.alongM)
+                return
+            }
+            // One of the other two routes (faint dots after `final`): open it.
+            let nearest = model.routeChoices.filter { $0 != model.shownRank }.compactMap { rank -> (Int, Double)? in
+                guard let other = model.data.candidate(rank: rank)?.line else { return nil }
+                let pts = other.points.map { map.point(for: $0.coordinate) }
+                return RouteHit.nearest(to: tap, projected: pts, cumulative: other.cumulative).map { (rank, $0.distance) }
+            }.min { $0.1 < $1.1 }
+            if let (rank, d) = nearest, d <= RouteHit.tolerance {
+                model.showRoute(rank: rank)
             } else {
                 model.clearSelection()
             }

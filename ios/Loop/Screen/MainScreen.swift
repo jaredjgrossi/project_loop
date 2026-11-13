@@ -203,6 +203,7 @@ struct MainScreen: View {
         }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-LoopSampleWeather") { WeatherStore.shared.useSample() }
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
             model.requestText = model.data.request.text
@@ -280,6 +281,12 @@ struct MainScreen: View {
                 model.toggleReason("crowded")
                 model.toggleReason("other")
             }
+        }
+        if args.contains("-LoopShapeMiss") {
+            // Screenshots: the card's note for a route type that wasn't found (final.shape.met false).
+            while !model.mapReady { try? await Task.sleep(for: .seconds(0.2)) }
+            model.shapeNote = CardText.shapeNote(.init(requested: "loop", met: false, shown: ["out_and_back"]))
+            model.applyReadOutToSheet()
         }
         if args.contains("-LoopSaved") {
             try? await Task.sleep(for: .seconds(1.0))

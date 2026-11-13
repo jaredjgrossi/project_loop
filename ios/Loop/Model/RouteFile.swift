@@ -174,6 +174,15 @@ struct RouteFile: Decodable {
         let crowds: CrowdMeasure
         let turnarounds: [Measure]
         let rank: RankMeasure
+        /// One line on why the route fits, written by the server from the route's own numbers (decision 049).
+        /// Absent in older files; its `text` is null when nothing stands out.
+        let reason: Reason?
+    }
+
+    struct Reason: Decodable {
+        let text: String?
+        let status: String?
+        let source: String?
     }
 
     struct TopCandidate: Decodable {
@@ -185,6 +194,9 @@ struct RouteFile: Decodable {
         let label: String
         let distance: Measure
         let geometry: Geometry
+        /// The route in full, same as `route` is for the first (final events since decision 049):
+        /// summary, markers, stretches and pieces. Absent in top3 and provisional events and in older files.
+        let file: FeatureCollection?
     }
 
     struct Pool: Decodable {

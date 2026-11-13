@@ -159,7 +159,15 @@ extension MainModel {
         liveNotice = nil
         rating = nil
         returnPrompt = nil
-        data = built
+        // The route the runner kept comes first (Save on a #2 or #3 reopens that route, not #1).
+        if let id = r.routeId, let i = built.candidates.firstIndex(where: { $0.serverId == id }), i > 0 {
+            var cs = built.candidates
+            cs.insert(cs.remove(at: i), at: 0)
+            data = LoopData(request: built.request, candidates: cs, bestOf: built.bestOf)
+        } else {
+            data = built
+        }
+        shapeNote = nil
         liveMode = false
         routeCameraFree = false
         build = BuildState()

@@ -129,6 +129,16 @@ struct BuildState: Equatable {
         betterRank = nil
     }
 
+    /// The runner picked another of the three routes after `final` (a dot, or its dotted line on the map).
+    /// Morphs from the route on screen; the route is the runner's choice from here on.
+    mutating func select(_ rank: Int, at t: TimeInterval) {
+        guard final, rank != shownRank, engineTop3.contains(rank), let shown = shownRank else { return }
+        morph = Morph(from: shown, to: rank, start: t)
+        shownRank = rank
+        betterRank = nil
+        touched = true
+    }
+
     /// Share of the shown route drawn at `t`: constant speed from when it first arrived.
     func drawnFraction(at t: TimeInterval, length: Double, metresPerSecond: Double) -> Double {
         guard let start = drawStart, length > 0 else { return 0 }
