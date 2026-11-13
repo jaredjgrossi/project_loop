@@ -8,7 +8,9 @@ import math
 
 import pytest
 
-from api.steps import MIN_STEP_M, maneuver_from_angle, route_steps
+from api.markers import _along, _xy
+from api.steps import MIN_STEP_M, maneuver_from_angle
+from api.steps import route_steps as _route_steps
 
 LAT0, LON0 = 40.74, -73.98
 KX = 111_320 * math.cos(math.radians(LAT0))
@@ -30,6 +32,13 @@ def walk(legs):
         e, n = e + dx * length, n + dy * length
         corners.append(len(coords) - 1)
     return coords, corners
+
+
+def route_steps(coords, instructions, stretches, turn_along_m, total_m):
+    """The tests say where GraphHopper's instructions are as (sign, point index); the module takes meters along."""
+    along = _along(_xy(coords))
+    placed = [(sign, along[idx]) for sign, idx in instructions] if instructions else instructions
+    return _route_steps(coords, placed, stretches, turn_along_m, total_m)
 
 
 def total_of(coords):
@@ -350,3 +359,19 @@ def test_a_start_stub_doesnt_leave_a_later_kink_measured_against_the_stub():
     steps = route_steps(coords, [(0, 0), (2, c[0]), (-1, c[1] - 1), (1, c[1]), (4, c[2])],
                         [stretch("3rd Avenue", 1220)], [], total_of(coords))
     assert [(s["maneuver"], s["street"]) for s in steps] == [("start", "3rd Avenue"), ("finish", None)]
+
+
+def test_each_step_says_where_its_maneuver_came_from():
+    coords, c = walk([(90, 600), (0, 600), (270, 600)])
+    steps = route_steps(coords, [(0, 0), (-2, c[0]), (-2, c[1]), (4, c[2])],
+                        [stretch("A", 600), stretch("B", 600), stretch("C", 600)], [1500], total_of(coords))
+    by = {s["maneuver"]: s["maneuver_source"] for s in steps}
+    assert "GraphHopper" in by["left"] and "turnaround marker" in by["turnaround"]
+    assert "street changes" not in by["start"]
+    # a change of street with no turn, and a turn measured from the line
+    s2, _ = steps_for([(90, 1200)], lambda c: [(0, 0), (4, c[0])], [stretch("A", 600), stretch("B", 600)])
+    assert "street changes" in s2[1]["maneuver_source"]
+    s3, _ = steps_for([(90, 300), (180, 15), (0, 400)], lambda c: [(0, 0), (2, c[0]), (-2, c[1]), (4, c[2])],
+                      [stretch("A", 315), stretch("B", 400)])
+    left = [s for s in s3 if s["maneuver"] == "left"]
+    assert len(left) == 1 and "measured from the line" in left[0]["maneuver_source"]

@@ -30,7 +30,7 @@ from api.via import Via, features_on_vias, through_rules, tour, via_jobs, with_e
 from api.naming import display_name, settle_names
 from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
-from api.routing import RoutingError, graphhopper_url
+from api.routing import RoutingError, graphhopper_url, with_instructions
 from api.scripts import make_loop as ml
 from api.summary import METERS_PER_MILE, route_summary
 
@@ -208,15 +208,22 @@ def shape_status(requested: str, chosen: list[Candidate]) -> dict:
 
 
 def route_files(chosen: list[Candidate], start: "Start", miles: float, rc: RunConstraints, best_of: int | None,
-                stretch_fn: Callable | None, cross_fn: Callable | None = None) -> list[dict]:
+                stretch_fn: Callable | None, cross_fn: Callable | None = None,
+                instructions_fn: Callable | None = None) -> list[dict]:
     """The route file (summary, markers, stretches and pieces) for each chosen route, built side by side: each
-    reads the database for its own stretches (UI review: routes 2 and 3 had no stats)."""
+    reads the database for its own stretches (UI review: routes 2 and 3 had no stats). Each route is asked again for
+    GraphHopper's turn instructions here, and only here, for the Directions steps (decision 054)."""
     from concurrent.futures import ThreadPoolExecutor
     if not chosen:
         return []
+
+    def file_for(ic):
+        r, c = ic
+        if instructions_fn is not None:
+            c = replace(c, route=instructions_fn(c.route))
+        return ml.route_file(c, r, start.lat, start.lon, start.label, miles, rc, best_of, stretch_fn, cross_fn)
     with ThreadPoolExecutor(max_workers=len(chosen)) as pool:
-        files = list(pool.map(lambda ic: ml.route_file(ic[1], ic[0], start.lat, start.lon, start.label, miles, rc,
-                                                       best_of, stretch_fn, cross_fn), enumerate(chosen, 1)))
+        files = list(pool.map(file_for, enumerate(chosen, 1)))
     settle_names(files)  # no two routes of a result share a name
     return files
 
@@ -380,6 +387,7 @@ class Engine:
     closures_fn: Callable | None = ml.db_closures
     stretch_fn: Callable | None = ml.db_stretches
     cross_fn: Callable | None = ml.db_cross_street  # the street at a turnaround, for route names
+    instructions_fn: Callable | None = with_instructions  # a final route, asked again for its turn instructions
     anchor_fn: Callable | None = ml.familiar_anchors
     feature_anchor_fn: object = None
     use_prior: bool = True
@@ -429,7 +437,7 @@ class Engine:
         routes = [entry(r, c, keys[id(c)]) for r, c in enumerate(chosen, 1)]
         send({"event": "top3", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
               "provisional": False, "routes": routes})
-        files = route_files(chosen, start, rc.distance_mi, rc, best_of, self.stretch_fn, self.cross_fn)
+        files = route_files(chosen, start, rc.distance_mi, rc, best_of, self.stretch_fn, self.cross_fn, self.instructions_fn)
         self.remember_pool(route_id, pool)  # another edit can start from this one
         return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
                 "provisional": False, "routes": with_files(chosen, files, keys), "route": files[0],
@@ -468,7 +476,7 @@ class Engine:
         if isinstance(c, Rejection):
             raise EngineUnavailable(f"can't score the stored route: {c.reason}")
         miles = round(meters_to_miles(route.distance_m), 2)
-        files = route_files([c], start, miles, rc, None, self.stretch_fn, self.cross_fn)
+        files = route_files([c], start, miles, rc, None, self.stretch_fn, self.cross_fn, self.instructions_fn)
         return {"event": "final", "v": 1, "route_id": route_id, "elapsed_s": round(time.perf_counter() - t0, 3),
                 "provisional": False, "routes": with_files([c], files, {id(c): f"{route_id}.1"}), "route": files[0],
                 "shape": shape_status(rc.shape, [c]), "pool_size": None, "pool": {"candidates": 1, "best_of": None}, "notes": [],
@@ -623,7 +631,7 @@ class Engine:
                             "text": render("note.no_good_loop", kind=kind)}]
         if end is None:  # a shape edit can reuse these (not an A-to-B build: its kind doesn't change with shape)
             self.remember_pool(route_id, passed)
-        files = route_files(chosen, start, miles, rc, result.best_of, self.stretch_fn, self.cross_fn)
+        files = route_files(chosen, start, miles, rc, result.best_of, self.stretch_fn, self.cross_fn, self.instructions_fn)
         return {"event": "final", "v": 1, "route_id": route_id,
                 "elapsed_s": round(time.perf_counter() - t0, 3), "provisional": False,
                 "routes": with_files(chosen, files, {id(c): key(c) for c in chosen}),

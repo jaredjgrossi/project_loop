@@ -205,6 +205,38 @@ These are the engine's three stream events (decision 024 and the streaming notes
   - A runnable path is never named after the road beside it: a stretch of the East River Esplanade or the Hudson
     River Greenway doesn't come back "FDR Drive" or "11th Avenue". A waterfront stretch with no named path is
     "waterfront path"; a path with no name is "unnamed path". A road's sidewalk or crossing keeps the road's name.
+- **`summary.steps`** (in each route's `file`; decision 054): the turn-by-turn list for Directions, in order along the route.
+  `summary.way` is unchanged, for older clients and for saved routes (see below).
+  ```json
+  {"index": 3, "maneuver": "right", "street": "East 33rd Street", "from_mile": 0.26, "from_meters": 419,
+   "distance": {"value": 0.15, "unit": "mi", "meters": 244, "status": "measured", "source": "route geometry (GraphHopper)"},
+   "point": {"lat": 40.7449, "lon": -73.9801}, "status": "measured",
+   "maneuver_source": "GraphHopper turn instructions (foot profile)", "trust": "listed", "source": "OSM way w1"}
+  ```
+  - `maneuver` is one of `start`, `continue`, `slight_left`, `left`, `sharp_left`, `slight_right`, `right`,
+    `sharp_right`, `u_turn`, `turnaround`, `finish`. It is GraphHopper's turn sign for the foot route, never written by
+    the model. `turnaround` comes from the turnaround marker (the same one `summary.turnarounds` lists), since
+    GraphHopper has only a U-turn there; a route that goes out both ways has two. `finish` is the last step, at the
+    end of the route, with a distance of 0 (the app says "back at the start" from the route `kind`).
+  - `street` is the name of the street, path or park the step runs most, from the same labeled stretches as
+    `summary.way`: so a path is named after itself ("waterfront path", "unnamed path"), never the road beside it, and a
+    road's sidewalk or crossing keeps the road's name. `null` for `finish`, for a route with no stretches, and for a
+    turn onto the street the runner is already on ("Turn left", not "onto" it). `trust` and `source` are the name's
+    own, as in `summary.way`.
+  - **Tiling:** `from_meters` starts at 0 and each step's `from_meters` plus `distance.meters` is the next step's
+    `from_meters`; `finish` is at `summary.distance.meters`. The mile values tile too: `from_mile` is
+    `round(from_meters / 1609.344, 2)` and `distance.value` is the difference of the displayed miles, so the numbers on
+    the screen add up. Use `meters` when you need an exact figure.
+  - **What isn't a step:** a stretch under 50 m (a crossing, a curb jog, a roundabout's exits) is part of the step
+    before it; where one is folded away, the next turn is measured again from the line. A "continue" onto the street
+    the runner is already on, and a bend inside the one path, park or corridor they are on, are not steps (a U-turn is).
+    A GraphHopper turn the line doesn't make (under 11.5 degrees) is a `continue`. A start stub under 50 m joins the
+    first street. A change of street with no turn is a `continue` onto the new street.
+  - `maneuver_source` says where the maneuver came from: GraphHopper's turn instructions, the turnaround marker, a
+    change of street with no turn, or a turn measured from the line after short steps were folded away. `status`
+    is `measured` for the maneuver and the distance; `trust` and `source` are for the street name.
+  - `point` is the position on the route where the step begins. Routes that weren't routed (a stored line, "run
+    again") have no `steps` key at all: keep the stretch list as the fallback.
 - **`summary.reason`**: one line on why the route fits, written by code from its own numbers, never by the model:
   `{"text": "58% on the waterfront, 22 lights, flat", "parts": [{"key": "water", "text": "...", "status": "measured"}],
   "status": "estimate", "source": "..."}`. Parts, in this order and at most three:

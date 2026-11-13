@@ -178,8 +178,8 @@ def with_steps(c, instructions):
     return replace(c, route=replace(c.route, instructions=instructions))
 
 
-# The out-and-back is 241 points; the turn is at point 120 (2,400 m).
-INSTRUCTIONS = ((0, 0), (5, 120), (-98, 120), (4, 240))
+# The out-and-back is 241 points a step of 20 m apart; the turn is at point 120 (2,400 m), the end at 4,800 m.
+INSTRUCTIONS = ((0, 0.0), (5, 2400.0), (-98, 2400.0), (4, 4800.0))
 
 
 def test_a_route_with_instructions_has_steps_that_tile_the_summarys_distance():

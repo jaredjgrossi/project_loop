@@ -1,7 +1,7 @@
 """Turn-by-turn steps for the Directions list (decision 054).
 
-The maneuvers are GraphHopper's own turn signs for the foot route (request `instructions: true`); the street names are
-the route's labeled stretches (api/segments.py), the same names `summary.way` lists, so a path is named after itself and
+The maneuvers are GraphHopper's own turn signs for the foot route (asked for again, with `instructions: true`, for the
+final routes only: api/routing.with_instructions); the street names are the route's labeled stretches (api/segments.py), the same names `summary.way` lists, so a path is named after itself and
 a road's sidewalk or crossing keeps the road's name (decision 049). GraphHopper's own street names are left out on
 purpose: for the foot profile they are blank on most sidewalks and crossings. Nothing here is written by the LLM.
 
@@ -30,6 +30,13 @@ WINDOW_M = 25  # the heading before and after a turn is read over this much line
 CONTINUE_DEG = 11.5  # a turn under this is no turn (GraphHopper's own threshold)
 DISTANCE_SOURCE = "route geometry (GraphHopper)"
 MANEUVER_SOURCE = "GraphHopper turn instructions (foot profile)"
+SOURCE_BY_KIND = {
+    "start": "route geometry: the start of the route",
+    "gh": MANEUVER_SOURCE,
+    "turn": "route geometry: the turnaround marker (where the route turns back on itself)",
+    "stretch": "route geometry: the street changes here with no turn",
+}
+MEASURED_SOURCE = "route geometry: the turn measured from the line, after short steps were folded away"
 
 # GraphHopper's turn signs: -3..3 sharp left to sharp right, +-7 keep left/right, +-8 and -98 U-turns. 4 (finish),
 # 5 (via point) and anything else it adds are not steps; 6 (roundabout) is measured from the line.
@@ -122,9 +129,9 @@ def _remeasure_next(bounds, i, gone) -> None:
 
 def route_steps(coords: list[list[float]], instructions, stretches: list[dict], turn_along_m: list[float],
                 total_m: int) -> list[dict] | None:
-    """The steps of a route, or None when it has no instructions. `instructions` are GraphHopper's (sign, first point
-    index) in order; `turn_along_m` are the turnaround markers' distances along the route; `total_m` is the distance
-    the summary shows, which the steps' meters add up to."""
+    """The steps of a route, or None when it has no instructions. `instructions` are GraphHopper's (sign, meters
+    along the route) in order; `turn_along_m` are the turnaround markers' distances along the route; `total_m` is the
+    distance the summary shows, which the steps' meters add up to."""
     if not instructions or len(coords) < 2:
         return None
     line = _Line(coords)
@@ -134,8 +141,8 @@ def route_steps(coords: list[list[float]], instructions, stretches: list[dict], 
     ranges = _stretch_ranges(stretches, line.length)
 
     bounds: list[dict] = [{"m": 0.0, "kind": "start", "maneuver": "start", "geom": False, "pre": None}]
-    for sign, idx in instructions:
-        m = line.along[min(max(idx, 0), len(line.along) - 1)]
+    for sign, along_m in instructions:
+        m = float(along_m)
         if sign in NOT_A_STEP or m <= 0 or m >= line.length - 1:
             continue
         bounds.append({"m": m, "kind": "gh", "maneuver": SIGN_MANEUVER.get(sign), "geom": sign not in SIGN_MANEUVER,
@@ -201,21 +208,22 @@ def route_steps(coords: list[list[float]], instructions, stretches: list[dict], 
         p = street(i)
         fact = ((p or {}).get("facts") or [{}])[0]
         lon, lat = line.lonlat_at(b["m"])
+        how = MEASURED_SOURCE if b["geom"] and b["kind"] == "gh" else SOURCE_BY_KIND[b["kind"]]
         out.append(_step(i, b["maneuver"], None if b.get("unnamed") else (p or {}).get("name"), at[i], at[i + 1], lat,
-                         lon, fact))
+                         lon, fact, how))
     lon, lat = coords[-1][0], coords[-1][1]
-    out.append(_step(len(out), "finish", None, total_m, total_m, lat, lon, {}))
+    out.append(_step(len(out), "finish", None, total_m, total_m, lat, lon, {}, "route geometry: the end of the route"))
     for s, nxt in zip(out, out[1:]):  # the miles shown tile as well as the meters
         s["distance"]["value"] = round(nxt["from_mile"] - s["from_mile"], 2)
     return out
 
 
-def _step(index, maneuver, street, start_m, end_m, lat, lon, fact) -> dict:
+def _step(index, maneuver, street, start_m, end_m, lat, lon, fact, how) -> dict:
     return {"index": index, "maneuver": maneuver, "street": street or None,
             "from_mile": round(start_m / METERS_PER_MILE, 2), "from_meters": start_m,
             "distance": {"value": 0.0, "unit": "mi", "meters": end_m - start_m, "status": "measured",
                          "source": DISTANCE_SOURCE},
             "point": {"lat": round(lat, 6), "lon": round(lon, 6)},
-            "status": "measured", "maneuver_source": MANEUVER_SOURCE,
+            "status": "measured", "maneuver_source": how,
             "trust": fact.get("trust", "listed") if street else "listed",
             "source": fact.get("source", DISTANCE_SOURCE) if street else DISTANCE_SOURCE}
