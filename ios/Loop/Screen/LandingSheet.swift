@@ -413,6 +413,7 @@ struct TileLabel: View {
     var overhang: CGFloat = 0
 
     var body: some View {
+        let name = CardText.unbroken(name)
         ViewThatFits(in: .horizontal) {
             Text(name)
                 .typeStyle(.label)
@@ -473,7 +474,7 @@ private struct RecentRow: View {
             HStack(spacing: 14) {
                 RouteThumbnail(shape: shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
-                Text(title)
+                Text(CardText.unbroken(title))
                     .typeStyle(.body)
                     .foregroundStyle(Palette.ink.color)
                     .lineLimit(1)
@@ -637,7 +638,7 @@ struct ReturnPrompt: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceSheet.color)
                     .overlay(RouteThumbnail(shape: viewed.route.shape, lineWidth: 2, dot: 5, inset: 0.14))
                     .frame(width: 44, height: 44)
-                Text(MainModel.promptText(viewed))
+                Text(CardText.unbroken(MainModel.promptText(viewed)))
                     .typeStyle(.body).foregroundStyle(Palette.ink.color)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

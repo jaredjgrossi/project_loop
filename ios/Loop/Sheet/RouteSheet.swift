@@ -306,7 +306,7 @@ struct CardBlock: View {
                         // The route's name from the server, once `final` has measured it (top3 names can change).
                         // Its room is held from the first card, so the sheet doesn't jump.
                         if shown.name != nil {
-                            Text(model.showsCount ? CardText.nameLine(shown.name ?? "") : "")
+                            Text(model.showsCount ? CardText.unbroken(CardText.nameLine(shown.name ?? "")) : "")
                                 .typeStyle(.bodyStrong)
                                 .foregroundStyle(Palette.ink.color)
                                 .lineLimit(2)
@@ -621,7 +621,7 @@ struct RatingContent: View {
                 .frame(maxWidth: .infinity).padding(.top, 10)
             Text("How was it?").typeStyle(.request).foregroundStyle(Palette.ink.color)
                 .padding(.top, 14).accessibilityAddTraits(.isHeader)
-            Text("\(state.route.name) · \(CardText.miles(state.route.distanceMi))")
+            Text("\(CardText.unbroken(state.route.name)) · \(CardText.miles(state.route.distanceMi))")
                 .typeStyle(.body).foregroundStyle(Palette.inkMuted.color).padding(.top, 4)
             HStack(spacing: 10) {
                 choice("Good", selected: false) { model.rateGood() }

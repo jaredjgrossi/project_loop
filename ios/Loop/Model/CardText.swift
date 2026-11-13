@@ -214,6 +214,16 @@ enum CardText {
             mode: mode)
     }
 
+    // MARK: Display
+
+    /// A route or place name as it is shown: it wraps at spaces, never inside a hyphenated word
+    /// ("East River out-and-back" never breaks after "out-"). An invisible word joiner goes after
+    /// each hyphen (neither font has a non-breaking hyphen). Display only: nothing that is
+    /// compared, stored or sent uses it.
+    static func unbroken(_ name: String) -> String {
+        name.replacingOccurrences(of: "-", with: "-\u{2060}")
+    }
+
     // MARK: Formatting helpers
 
     static func oneDecimal(_ v: Double) -> String { String(format: "%.1f", v) }

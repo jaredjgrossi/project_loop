@@ -94,7 +94,7 @@ struct HistoryRow: View {
                 RouteThumbnail(shape: log.route.shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(log.route.name)
+                    Text(CardText.unbroken(log.route.name))
                         .typeStyle(.body)
                         .foregroundStyle(Palette.ink.color)
                         .lineLimit(2)
