@@ -237,6 +237,12 @@ struct MainScreen: View {
                 model.fieldText = args[i + 1]
             }
         }
+        if args.contains("-LoopQuestion") {
+            // Screenshots (with -LoopDemo): a question with no options, as the parser asks it.
+            while model.stage != .reading { try? await Task.sleep(for: .seconds(0.1)) }
+            try? await Task.sleep(for: .seconds(0.8))
+            model.debugQuestion()
+        }
         if args.contains("-LoopCollapsed") {
             // Screenshots: collapse the landing sheet once it has risen and typed its example.
             while model.landingAnchor != nil || !model.landingShown { try? await Task.sleep(for: .seconds(0.2)) }

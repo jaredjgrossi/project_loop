@@ -412,6 +412,16 @@ extension MainModel {
         liveNotice = n
     }
 
+    #if DEBUG
+    /// Screenshots (`-LoopQuestion`): the parser's question with no options.
+    func debugQuestion() {
+        flow?.cancel()
+        locationPulsing = false
+        pendingQuestion = ServerEvent.Question(parseId: nil, id: "q_debug", about: "start", from: "parser",
+                                               text: "Where should it start?", options: [], allowText: true, chipId: nil)
+    }
+    #endif
+
     /// "Try again": the same request again (a chip edit's constraints, or the text).
     func retryLive() {
         liveNotice = nil
