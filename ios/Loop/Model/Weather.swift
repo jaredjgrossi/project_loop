@@ -5,8 +5,9 @@ import Observation
 /// Refreshes on launch, on return to the foreground and every 15 minutes while the app is open. A
 /// reading older than 30 minutes is hidden (the time stays): never a stale number (phone, 2026-11-13).
 ///
-/// Where the reading comes from is `provider`. WeatherKit needs the paid developer program
-/// (decision 024), so until a source is chosen there is none, and the line shows the time only.
+/// Where the reading comes from is `provider`: the Loop server's `GET /v1/weather/nyc` (decision 051;
+/// WeatherKit needs the paid developer program, decision 024). With no server or token the line
+/// shows the time only.
 @MainActor @Observable
 final class WeatherStore {
     struct Reading: Equatable {
@@ -14,6 +15,8 @@ final class WeatherStore {
         let temperature: String
         /// When the source measured it (not when the phone asked).
         let at: Date
+        /// Who measured it, for the attribution (the server's `source`).
+        var source = ""
     }
 
     static let refreshInterval: TimeInterval = 15 * 60
@@ -21,7 +24,11 @@ final class WeatherStore {
     /// Two asks closer together than this are one (launch and foreground arrive together).
     static let minimumGap: TimeInterval = 30
 
-    static let shared = WeatherStore()
+    /// The Loop server's city reading. It looks the client up on each ask, so a token pasted later is used.
+    static let shared = WeatherStore(provider: {
+        guard let api = LoopAPI.live else { throw LoopAPI.Failure.unreachable }
+        return try await api.weather()
+    })
 
     /// The latest good reading, however old. Read it through `visible(at:)`.
     private(set) var reading: Reading?

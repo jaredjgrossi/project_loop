@@ -582,6 +582,7 @@ struct WeatherLine: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(r.map { "\($0.temperature), \(Self.dayTime(context.date))" } ?? Self.dayTime(context.date))
+            .accessibilityHint(r.map { $0.source } ?? "")
         }
         .task { await store.run() }
         .onChange(of: scenePhase) { _, phase in

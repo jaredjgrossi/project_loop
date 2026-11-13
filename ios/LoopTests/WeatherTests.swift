@@ -58,3 +58,46 @@ final class WeatherTests: XCTestCase {
         XCTAssertEqual(store.reading?.temperature, "47°")
     }
 }
+
+/// The server's `GET /v1/weather/nyc` body (decision 051).
+final class WeatherResponseTests: XCTestCase {
+    private let now = ISO8601DateFormatter().date(from: "2026-11-13T19:00:00Z")!
+
+    private func body(_ extra: String = "", temp: String = "41", at: String = "2026-11-13T18:51:00Z", v: Int = 1, condition: String = "cloudy") -> Data {
+        Data("""
+        {"v":\(v),"temp_f":\(temp),"condition":"\(condition)","description":"Cloudy","observed_at":"\(at)","station":"KNYC","source":"National Weather Service, KNYC Central Park","status":"measured"\(extra)}
+        """.utf8)
+    }
+
+    func testReadsTheServersBody() throws {
+        let r = try XCTUnwrap(LoopAPI.reading(from: body(), now: now))
+        XCTAssertEqual(r.temperature, "41°")
+        XCTAssertEqual(r.symbol, "cloud")
+        XCTAssertEqual(r.at, ISO8601DateFormatter().date(from: "2026-11-13T18:51:00Z"), "the station's time, not the request's")
+        XCTAssertEqual(r.source, "National Weather Service, KNYC Central Park")
+    }
+
+    func testRefusesWhatItCannotTrust() {
+        XCTAssertNil(LoopAPI.reading(from: body(v: 2), now: now), "unknown version")
+        XCTAssertNil(LoopAPI.reading(from: body(at: "yesterday"), now: now), "no usable time")
+        XCTAssertNil(LoopAPI.reading(from: body(at: "2026-11-13T19:30:00Z"), now: now), "measured in the future would never go stale")
+        XCTAssertNil(LoopAPI.reading(from: Data("{}".utf8), now: now))
+        XCTAssertNil(LoopAPI.reading(from: Data(#"{"detail":"weather_unavailable"}"#.utf8), now: now))
+    }
+
+    func testEveryConditionHasAGlyph() {
+        let noon = ISO8601DateFormatter().date(from: "2026-11-13T17:00:00Z")!   // noon in New York
+        let night = ISO8601DateFormatter().date(from: "2026-11-14T03:00:00Z")!  // 10 pm
+        for c in ["clear", "partly_cloudy", "cloudy", "fog", "rain", "snow", "thunderstorm", "other"] {
+            XCTAssertFalse(LoopAPI.weatherSymbol(c, at: noon).isEmpty, c)
+        }
+        XCTAssertEqual(LoopAPI.weatherSymbol("clear", at: noon), "sun.max")
+        XCTAssertEqual(LoopAPI.weatherSymbol("clear", at: night), "moon.stars")
+        XCTAssertEqual(LoopAPI.weatherSymbol("partly_cloudy", at: night), "cloud.moon")
+    }
+
+    func testWholeDegreesAreRounded() throws {
+        XCTAssertEqual(LoopAPI.reading(from: body(temp: "41.6"), now: now)?.temperature, "42°")
+        XCTAssertEqual(LoopAPI.reading(from: body(temp: "-3"), now: now)?.temperature, "-3°")
+    }
+}
