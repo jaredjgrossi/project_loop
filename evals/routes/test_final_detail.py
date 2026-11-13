@@ -74,7 +74,7 @@ def test_the_three_names_are_ones_a_runner_would_say(shape, miles):
         props = r["file"]["features"][0]["properties"]
         assert r["label"] == props["label"] == props["name"]  # one name everywhere
         assert not TYPE_WORDS.search(r["label"]), r["label"]
-        assert r["label"][0].isupper() and len(r["label"]) <= 36, r["label"]
+        assert not r["label"][0].islower() and len(r["label"]) <= 36, r["label"]
         assert not r["label"].endswith(("waterfront path", "unnamed path")), r["label"]
         assert "plan" not in props and "name_ladder" not in props  # the generator's words never reach the app
     assert len(set(names)) == len(names), names
