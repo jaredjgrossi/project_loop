@@ -10,7 +10,11 @@ Steps are the places where the runner has something to do, and they tile the rou
 - the turnaround, taken from the turnaround marker (GraphHopper has only a U-turn there, or a left, a via and a right);
 - a stretch under MIN_STEP_M is part of the step before (a crossing, a curb jog, a roundabout's exits);
 - where such a stretch is folded away, the next turn is measured again from the line, so a jog with a turn on each
-  side doesn't leave one bare "left"; and a "continue" onto the street the runner is already on is not a step.
+  side doesn't leave one bare "left"; a "continue" onto the street the runner is already on is not a step, nor is a
+  bend inside the one path, park or corridor (a U-turn is); a real turn on a street the runner is already on keeps
+  the turn and leaves the name out ("Turn left", never "onto" the street it is on);
+- a GraphHopper turn the line doesn't make (under CONTINUE_DEG either side of it) is a "continue";
+- a start stub under MIN_STEP_M (the door to the corner) joins the first street.
 """
 
 import math
@@ -23,6 +27,7 @@ MIN_STEP_M = 50
 TURN_SNAP_M = 25  # a GraphHopper instruction this close to the turnaround is the turnaround's
 STRETCH_SNAP_M = 30  # a change of street this close to a GraphHopper instruction is that instruction's
 WINDOW_M = 25  # the heading before and after a turn is read over this much line
+CONTINUE_DEG = 11.5  # a turn under this is no turn (GraphHopper's own threshold)
 DISTANCE_SOURCE = "route geometry (GraphHopper)"
 MANEUVER_SOURCE = "GraphHopper turn instructions (foot profile)"
 
@@ -36,7 +41,7 @@ NOT_A_STEP = {4, 5}
 def maneuver_from_angle(degrees: float) -> str:
     """The maneuver for a turn of this many degrees (right is positive), at GraphHopper's own thresholds."""
     a = abs(degrees)
-    if a < 11.5:
+    if a < CONTINUE_DEG:
         return "continue"
     side = "right" if degrees > 0 else "left"
     if a < 46:
@@ -109,6 +114,12 @@ def _street_of(ranges, start: float, end: float) -> dict | None:
     return best
 
 
+def _remeasure_next(bounds, i, gone) -> None:
+    """A turn folded away: the next GraphHopper turn is measured again from the line, from where the folded one began."""
+    if gone["kind"] == "gh" and i < len(bounds) and bounds[i]["kind"] == "gh":
+        bounds[i]["geom"], bounds[i]["pre"] = True, gone["pre"] if gone["pre"] is not None else gone["m"]
+
+
 def route_steps(coords: list[list[float]], instructions, stretches: list[dict], turn_along_m: list[float],
                 total_m: int) -> list[dict] | None:
     """The steps of a route, or None when it has no instructions. `instructions` are GraphHopper's (sign, first point
@@ -146,35 +157,43 @@ def route_steps(coords: list[list[float]], instructions, stretches: list[dict], 
     folding = True
     while folding:  # a stretch under the minimum is part of the step before it
         folding = False
-        if span(0) < MIN_STEP_M and len(bounds) > 1 and bounds[1]["kind"] == "stretch":
-            bounds.pop(1)
+        if span(0) < MIN_STEP_M and len(bounds) > 1 and bounds[1]["kind"] != "turn":
+            jog = span(1) < MIN_STEP_M  # a turn with another close behind it is a jog; a long step after it isn't
+            gone = bounds.pop(1)  # a stub from the door to the corner is part of the first street, not a step of its own
+            if jog:
+                _remeasure_next(bounds, 1, gone)
             folding = True
             continue
         for i in range(1, len(bounds)):
             if bounds[i]["kind"] != "turn" and span(i) < MIN_STEP_M:
-                gone = bounds.pop(i)
-                if gone["kind"] == "gh" and i < len(bounds) and bounds[i]["kind"] == "gh":
-                    bounds[i]["geom"], bounds[i]["pre"] = True, gone["pre"] if gone["pre"] is not None else gone["m"]
+                _remeasure_next(bounds, i, bounds.pop(i))
                 folding = True
                 break
 
     for b in bounds[1:]:  # turns read from the line: after a fold, or a sign GraphHopper has no word for here
         if b["geom"] or b["maneuver"] is None:
             b["maneuver"] = maneuver_from_angle(line.turn_at(b["m"], b["pre"]))
+        elif b["kind"] == "gh" and b["maneuver"] != "continue" and abs(line.turn_at(b["m"])) < CONTINUE_DEG:
+            b["maneuver"] = "continue"  # a sidewalk kink GraphHopper counts as a turn but the line doesn't make
 
     def street(i):
         return _street_of(ranges, bounds[i]["m"], bounds[i]["m"] + span(i))
 
     dropping = True
-    while dropping:  # "continue" onto the street the runner is already on is not a step
+    while dropping:  # the same street twice is not a new step
         dropping = False
         for i in range(1, len(bounds)):
-            if bounds[i]["maneuver"] == "continue" and bounds[i]["kind"] != "turn":
-                here, before = street(i), street(i - 1)
-                if (here or {}).get("name") == (before or {}).get("name"):
-                    bounds.pop(i)
-                    dropping = True
-                    break
+            b = bounds[i]
+            if b["kind"] == "turn":
+                continue
+            here, before = street(i), street(i - 1)
+            if not (here and before and here.get("name") and here.get("name") == before.get("name")):
+                continue  # only when both names are known and the same
+            if b["maneuver"] == "continue" or ((here or {}).get("kind") != "street" and b["maneuver"] != "u_turn"):
+                bounds.pop(i)  # a "continue", or a bend in the one path, park or corridor the runner is on
+                dropping = True
+                break
+            b["unnamed"] = True  # a real turn on a street, onto a name it already has: "Turn left", not "onto" it
 
     out = []
     at = [round(b["m"] * scale) for b in bounds] + [total_m]
@@ -182,7 +201,8 @@ def route_steps(coords: list[list[float]], instructions, stretches: list[dict], 
         p = street(i)
         fact = ((p or {}).get("facts") or [{}])[0]
         lon, lat = line.lonlat_at(b["m"])
-        out.append(_step(i, b["maneuver"], (p or {}).get("name"), at[i], at[i + 1], lat, lon, fact))
+        out.append(_step(i, b["maneuver"], None if b.get("unnamed") else (p or {}).get("name"), at[i], at[i + 1], lat,
+                         lon, fact))
     lon, lat = coords[-1][0], coords[-1][1]
     out.append(_step(len(out), "finish", None, total_m, total_m, lat, lon, {}))
     for s, nxt in zip(out, out[1:]):  # the miles shown tile as well as the meters
@@ -196,6 +216,6 @@ def _step(index, maneuver, street, start_m, end_m, lat, lon, fact) -> dict:
             "distance": {"value": 0.0, "unit": "mi", "meters": end_m - start_m, "status": "measured",
                          "source": DISTANCE_SOURCE},
             "point": {"lat": round(lat, 6), "lon": round(lon, 6)},
-            "maneuver_source": MANEUVER_SOURCE,
+            "status": "measured", "maneuver_source": MANEUVER_SOURCE,
             "trust": fact.get("trust", "listed") if street else "listed",
             "source": fact.get("source", DISTANCE_SOURCE) if street else DISTANCE_SOURCE}

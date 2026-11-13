@@ -37,9 +37,9 @@ def total_of(coords):
                                ((b[0] - coords[0][0]) * KX, (b[1] - LAT0) * KY)) for a, b in zip(coords, coords[1:])))
 
 
-def stretch(name, length_m, trust="listed", source="OSM way w1"):
+def stretch(name, length_m, trust="listed", source="OSM way w1", kind="street"):
     return {"type": "Feature", "geometry": {"type": "LineString", "coordinates": []},
-            "properties": {"feature": "stretch", "name": name, "length_m": length_m,
+            "properties": {"feature": "stretch", "name": name, "kind": kind, "length_m": length_m,
                            "facts": [{"text": name, "source": source, "trust": trust}]}}
 
 
@@ -173,10 +173,18 @@ def test_a_step_under_the_minimum_joins_the_one_before():
     assert_tiles(steps, total)
 
 
-def test_the_first_step_stays_however_short():
-    steps, total = steps_for([(90, 40), (0, 500)], lambda c: [(0, 0), (-2, c[0]), (4, c[1])],
-                             [stretch("A Street", 40), stretch("B Street", 500)])
-    assert [(s["maneuver"], s["distance"]["meters"]) for s in steps] == [("start", 40), ("left", 500), ("finish", 0)]
+def test_a_start_stub_under_the_minimum_joins_the_step_after_it():
+    # 20 m from the door to the corner, then a right onto the street it runs: one step, "start", on that street.
+    steps, total = steps_for([(90, 20), (180, 1200)], lambda c: [(0, 0), (2, c[0]), (4, c[1])],
+                             [stretch("3rd Avenue", 1220)])
+    assert [(s["maneuver"], s["street"], s["distance"]["meters"]) for s in steps] == [
+        ("start", "3rd Avenue", total), ("finish", None, 0)]
+
+
+def test_the_first_step_is_kept_when_it_is_long_enough():
+    steps, total = steps_for([(90, 60), (0, 500)], lambda c: [(0, 0), (-2, c[0]), (4, c[1])],
+                             [stretch("A Street", 60), stretch("B Street", 500)])
+    assert [(s["maneuver"], s["distance"]["meters"]) for s in steps] == [("start", 60), ("left", 500), ("finish", 0)]
 
 
 def test_a_short_first_stretch_doesnt_make_its_own_step():
@@ -272,3 +280,73 @@ def test_no_instructions_means_no_steps():
     coords, _ = walk([(90, 600)])
     assert route_steps(coords, None, [stretch("A", 600)], [], total_of(coords)) is None
     assert route_steps(coords, [], [stretch("A", 600)], [], total_of(coords)) is None
+
+
+# ---- the same street twice (real data: Kips Bay, 2026-11-13) ---------------------------------------------------------------
+
+
+def test_bends_in_a_named_path_are_not_steps():
+    # The esplanade wiggles: GraphHopper says left, right, slight left; the runner stays on the esplanade.
+    steps, total = steps_for([(90, 300), (45, 300), (135, 300), (90, 300)],
+                             lambda c: [(0, 0), (-1, c[0]), (2, c[1]), (-1, c[2]), (4, c[3])],
+                             [stretch("East River Esplanade", 1200, kind="corridor")])
+    assert [s["maneuver"] for s in steps] == ["start", "finish"]
+    assert_tiles(steps, total)
+
+
+def test_a_path_that_turns_onto_another_street_still_has_the_turn():
+    steps, _ = steps_for([(90, 300), (0, 300)], lambda c: [(0, 0), (-2, c[0]), (4, c[1])],
+                         [stretch("East River Esplanade", 300, kind="corridor"), stretch("East 34th Street", 300)])
+    assert [(s["maneuver"], s["street"]) for s in steps] == [
+        ("start", "East River Esplanade"), ("left", "East 34th Street"), ("finish", None)]
+
+
+def test_a_u_turn_on_a_path_stays():
+    steps, _ = steps_for([(90, 500), (270, 100), (90, 400)], lambda c: [(0, 0), (-98, c[0]), (4, c[2])],
+                         [stretch("The Walk", 1000, kind="path")])
+    assert [s["maneuver"] for s in steps] == ["start", "u_turn", "finish"]
+
+
+def test_a_turn_on_a_street_keeps_the_turn_but_not_a_name_it_is_already_on():
+    # The labels say East 31st Street for both legs; "turn left onto East 31st Street" would be wrong.
+    steps, total = steps_for([(90, 240), (0, 170), (90, 240)], lambda c: [(0, 0), (-2, c[0]), (2, c[1]), (4, c[2])],
+                             [stretch("East 31st Street", 650)])
+    assert [(s["maneuver"], s["street"]) for s in steps] == [
+        ("start", "East 31st Street"), ("left", None), ("right", None), ("finish", None)]
+    assert_tiles(steps, total)
+
+
+def test_without_street_names_every_turn_stays():
+    coords, c = walk([(90, 400), (180, 400), (270, 400)])
+    steps = route_steps(coords, [(0, 0), (2, c[0]), (2, c[1]), (4, c[2])], [], [], total_of(coords))
+    assert [s["maneuver"] for s in steps] == ["start", "right", "right", "finish"]
+
+
+def test_a_stub_and_a_jog_before_the_first_real_turn_leave_the_turn_measured_from_the_line():
+    # 20 m to the corner, a right, 30 m and a left (a doorway jog), then straight on 600 m: nothing to turn at.
+    steps, total = steps_for([(90, 20), (180, 30), (90, 600)], lambda c: [(0, 0), (2, c[0]), (-2, c[1]), (4, c[2])],
+                             [stretch("A Street", 650)])
+    assert [s["maneuver"] for s in steps] == ["start", "finish"]
+
+
+def test_a_turn_the_line_doesnt_make_is_not_a_turn():
+    # Real data: GraphHopper said "right" at a sidewalk kink with the heading 209 degrees before and 210 after.
+    steps, total = steps_for([(90, 800)], lambda c: [(0, 0), (2, 20), (4, c[0])], [stretch("3rd Avenue", 800)])
+    assert [s["maneuver"] for s in steps] == ["start", "finish"]
+    assert_tiles(steps, total)
+
+
+def test_such_a_kink_where_the_street_changes_is_a_continue_onto_it():
+    steps, _ = steps_for([(90, 800)], lambda c: [(0, 0), (2, 20), (4, c[0])],
+                         [stretch("3rd Avenue", 400), stretch("East 16th Street", 400)])
+    assert [(s["maneuver"], s["street"]) for s in steps] == [
+        ("start", "3rd Avenue"), ("continue", "East 16th Street"), ("finish", None)]
+
+
+def test_a_start_stub_doesnt_leave_a_later_kink_measured_against_the_stub():
+    # Real data (3rd Avenue loop): a right 20 m from the door, then a slight left and a slight right one metre apart
+    # 800 m down the avenue, the line straight and heading nowhere near the stub's.
+    coords, c = walk([(90, 20), (190, 800), (190, 400)])
+    steps = route_steps(coords, [(0, 0), (2, c[0]), (-1, c[1] - 1), (1, c[1]), (4, c[2])],
+                        [stretch("3rd Avenue", 1220)], [], total_of(coords))
+    assert [(s["maneuver"], s["street"]) for s in steps] == [("start", "3rd Avenue"), ("finish", None)]

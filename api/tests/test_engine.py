@@ -540,6 +540,33 @@ def test_every_route_of_the_final_has_its_full_file():
     assert final["route"] == final["routes"][0]["file"]  # the first route's file, as before
 
 
+def routed_candidates():
+    """Three square loops whose routes carry GraphHopper's four right turns, as a routed candidate does (decision 054)."""
+    from dataclasses import replace
+    return [replace(c, route=replace(c.route, instructions=((0, 0), (2, 1), (2, 2), (2, 3), (4, 4))))
+            for c in three_candidates()]
+
+
+def test_every_route_of_the_final_has_steps_that_tile_its_distance():
+    final = engine(fake_generate(routed_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_st")
+    assert len(final["routes"]) == 3
+    for r in final["routes"]:
+        summary = r["file"]["features"][0]["properties"]["summary"]
+        steps = summary["steps"]
+        assert [x["maneuver"] for x in steps] == ["start", "right", "right", "right", "finish"]
+        assert steps[0]["from_meters"] == 0 and steps[-1]["from_meters"] == summary["distance"]["meters"]
+        assert all(a["from_meters"] + a["distance"]["meters"] == b["from_meters"] for a, b in zip(steps, steps[1:]))
+        assert summary["way"] is not None  # older clients keep the stretch list
+    assert final["route"]["features"][0]["properties"]["summary"]["steps"]
+
+
+def test_a_route_without_instructions_has_no_steps_and_keeps_its_way():
+    final = engine(fake_generate(three_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_ns")
+    for r in final["routes"]:
+        summary = r["file"]["features"][0]["properties"]["summary"]
+        assert "steps" not in summary and "way" in summary
+
+
 def test_the_routes_are_named_from_their_own_stretches():
     names = iter(["East River Esplanade", "Central Park", "Hudson River Greenway"])
     calls = []

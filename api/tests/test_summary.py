@@ -168,3 +168,61 @@ def test_without_stretches_there_is_a_way_of_none_and_no_reason_claims():
     c = candidate(CONTEXT)
     s = route_summary(c, [], [], {"status": "not_scored"})
     assert s["way"] == [] and s["reason"]["text"] is None
+
+
+# ---- the steps (decision 054) -------------------------------------------------------------------------------------------
+
+
+def with_steps(c, instructions):
+    from dataclasses import replace
+    return replace(c, route=replace(c.route, instructions=instructions))
+
+
+# The out-and-back is 241 points; the turn is at point 120 (2,400 m).
+INSTRUCTIONS = ((0, 0), (5, 120), (-98, 120), (4, 240))
+
+
+def test_a_route_with_instructions_has_steps_that_tile_the_summarys_distance():
+    c = with_steps(candidate(CONTEXT), INSTRUCTIONS)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    steps = s["steps"]
+    assert [x["maneuver"] for x in steps] == ["start", "continue", "turnaround", "continue", "finish"]
+    assert [x["street"] for x in steps] == ["East 34th Street", "East River Esplanade", "East River Esplanade",
+                                           "East 34th Street", None]
+    assert steps[0]["from_meters"] == 0 and steps[-1]["from_meters"] == s["distance"]["meters"]
+    for a, b in zip(steps, steps[1:]):
+        assert a["from_meters"] + a["distance"]["meters"] == b["from_meters"]
+    assert steps[-1]["from_mile"] == s["distance"]["value"]
+    (turn,) = s["turnarounds"]
+    assert steps[2]["from_meters"] == turn["meters"]  # the turnaround is the step that starts at the marker
+
+
+def test_the_turnaround_step_is_where_the_way_says_the_turnaround_is():
+    c = with_steps(candidate(CONTEXT), INSTRUCTIONS)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    on = [w for w in s["way"] if "turnaround" in w]
+    (turn_step,) = [x for x in s["steps"] if x["maneuver"] == "turnaround"]
+    assert len(on) == 1 and on[0]["turnaround"]["mile"] == turn_step["from_mile"]
+
+
+def test_steps_carry_a_status_and_a_source_like_everything_else():
+    c = with_steps(candidate(CONTEXT), INSTRUCTIONS)
+    s = route_summary(c, stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    for x in s["steps"]:
+        assert x["status"] == "measured" and x["source"] and x["trust"] in ("verified", "listed", "seasonal_or_closed")
+
+
+def test_adding_steps_leaves_the_way_exactly_as_it_was():
+    plain = candidate(CONTEXT)
+    c = with_steps(plain, INSTRUCTIONS)
+    args = (stretches(c.route.coordinates), marker_features(c.route.coordinates), ELEVATION)
+    assert route_summary(c, *args)["way"] == route_summary(plain, *args)["way"]
+    without = route_summary(plain, *args)
+    assert "steps" not in without  # no instructions, no steps: the app keeps its stretch list
+
+
+def test_a_route_with_no_stretches_has_steps_without_street_names():
+    c = with_steps(candidate(CONTEXT), INSTRUCTIONS)
+    s = route_summary(c, [], marker_features(c.route.coordinates), ELEVATION)
+    assert [x["maneuver"] for x in s["steps"]] == ["start", "turnaround", "finish"]
+    assert all(x["street"] is None for x in s["steps"])
