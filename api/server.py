@@ -7,6 +7,7 @@
   a new POST with `answer`, which resumes the pending parse with no second Claude call. A chip edit sends
   `constraints` and skips Claude.
 - `GET /v1/routes/{id}`: a built result, the same payload as `final`, from saved_routes (decision 030).
+- `GET /v1/weather/nyc`: the city's current temperature from the National Weather Service (decision 051).
 - `GET /v1/health`: the server is up, and whether the engine, the database and the parser key are ready.
 
 Every route but health needs `Authorization: Bearer <LOOP_TOKEN>`; the token lives in .env, never in git or the
@@ -38,6 +39,7 @@ from api.parse import Context, DbPlaces, answer_overrides, parse, parsed_for_con
 from api.pending import Pending, PendingStore
 from api.feedback import AppFeedback, PgFeedbackStore
 from api.saved_routes import PgRouteStore, stored_request
+from api.weather import WeatherService, WeatherUnavailable
 
 MAX_TEXT = 500  # characters; a run request is a sentence or two
 MAX_ROUTES_KEPT = 50  # the latest builds, also kept in memory; every build is in saved_routes (step 7)
@@ -188,7 +190,7 @@ def _health_checks() -> dict:
 def create_app(*, token: str | None = None, parse_fn: Callable | None = None, places: Callable | None = None,
                engine: Engine | None = None, store: PendingStore | None = None,
                route_store=None, feedback_store=None, health_fn: Callable[[], dict] = _health_checks,
-               warm: bool = True) -> FastAPI:
+               weather=None, warm: bool = True) -> FastAPI:
     """The app. Tests pass fakes; `uvicorn api.server:app` uses the real parser, places table and engine."""
     from api.env import load_env
 
@@ -206,6 +208,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
     store = PendingStore() if store is None else store
     route_store = PgRouteStore() if route_store is None else route_store
     feedbacks = PgFeedbackStore() if feedback_store is None else feedback_store
+    weather = WeatherService() if weather is None else weather
     routes: OrderedDict[str, dict] = OrderedDict()
     routes_lock = threading.Lock()
 
@@ -528,6 +531,14 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         except LookupError:
             raise HTTPException(status_code=404, detail="no such route") from None
         return {"v": 1, "route_id": route_id, **body.model_dump(mode="json"), **saved}
+
+    @app.get("/v1/weather/nyc", dependencies=[Depends(check_token)])
+    def weather_nyc() -> dict:
+        """The city's current temperature for the app's header (decision 051). No location comes in, none goes out."""
+        try:
+            return {"v": 1, **weather.reading()}
+        except WeatherUnavailable:
+            raise HTTPException(status_code=503, detail="weather_unavailable") from None
 
     @app.get("/v1/health")
     def health() -> dict:
