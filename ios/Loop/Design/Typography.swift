@@ -139,5 +139,7 @@ enum Motion {
     static let morphDuration: TimeInterval = 0.6
     /// Candidate outlines: faint while building, gone 500 ms after the provisional flag.
     static let outlinePeakOpacity: Double = 0.3
+    /// The two routes not shown, once `final` arrived: faint dots, tappable.
+    static let otherRouteOpacity: Double = 0.55
     static let outlineFade: TimeInterval = 0.5
 }

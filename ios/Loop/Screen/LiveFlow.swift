@@ -285,11 +285,13 @@ extension MainModel {
             if byKey[k] == nil {
                 byKey[k] = Candidate(rank: k, line: Polyline(pts), distanceMi: r.distance.miles,
                                      distanceTrust: Trust(r.distance.status), distanceSource: r.distance.source,
-                                     kindText: CardText.kindText(r.kind), detail: nil)
+                                     kindText: CardText.kindText(r.kind), detail: nil,
+                                     name: r.label, serverId: r.id)
             }
         }
         guard !keys.isEmpty else { return }
         data = LoopData(request: data.request, candidates: byKey.values.sorted { $0.rank < $1.rank }, bestOf: data.bestOf)
+        applyReadOutToSheet()   // room for the route's name
         let first = build.shownRank == nil
         receiveEvent(.top3(keys), at: CACurrentMediaTime())
         if first {
@@ -329,13 +331,16 @@ extension MainModel {
         let remapped = built.candidates.map { c in
             Candidate(rank: key(for: ids[c.rank] ?? nil, rank: c.rank), line: c.line, distanceMi: c.distanceMi,
                       distanceTrust: c.distanceTrust, distanceSource: c.distanceSource,
-                      kindText: c.kindText, detail: c.detail)
+                      kindText: c.kindText, detail: c.detail, name: c.name, serverId: c.serverId)
         }
         let keys = f.routes.sorted { $0.rank < $1.rank }.map { key(for: $0.id, rank: $0.rank) }
         let hour = built.request.startHourText
         data = LoopData(request: liveRequestCard(chips: [], startHour: hour.isEmpty ? "" : hour)
                             .withMode(data.request.mode),
                         candidates: remapped, bestOf: built.bestOf)
+        // The route type asked for, when it wasn't found: one plain line on the card.
+        shapeNote = CardText.shapeNote(f.shape)
+        applyReadOutToSheet()
         liveRouteId = f.routes.first { $0.rank == 1 }?.id ?? f.routeId
         liveBuildId = f.routeId
         // Keep the route on the phone (Save, History and the return prompt draw it again from here).

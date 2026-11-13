@@ -217,12 +217,17 @@ struct CardBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(model.eyebrowText)
-                .typeStyle(.eyebrow)
-                .foregroundStyle(Palette.inkMuted.color)
-                .frame(height: 14)
-                .contentTransition(.opacity)
-                .animation(reduceMotion ? nil : Motion.textArrive, value: model.eyebrowText)
+            HStack(spacing: 0) {
+                Text(model.eyebrowText)
+                    .typeStyle(.eyebrow)
+                    .foregroundStyle(Palette.inkMuted.color)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : Motion.textArrive, value: model.eyebrowText)
+                Spacer(minLength: 8)
+                RouteDots(model: model)
+                    .padding(.trailing, 96)   // clear of the bookmark and the ×
+            }
+            .frame(height: 14)
 
             Group {
                 if model.cardRevealed, let shown = model.shown {
@@ -243,12 +248,37 @@ struct CardBlock: View {
                         .accessibilityLabel(["\(CardText.distance(shown.distanceMi)) miles", shown.distanceTrust?.text]
                             .compactMap { $0 }.joined(separator: ", "))
 
-                        if let reason = shown.detail.flatMap({ CardText.reason($0.summary) }) {
-                            Text(reason)
-                                .typeStyle(.body)
-                                .foregroundStyle(Palette.inkSoft.color)
+                        // The route's name from the server, once `final` has measured it (top3 names can change).
+                        // Its room is held from the first card, so the sheet doesn't jump.
+                        if shown.name != nil {
+                            Text(model.showsCount ? shown.name ?? "" : "")
+                                .typeStyle(.bodyStrong)
+                                .foregroundStyle(Palette.ink.color)
                                 .lineLimit(1)
-                                .padding(.top, 4)
+                                .frame(height: 24, alignment: .leading)
+                                .contentTransition(.opacity)
+                                .animation(reduceMotion ? nil : Motion.textArrive, value: model.showsCount ? shown.name : nil)
+                        }
+                        if let detail = shown.detail, let reason = CardText.reasonLine(detail.summary) {
+                            // The server's reason line carries its trust label and source on tap.
+                            TrustTap(trust: detail.summary.reason?.text == nil ? nil : detail.summary.reason?.status.map(Trust.init),
+                                     source: detail.summary.reason?.source) {
+                                Text(reason)
+                                    .typeStyle(.body)
+                                    .foregroundStyle(Palette.inkSoft.color)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.top, 4)
+                        }
+                        // The route type asked for wasn't found: said plainly, once `final` arrives.
+                        if let note = model.shapeNote {
+                            HStack(spacing: 8) {
+                                Circle().strokeBorder(Palette.inkMuted.color, lineWidth: 1.5).frame(width: 9, height: 9)
+                                Text(note).typeStyle(.label).foregroundStyle(Palette.inkSoft.color).lineLimit(1)
+                            }
+                            .frame(height: 26, alignment: .bottom)
+                            .accessibilityElement(children: .combine)
                         }
                         // An unmet ask, named in one line; tapping it opens "How Loop read it".
                         if let line = CardText.cantCardLine(model.readOut?.cant.map(\.gap) ?? []) {
@@ -275,6 +305,34 @@ struct CardBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 96 + model.sheet.extra, alignment: .top)
+    }
+}
+
+/// Which of the three routes the card shows: one dot each, after `final`. Tap a dot to open that route
+/// (the map morphs to it). Hidden with a single route.
+struct RouteDots: View {
+    let model: MainModel
+
+    var body: some View {
+        let choices = model.routeChoices
+        if choices.count > 1 {
+            HStack(spacing: 0) {
+                ForEach(Array(choices.enumerated()), id: \.element) { i, rank in
+                    let selected = rank == model.shownRank
+                    Button { model.showRoute(rank: rank) } label: {
+                        Circle()
+                            .fill(selected ? Palette.ink.color : Palette.grabber.color)
+                            .frame(width: 8, height: 8)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Route \(i + 1) of \(choices.count)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .frame(height: 14)
+        }
     }
 }
 

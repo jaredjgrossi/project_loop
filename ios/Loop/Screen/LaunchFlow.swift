@@ -182,6 +182,7 @@ extension MainModel {
         rating = nil
         cardMode = .normal
         currentRoute = nil
+        shapeNote = nil
         returnPrompt = nil
         flow?.cancel()
         playbackCancel()

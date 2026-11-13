@@ -61,6 +61,8 @@ final class MainModel {
     var requestText: String?
     /// The example the landing field types in its placeholder colour at launch.
     var fieldExample = ""
+    /// "No loop from here beats this out-and-back": set from `final.shape` when the type asked for wasn't found.
+    var shapeNote: String?
     /// What the runner has typed in the landing field (kept when editing ends, cleared by Cancel).
     var fieldText = ""
     // Come back (UI chat, 2026-11-10; ComeBack.swift)
@@ -310,6 +312,24 @@ final class MainModel {
         }
     }
 
+    /// The three routes in order (their keys), for the dots and the map: only once `final` arrived.
+    var routeChoices: [Int] { build.final ? build.engineTop3.filter { data.candidate(rank: $0) != nil } : [] }
+
+    /// Picks one of the three after `final`: morphs to it and fits it, and Save, "I ran it" and the
+    /// feedback follow the route on the card.
+    func showRoute(rank: Int) {
+        guard rank != shownRank, routeChoices.contains(rank) else { return }
+        touch()
+        build.select(rank, at: CACurrentMediaTime())
+        frameVersion += 1
+        clearSelection()
+        if let r = currentRoute, cardMode == .normal {
+            currentRoute = identityOfShown(archive: r.archive, routeId: shown?.serverId ?? r.routeId)
+        }
+        routeCameraFree = false
+        requestCamera(.overview, animated: true, duration: 0.5)
+    }
+
     /// "A better route came in" → switch, morphing from the route on screen.
     func acceptBetterRoute() {
         build.acceptBetterRoute(at: CACurrentMediaTime())
@@ -323,8 +343,11 @@ final class MainModel {
 
     // MARK: Read-out, edit mode and the editor
 
+    /// One line more on the card for each of: the route's name (24 pt, from the server), the route-type
+    /// note and the can't-do line (26 pt each). Both rests grow with it.
     func applyReadOutToSheet() {
-        sheet.extra = (readOut?.cant.isEmpty ?? true) ? 0 : 26
+        sheet.extra = (readOut?.cant.isEmpty ?? true ? 0 : 26) + (shapeNote == nil ? 0 : 26)
+            + (data.candidates.contains { $0.name != nil } ? 24 : 0)
         if !(readOut?.hasReadIt ?? false) { sheet.readHeight = nil }
         sheet.refreshRest()
     }
@@ -519,8 +542,10 @@ final class MainModel {
         let outline = reduceMotion
             ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
             : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)
-        frame.othersOpacity = outline
-        frame.others = outline > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
+        // After `final` the other two routes stay on the map as faint dots; tap one to open it.
+        let others = build.final && build.provisional ? max(outline, Motion.otherRouteOpacity) : outline
+        frame.othersOpacity = others
+        frame.others = others > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
         guard let shown else {
             if drawnFraction != 0 { drawnFraction = 0 }
             return frame

@@ -518,6 +518,16 @@ struct RouteMapView: UIViewRepresentable {
             if let hit = RouteHit.nearest(to: tap, projected: projected, cumulative: line.cumulative),
                hit.distance <= RouteHit.tolerance {
                 model.selectPoint(alongM: hit.alongM)
+                return
+            }
+            // One of the other two routes (faint dots after `final`): open it.
+            let nearest = model.routeChoices.filter { $0 != model.shownRank }.compactMap { rank -> (Int, Double)? in
+                guard let other = model.data.candidate(rank: rank)?.line else { return nil }
+                let pts = other.points.map { map.point(for: $0.coordinate) }
+                return RouteHit.nearest(to: tap, projected: pts, cumulative: other.cumulative).map { (rank, $0.distance) }
+            }.min { $0.1 < $1.1 }
+            if let (rank, d) = nearest, d <= RouteHit.tolerance {
+                model.showRoute(rank: rank)
             } else {
                 model.clearSelection()
             }
