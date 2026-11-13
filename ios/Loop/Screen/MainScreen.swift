@@ -203,6 +203,7 @@ struct MainScreen: View {
         }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("-LoopSampleWeather") { WeatherStore.shared.useSample() }
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
             model.requestText = model.data.request.text

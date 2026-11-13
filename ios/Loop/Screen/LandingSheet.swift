@@ -557,23 +557,17 @@ struct RouteThumbnail: View {
 }
 
 /// Under the wordmark on the landing: a weather glyph, the temperature (Fraunces), "· Mon 7:02"
-/// (Instrument Sans, ink-muted). WeatherKit needs the paid developer program, so Debug builds
-/// show fixed sample weather and Release builds show nothing until it's wired.
+/// (Instrument Sans, ink-muted). The time updates every minute. The temperature refreshes by
+/// `WeatherStore`'s rules and is hidden, with its glyph, when there is no fresh reading.
 struct WeatherLine: View {
-    struct Reading { let symbol: String; let temperature: String }
-
-    static var reading: Reading? {
-        #if DEBUG
-        Reading(symbol: "cloud.sun", temperature: "48°")
-        #else
-        nil
-        #endif
-    }
+    @Environment(\.scenePhase) private var scenePhase
+    private let store = WeatherStore.shared
 
     var body: some View {
-        if let r = Self.reading {
-            TimelineView(.everyMinute) { context in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+        TimelineView(.everyMinute) { context in
+            let r = store.visible(at: context.date)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let r {
                     Image(systemName: r.symbol)
                         .symbolRenderingMode(.monochrome)
                         .font(.system(size: 14, weight: .regular))
@@ -581,13 +575,17 @@ struct WeatherLine: View {
                     Text(r.temperature)
                         .typeStyle(.numeralS)
                         .foregroundStyle(Palette.inkSoft.color)
-                    Text("· " + Self.dayTime(context.date))
-                        .typeStyle(.body)
-                        .foregroundStyle(Palette.inkMuted.color)
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(r.temperature), sample weather, \(Self.dayTime(context.date))")
+                Text((r == nil ? "" : "· ") + Self.dayTime(context.date))
+                    .typeStyle(.body)
+                    .foregroundStyle(Palette.inkMuted.color)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(r.map { "\($0.temperature), \(Self.dayTime(context.date))" } ?? Self.dayTime(context.date))
+        }
+        .task { await store.run() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await store.refresh() } }
         }
     }
 
