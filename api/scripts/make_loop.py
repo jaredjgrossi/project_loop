@@ -117,6 +117,24 @@ def db_stretches(coords: list[list[float]], elevation: list[float] | None, start
     return stretches + pieces
 
 
+def db_cross_street(lat: float, lon: float, exclude: str = "") -> str | None:
+    """The named street nearest a point, within CROSS_RADIUS_M, other than `exclude` (the route's own main stretch);
+    None if there isn't one. Streets only: no path, no highway (a route's turnaround is named for the street that meets
+    it)."""
+    from api.naming import CROSS_RADIUS_M
+    with psycopg.connect(database_url()) as conn:
+        row = conn.execute(
+            """SELECT name FROM osm_ways
+               WHERE name IS NOT NULL AND name <> %(exclude)s
+                 AND highway IN ('residential', 'tertiary', 'secondary', 'primary', 'unclassified', 'living_street')
+                 AND name !~* '(FDR|Expressway|Highway|Parkway|Bridge|Tunnel)'
+                 AND geom && ST_Expand(ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326), 0.002)
+                 AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography, %(r)s)
+               ORDER BY geom::geography <-> ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s), 4326)::geography LIMIT 1""",
+            {"lat": lat, "lon": lon, "exclude": exclude, "r": CROSS_RADIUS_M}).fetchone()
+    return row[0] if row else None
+
+
 def _merged(*models: dict | None) -> dict | None:
     """One GraphHopper custom model from several: priority rules concatenated, areas combined."""
     models = [m for m in models if m]
@@ -240,25 +258,29 @@ def area_router(zones: list[NoGoZone], extra: dict | None = None) -> Callable:
 
 
 def route_file(c: Candidate, rank: int, lat: float, lon: float, label: str, miles: float, constraints: RunConstraints,
-               best_of: int | None, stretch_fn: Callable | None) -> dict:
+               best_of: int | None, stretch_fn: Callable | None, cross_fn: Callable | None = None) -> dict:
     """One route as the app reads it (the fixture's `route`): the line with its shape, elevation, request and summary,
-    then mile markers and turnarounds, then stretches and pieces by kind (decisions 014, 020, 023)."""
-    from api.naming import route_name
+    then mile markers and turnarounds, then stretches and pieces by kind (decisions 014, 020, 023). The name is the
+    first of the route's `name_ladder`; `settle_names` (api/naming.py) makes the routes of one result differ."""
+    from api.naming import name_ladder
     stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
                  if stretch_fn is not None else [])
-    # Named from what the route measured: the stretch it runs most (UI review), else the generator's label
-    name = route_name(c.kind, c.label, [s["properties"] for s in stretches
-                                        if s["properties"].get("feature", "stretch") == "stretch"])
     geojson = route_to_geojson(
-        c.route, lat, lon, label, miles, c.shape.as_dict(), name=name,
-        extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": name, "plan": c.label,
+        c.route, lat, lon, label, miles, c.shape.as_dict(), name=c.kind,
+        extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "plan": c.label,
                           "score": round(c.score),
                           "elevation": elevation_profile(c.route.coordinates, c.route.elevation),
                           "start_hour": constraints.start_hour, "request": request_items(constraints)},
     )
     markers = marker_features(c.route.coordinates)
-    geojson["features"][0]["properties"]["summary"] = route_summary(
-        c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=best_of)
+    props = geojson["features"][0]["properties"]
+    props["summary"] = route_summary(c, stretches, markers, props["elevation"], rank=rank, best_of=best_of)
+    # Named from what the route measured: the stretch it runs most, which way it heads and where it turns
+    ladder = name_ladder(c.kind, c.label, c.route.coordinates,
+                         [s["properties"] for s in stretches if s["properties"].get("feature", "stretch") == "stretch"],
+                         cross_fn, props["summary"]["distance"]["value"])
+    props["name"] = props["label"] = ladder[0]
+    props["name_ladder"] = ladder
     geojson["features"] += markers + stretches
     return geojson
 
@@ -303,6 +325,7 @@ def run(
     lights: str | None = None,
     start_date: str | None = None,
     stretch_fn: Callable | None = None,  # (coords, elevation, start) -> stretch features (api/segments.py)
+    cross_fn: Callable | None = None,  # (lat, lon, exclude) -> the street at a point, for names (api/naming.py)
     pool_out: Path | None = None,
     closures_fn: Callable | None = None,  # (lat, lon, miles) -> known closures (decision 017)
     now_fn: Callable[[], datetime] = lambda: datetime.now(NEW_YORK).replace(tzinfo=None),  # for the default day
@@ -380,7 +403,7 @@ def run(
     for rank, c in enumerate(result.candidates, start=1):
         print_candidate(rank, c)
         path = base if len(result.candidates) == 1 else base.with_name(f"{base.stem}-rank{rank}{base.suffix}")
-        geojson = route_file(c, rank, place.lat, place.lon, place.label, miles, constraints, result.best_of, stretch_fn)
+        geojson = route_file(c, rank, place.lat, place.lon, place.label, miles, constraints, result.best_of, stretch_fn, cross_fn)
         path.write_text(json.dumps(geojson))
         saved.append(path)
 
@@ -408,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     return run(args.address, args.miles, out=args.out, top=args.top, geocode_fn=geocode, grid_fn=current_grid,
                generate_fn=generate_loops, shape=args.shape, mode=args.mode, avoid=args.avoid,
                anchor_fn=familiar_anchors, feature_anchor_fn=DB_FEATURE_ANCHOR_SOURCES, start_time=args.start_time,
-               stretch_fn=db_stretches, closures_fn=db_closures, pool_out=args.pool, lights=args.lights, start_date=args.start_date,
+               stretch_fn=db_stretches, cross_fn=db_cross_street, closures_fn=db_closures, pool_out=args.pool, lights=args.lights, start_date=args.start_date,
                context_factory=lambda lights, grid, start: context_for(lights, grid, use_prior=True, start=start))
 
 

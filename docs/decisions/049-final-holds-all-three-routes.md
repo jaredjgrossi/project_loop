@@ -20,7 +20,7 @@ and route cards need the second and third routes' details, honest names and the 
 2. **`final.shape`**: `{requested, met, shown}`. `met` is false when the shape asked for wasn't found (`shown` says what
    came back) or there is no route. A run to an end is `one_way`. The existing `kind` values stay (`loop`,
    `out_and_back`, `lollipop`, `a_to_b`): the app decodes them already, and a one-way run is `a_to_b` on the wire.
-3. **Names from the main stretch.** The stretch (name and kind, its pieces added up) that carries at least 40% of the
+3. **Names from the main stretch** (superseded by [050](050-names-a-runner-would-say.md)). The stretch (name and kind, its pieces added up) that carries at least 40% of the
    route names it: "Out-and-back on East River Esplanade", "Loop through Central Park". With none that stands out, the
    generator's label decides ("Loop on the street grid"). "Unnamed path" and "waterfront path" never name a route. The
    `top3` and `provisional` events still use the generator's label, since measuring stretches for every candidate as

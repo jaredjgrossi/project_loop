@@ -61,11 +61,23 @@ def test_the_way_adds_up_to_the_route_and_names_the_turnaround():
             assert sum("turnaround" in w for w in way) == len(summary["turnarounds"]) >= 1, r["label"]
 
 
-def test_a_route_has_one_name_everywhere_and_it_says_something():
-    for r in built()["routes"]:
-        assert r["label"] == r["file"]["features"][0]["properties"]["label"]
-        assert "and beyond" not in r["label"] and "heading" not in r["label"]
-        assert not r["label"].endswith(("waterfront path", "unnamed path"))
+TYPE_WORDS = re.compile(r"out-and-back|\bloop\b|one way|lollipop|heading|degrees|both ways|\u00b0|rectangle|and beyond", re.I)
+
+
+@pytest.mark.parametrize("shape, miles", [("any", 3.0), ("any", 6.0), ("loop", 4.0)])
+def test_the_three_names_are_ones_a_runner_would_say(shape, miles):
+    """Phone test 2026-11-13: "out-and-back on the waterfront, heading 175" and "out-and-back both ways on the
+    waterfront". No route type or generator word, capitalized, short, and different for each of the three."""
+    routes = built(shape, miles)["routes"]
+    names = [r["label"] for r in routes]
+    for r in routes:
+        props = r["file"]["features"][0]["properties"]
+        assert r["label"] == props["label"] == props["name"]  # one name everywhere
+        assert not TYPE_WORDS.search(r["label"]), r["label"]
+        assert r["label"][0].isupper() and len(r["label"]) <= 36, r["label"]
+        assert not r["label"].endswith(("waterfront path", "unnamed path")), r["label"]
+        assert "plan" not in props and "name_ladder" not in props  # the generator's words never reach the app
+    assert len(set(names)) == len(names), names
 
 
 def test_the_shape_flag_agrees_with_what_was_shown():
