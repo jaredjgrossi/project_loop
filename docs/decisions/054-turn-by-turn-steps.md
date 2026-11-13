@@ -9,11 +9,18 @@ marker, and noise folded away. `summary.way` stays exactly as it was. Asked for 
 053), which could only say "Continue onto X" because the files had no turns. Code only; the LLM writes none of it.
 
 ## Choices worth knowing
-- **Maneuvers from GraphHopper, names from our stretches.** Every request now sets `instructions: true` and each `Route`
-  keeps `(sign, point index)` per instruction (no measurable cost: 44 ms either way on the local graph). GraphHopper's
-  own street names are blank on most foot sidewalks and crossings, so the names come from the labeled stretches that
-  `summary.way` uses. That keeps decision 049's rule: a runnable path is named after itself, a road's sidewalk or
-  crossing keeps the road's name, and neither shows up as a step of its own.
+- **Maneuvers from GraphHopper, names from our stretches.** GraphHopper's own street names are blank on most foot
+  sidewalks and crossings, so the names come from the labeled stretches that `summary.way` uses. That keeps decision
+  049's rule: a runnable path is named after itself, a road's sidewalk or crossing keeps the road's name, and neither
+  shows up as a step of its own.
+- **Only the three final routes are asked for instructions, in a second request.** Asking on every request (the first
+  try) is free in time (44 ms either way) but makes GraphHopper keep other vertices: same path, same length and
+  elevations, a few points different. That changed all 30 pinned top-3 fingerprints and moved some scores by 0.01, a
+  side effect of a directions feature. So the candidates are requested exactly as before; each `Route` remembers the
+  request it came from (left out of equality), and `routing.with_instructions` re-posts it with `instructions: true`
+  for the chosen routes only (`route_files`, in the engine). The two answers are the same path, so each instruction
+  is placed by its distance along the route's own line (the answer must be within 1% of the route's length, else no
+  steps). If GraphHopper is down or the route was never routed, the route simply has no `steps`.
 - **Folding.** A step under 50 m joins the one before. Where a short step is folded away, the next turn is measured
   again from the line (25 m either side, GraphHopper's own angle thresholds), so a right-left jog around a crossing
   doesn't leave a bare "left". Without that, real Kips Bay routes had "left" in the middle of a straight avenue.
@@ -45,8 +52,8 @@ turnaround steps and "Continue onto New Wave Pier" between them. The loop: "Star
 East 16th Street, continue through Union Square Park, turnaround on West 16th Street, right onto West 31st Street.
 
 ## Not done
-- **Routes that weren't routed have no steps.** "Run again" and a route rebuilt from a stored line have no GraphHopper
-  instructions, so no `steps` key (the app keeps the stretch list, as asked). Routes stored from now on carry them.
+- **Routes that weren't routed have no steps.** "Run again" and a route rebuilt from a stored line have no request
+  to ask again, so no `steps` key (the app keeps the stretch list, as asked). Routes stored from now on carry them.
 - **Names are as good as the stretch labels.** The labeler names the nearest street within 30 m, so an avenue leg can
   carry a cross street's name or none; steps inherit that, as `summary.way` always has. A true intersection test
   would fix both.
