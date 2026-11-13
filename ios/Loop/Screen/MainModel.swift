@@ -3,6 +3,7 @@ import MapKit
 import Observation
 import QuartzCore
 import SwiftUI
+import UIKit
 
 /// State of the main screen: which route is shown, the sheet, the selected mile, the camera.
 @Observable
@@ -311,10 +312,17 @@ final class MainModel {
             if build.shownRank != wasShown || now?.differs(from: wasBounds) == true { autoFitRoute(duration: 0.5) }
         }
         if build.settleAt != nil, wasSettled == nil {
-            pulseID += 1
-            Haptics.settle()
+            if UIAccessibility.isReduceMotionEnabled {
+                pulseID += 1
+                Haptics.settle()
+            } else {
+                // Pencil, then ink (decision 052): the settle is one move (ink, a tick per mile, a knock).
+                inkSettle()
+            }
         }
     }
+
+    func bumpPulse() { pulseID += 1 }
 
     /// The routes the runner can open, in order (their keys): only once `final` arrived, and only routes the
     /// server sent in full. A saved route from before `final` carried every route (or an older server)
@@ -555,6 +563,7 @@ final class MainModel {
     /// True while the route is still drawing or morphing (the map redraws every frame).
     func isAnimating(now: CFTimeInterval, reduceMotion: Bool) -> Bool {
         if waitIsMoving(now: now, reduceMotion: reduceMotion) { return true }
+        if !reduceMotion, inkIsMoving(now: now) { return true }
         guard !reduceMotion, let shown else { return false }
         if build.outlineOpacity(at: now, peak: 1, fade: Motion.outlineFade) > 0, build.provisional { return true }
         if build.morphProgress(at: now, duration: Motion.morphDuration) != nil { return true }
@@ -622,6 +631,7 @@ final class MainModel {
                 frame.arrowsOpacity = arrival * Motion.arrowOpacity
             }
         }
+        applyInk(&frame, shown: shown, now: now, reduceMotion: reduceMotion)
         return frame
     }
 }

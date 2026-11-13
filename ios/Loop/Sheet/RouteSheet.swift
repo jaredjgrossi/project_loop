@@ -278,9 +278,16 @@ struct CardBlock: View {
                         HStack(spacing: 8) {
                             TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
-                                        .typeStyle(.numeralXL)
-                                        .foregroundStyle(Palette.ink.color)
+                                    if shown.distanceTrust?.isEstimate == true {
+                                        Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
+                                            .typeStyle(.numeralXL)
+                                            .foregroundStyle(Palette.ink.color)
+                                    } else {
+                                        // Pencil, then ink (decision 052): the distance rolls up and lands with the ink.
+                                        RollingDistance(target: shown.distanceMi,
+                                                        duration: model.inkDuration(lengthM: shown.line.length),
+                                                        roll: !reduceMotion && model.inkIsMoving(now: CACurrentMediaTime()))
+                                    }
                                     Text("mi")
                                         .typeStyle(.numeralL)
                                         .foregroundStyle(Palette.unitInk.color)

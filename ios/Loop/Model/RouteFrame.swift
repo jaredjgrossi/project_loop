@@ -27,6 +27,8 @@ struct RouteFrame: Equatable {
     var lead: [Segment] = []
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
+    /// Pencil, then ink (decision 052): the current best as a graphite line, before and under the ink.
+    var pencil: [GeoPoint] = []
     /// The routes the runner can still open, after `final`: thin, solid, faint.
     var alternates: [[GeoPoint]] = []
     var alternatesOpacity: Double = 0
