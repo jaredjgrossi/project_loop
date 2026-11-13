@@ -243,8 +243,12 @@ def route_file(c: Candidate, rank: int, lat: float, lon: float, label: str, mile
                best_of: int | None, stretch_fn: Callable | None) -> dict:
     """One route as the app reads it (the fixture's `route`): the line with its shape, elevation, request and summary,
     then mile markers and turnarounds, then stretches and pieces by kind (decisions 014, 020, 023)."""
-    from api.naming import display_name
-    name = display_name(c.kind, c.label)
+    from api.naming import route_name
+    stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
+                 if stretch_fn is not None else [])
+    # Named from what the route measured: the stretch it runs most (UI review), else the generator's label
+    name = route_name(c.kind, c.label, [s["properties"] for s in stretches
+                                        if s["properties"].get("feature", "stretch") == "stretch"])
     geojson = route_to_geojson(
         c.route, lat, lon, label, miles, c.shape.as_dict(), name=name,
         extra_properties={"rank": rank, "method": c.method, "kind": c.kind, "label": name, "plan": c.label,
@@ -253,8 +257,6 @@ def route_file(c: Candidate, rank: int, lat: float, lon: float, label: str, mile
                           "start_hour": constraints.start_hour, "request": request_items(constraints)},
     )
     markers = marker_features(c.route.coordinates)
-    stretches = (stretch_fn(c.route.coordinates, c.route.elevation, constraints.start_moment())
-                 if stretch_fn is not None else [])
     geojson["features"][0]["properties"]["summary"] = route_summary(
         c, stretches, markers, geojson["features"][0]["properties"]["elevation"], rank=rank, best_of=best_of)
     geojson["features"] += markers + stretches

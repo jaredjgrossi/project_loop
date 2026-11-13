@@ -159,7 +159,7 @@ WITH s AS (
 SELECT s.ord, c.id, c.name, c.verified, p.area_id, p.name,
        EXISTS (SELECT 1 FROM osm_coastline k WHERE k.geom && ST_Expand(s.g, 0.001)
                AND ST_DWithin(k.geom::geography, s.g::geography, 60)) AS by_water,
-       w.way_id, w.name
+       w.way_id, w.name, pw.way_id, pw.name, nw.way_id, nw.highway, nw.footway, nw.name
 FROM s
 LEFT JOIN LATERAL (SELECT id, name, verified FROM corridors c WHERE c.geom && ST_Expand(s.g, 0.0003)
                    AND ST_DWithin(c.geom::geography, s.g::geography, 15) ORDER BY c.geom <-> s.g LIMIT 1) c ON true
@@ -169,6 +169,18 @@ LEFT JOIN LATERAL (SELECT way_id, name FROM osm_ways w WHERE w.name IS NOT NULL 
                    AND ST_DWithin(w.geom::geography, s.g::geography, 30)
                    AND w.highway NOT IN ('motorway', 'motorway_link', 'trunk', 'trunk_link')
                    ORDER BY w.geom <-> s.g LIMIT 1) w ON true
+-- the path's own name: a named walkway or bike path that isn't a road's sidewalk or crossing (UI review: a stretch of
+-- the East River Esplanade came back "FDR Drive")
+LEFT JOIN LATERAL (SELECT way_id, name FROM osm_ways q WHERE q.name IS NOT NULL AND q.geom && ST_Expand(s.g, 0.0004)
+                   AND ST_DWithin(q.geom::geography, s.g::geography, 30)
+                   AND q.highway IN ('footway', 'path', 'cycleway', 'pedestrian', 'track')
+                   AND coalesce(q.tags->>'footway', '') NOT IN ('sidewalk', 'crossing')
+                   ORDER BY q.geom <-> s.g LIMIT 1) pw ON true
+-- what the route is on: the nearest way of any name
+LEFT JOIN LATERAL (SELECT way_id, highway, tags->>'footway' AS footway, name FROM osm_ways q
+                   WHERE q.geom && ST_Expand(s.g, 0.0002) AND ST_DWithin(q.geom::geography, s.g::geography, 12)
+                   AND q.highway NOT IN ('motorway', 'motorway_link', 'trunk', 'trunk_link')
+                   ORDER BY q.geom <-> s.g LIMIT 1) nw ON true
 ORDER BY s.ord
 """
 
@@ -178,8 +190,13 @@ WHERE ST_DWithin(geom::geography, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)::geog
 """
 
 
+PATH_HIGHWAYS = ("footway", "path", "cycleway", "pedestrian", "track")
+
+
 def _label(row) -> Label:
-    _, cid, cname, verified, area_id, pname, by_water, way_id, wname = row
+    row = (*row, *(None,) * (15 - len(row)))  # rows from before the path columns
+    _, cid, cname, verified, area_id, pname, by_water, way_id, wname, pw_id, pw_name, nw_id, nw_highway, nw_footway, \
+        nw_name = row
     if cid is not None:
         how = "continuity checked by routing" if verified else "has gaps when routed end to end"
         if cname.startswith("unnamed") and wname:
@@ -187,9 +204,14 @@ def _label(row) -> Label:
         return Label("corridor", cname, f"Loop corridor catalog #{cid}, from OSM ways ({how})")
     if area_id is not None:
         return Label("park", pname, f"OSM park area a{area_id}")
-    if by_water:
-        return Label("waterfront", wname or "waterfront path",
-                     "OSM coastline within 60 m" + (f"; OSM way w{way_id}" if way_id else ""))
+    if by_water:  # the path's own name, never the road beside it (UI review: "FDR Drive", "11th Avenue")
+        return Label("waterfront", pw_name or "waterfront path",
+                     "OSM coastline within 60 m" + (f"; OSM way w{pw_id}" if pw_id else ""))
+    on_a_path = nw_highway in PATH_HIGHWAYS and nw_footway not in ("sidewalk", "crossing")  # not a road's sidewalk
+    if on_a_path:
+        if nw_name:
+            return Label("path", nw_name, f"OSM way w{nw_id}")
+        return Label("path", "unnamed path", "OSM ways (unnamed)")  # not a neighbor's name: it isn't on that path
     if wname is not None:
         return Label("street", wname, f"OSM way w{way_id}")
     return Label("path", "unnamed path", "OSM ways (unnamed)")

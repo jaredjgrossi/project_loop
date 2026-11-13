@@ -514,3 +514,94 @@ def test_a_lap_starts_where_the_way_in_meets_the_ring():  # full review 4.2, Q6:
 def generate_loops_for_tests():
     from api.generate import generate_loops
     return generate_loops
+
+# ---- the final event holds all three routes in full, with the shape flag (UI review) ------------------------------------
+
+
+def stretch_for(name, kind="corridor", length_m=3800):
+    return [{"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+             "properties": {"feature": "stretch", "name": name, "kind": kind, "length_m": length_m, "from_mile": 0.0,
+                            "to_mile": 2.4, "facts": [{"text": f"On {name}", "source": "test", "trust": "listed"}]}}]
+
+
+def three_candidates():
+    return [candidate(label="first", score=90), candidate(label="second", score=80), candidate(label="third", score=70)]
+
+
+def test_every_route_of_the_final_has_its_full_file():
+    final = engine(fake_generate(three_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_f")
+    assert [r["rank"] for r in final["routes"]] == [1, 2, 3]
+    for i, r in enumerate(final["routes"], 1):
+        props = r["file"]["features"][0]["properties"]
+        assert props["rank"] == i and props["summary"]["distance"]["status"] == "measured"
+        assert {"signalized_crossings", "climb", "waterfront_pct", "park_pct", "way", "reason"} <= set(props["summary"])
+        assert r["label"] == props["label"] == props["name"]  # one name, in the list and in the file
+    assert final["route"] == final["routes"][0]["file"]  # the first route's file, as before
+
+
+def test_the_routes_are_named_from_their_own_stretches():
+    names = iter(["East River Esplanade", "Central Park", "Hudson River Greenway"])
+    calls = []
+
+    def stretch_fn(coords, elevation, start):
+        calls.append(1)
+        return stretch_for(next(names))
+    final = engine(fake_generate(three_candidates()), stretch_fn=stretch_fn).build(
+        rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_f2")
+    assert len(calls) == 3  # each route, not only the first
+    assert sorted(r["label"] for r in final["routes"]) == ["Loop on Central Park", "Loop on East River Esplanade",
+                                                           "Loop on Hudson River Greenway"]
+
+
+def test_a_shape_edit_from_the_pool_has_all_three_files_too():
+    cands = three_candidates()
+    inner = fake_generate(cands)
+
+    def reporting(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, on_candidate=None, **kw):
+        for c in cands:  # what the real generator does: every passing candidate, as it passes
+            on_candidate(c, 0.1)
+        return inner(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=top_n, **kw)
+    eng = engine(reporting)
+    start = Start(*KIPS_POINT, "x")
+    eng.build(rc(), start, lambda e: None, "r_p1")
+    final = eng.from_pool(rc(shape="any"), start, "r_p1", lambda e: None, "r_p2")
+    assert final is not None and all("file" in r for r in final["routes"]) and final["shape"]["met"] is True
+
+
+def test_the_shape_flag_says_when_the_shape_was_met():
+    final = engine(fake_generate(three_candidates())).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_s1")
+    assert final["shape"] == {"requested": "loop", "met": True, "shown": ["loop"]}
+    anything = engine(fake_generate(three_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_s2")
+    assert anything["shape"]["requested"] == "any" and anything["shape"]["met"] is True
+
+
+def test_the_shape_flag_says_when_a_loop_could_not_be_found():
+    import dataclasses
+    from collections import Counter
+    from api.generate import GenerationResult
+    out_and_back = dataclasses.replace(candidate(label="out-and-back on Riverside Walk, heading 19 degrees"),
+                                       kind="out_and_back")
+
+    def no_loops(lat, lon, miles, grid, route_fn, round_trip_fn, top_n=3, **kw):
+        return GenerationResult(candidates=[], within_tolerance=False, grid=grid, generated=20,
+                                rejected=Counter({"unwanted_out_and_back": 1}), fallback=[out_and_back])
+    final = engine(no_loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_s3")
+    assert final["shape"] == {"requested": "loop", "met": False, "shown": ["out_and_back"]}
+    assert final["notes"][0]["key"] == "no_good_loop"  # the note says it in words; the flag lets the app say it too
+
+
+def test_a_run_to_an_end_is_a_one_way_request_and_met():
+    from api.shape import shape_metrics  # noqa: F401
+    from api.engine import shape_status
+    one_way = dataclasses_replace(candidate(), kind="a_to_b")
+    assert shape_status("one_way", [one_way]) == {"requested": "one_way", "met": True, "shown": ["a_to_b"]}
+
+
+def dataclasses_replace(c, **kw):
+    import dataclasses
+    return dataclasses.replace(c, **kw)
+
+
+def test_no_route_means_the_requested_shape_wasnt_met():
+    from api.engine import shape_status
+    assert shape_status("loop", []) == {"requested": "loop", "met": False, "shown": []}

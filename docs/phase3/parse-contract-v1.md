@@ -173,6 +173,46 @@ These are the engine's three stream events (decision 024 and the streaming notes
 ```
 - `route_id` identifies the stored result (`GET /v1/routes/{id}`).
 - `final` also carries `pool_size` ("Best of N").
+- **`final` holds all three routes in full** (decision 049; UI review). Each entry of `routes` is as in `top3` (`id`, `rank`,
+  `kind`, `label`, `score`, `distance`, `geometry`) plus:
+  - `file`: the route file the app already reads for the first route (`route`): a GeoJSON FeatureCollection with the line
+    and its `properties.summary`, the start, mile and turnaround markers, the stretches and the pieces by kind. So the
+    second and third routes have the same stats, pieces and stretches as the first. `route` stays, equal to
+    `routes[0].file`, until the app reads `file`.
+  - `label` is the route's name from what it measured (below), and the same string as `file`'s `properties.label`. The
+    `top3` and `provisional` events name routes from the generator's label, before the stretches are measured, so the
+    name can change at `final`: show the `final` one.
+- **`final.shape`**: `{"requested": "any" | "loop" | "out_and_back" | "one_way", "met": true | false, "shown": ["loop"]}`.
+  `met` is false when the shape asked for couldn't be found and the routes shown are another kind (a loop request
+  that came back as the best out-and-back, with the `no_good_loop` note), or when there is no route. `shown` is the
+  kinds of the routes in `routes`. A run to an end is `one_way`.
+- **`kind`** is `loop`, `out_and_back`, `lollipop` (an out-and-back with a loop at the far end) or `a_to_b` (a one-way run).
+- **Route names** (`label`, `properties.name`) come from the stretch the route runs most, when it carries at least 40%
+  of the route and has a real name: "Out-and-back on East River Esplanade", "Loop through Central Park", "One way on
+  Hudson River Greenway". With no stretch that stands out they come from the generator: "Loop on the street grid".
+  "Unnamed path" and "waterfront path" never name a route.
+- **`summary.way`** (in each route's `file`): the stretch list for "The way", in order:
+  ```json
+  {"name": "East River Esplanade", "kind": "corridor", "from_mile": 0.52, "to_mile": 2.61,
+   "distance": {"value": 2.09, "unit": "mi", "meters": 3363, "status": "measured", "source": "route geometry (GraphHopper)"},
+   "status": "measured", "trust": "listed", "source": "Loop corridor catalog #9, from OSM ways (...)",
+   "turnaround": {"mile": 1.51, "meters": 2435}}
+  ```
+  - `kind` is `corridor`, `park`, `waterfront`, `street` or `path`. `turnaround` is on the stretch the run turns on (one
+    per turn: a route that goes out both ways has two); a loop has none.
+  - A runnable path is never named after the road beside it: a stretch of the East River Esplanade or the Hudson
+    River Greenway doesn't come back "FDR Drive" or "11th Avenue". A waterfront stretch with no named path is
+    "waterfront path"; a path with no name is "unnamed path". A road's sidewalk or crossing keeps the road's name.
+- **`summary.reason`**: one line on why the route fits, written by code from its own numbers, never by the model:
+  `{"text": "58% on the waterfront, 22 lights, flat", "parts": [{"key": "water", "text": "...", "status": "measured"}],
+  "status": "estimate", "source": "..."}`. Parts, in this order and at most three:
+  - `park`: "82% through Central Park" at 40% park or more with one park carrying it, else "35% in parks" from 20%;
+  - `water`: "58% on the waterfront" from 20%;
+  - `lights`: the total ("22 lights", "1 light", "No lights");
+  - `flat` ("flat", under 8 m of climb a mile) or `hilly` ("120 m of climb", over 25 m a mile); both estimates.
+
+  A route that is mostly park isn't called a waterfront route for a sliver by the water. `text` is null when nothing
+  stands out and nothing is scored.
 
 ## Event: `question` (engine)
 Same shape as `parsed.question`, with `from: "engine"` and its own `parse_id`. The stream ends after it (then `done`). Built in step 8: when a run ends somewhere else and the distance is shorter than the shortest way there, beyond the tolerance, the engine asks before anything streams but `parsed`:
