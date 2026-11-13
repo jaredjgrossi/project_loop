@@ -43,19 +43,28 @@ struct EditorPanel: View {
             Text(title).typeStyle(.eyebrow).foregroundStyle(Palette.inkMuted.color)
             control
             HStack {
-                Button("Cancel") { model.editing = nil }
-                    .typeStyle(.body).foregroundStyle(Palette.inkMuted.color)
+                // Each is a 44 pt target (they were as tall as their text), and Cancel is ink, like
+                // the Cancel beside the field.
+                Button { model.editing = nil } label: {
+                    Text("Cancel").typeStyle(.body).foregroundStyle(Palette.ink.color)
+                        .frame(minWidth: Metrics.minTap, minHeight: Metrics.minTap, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
                 Spacer()
-                Button("Done") { done() }
-                    .typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                Button { done() } label: {
+                    Text("Done").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                        .frame(minWidth: Metrics.minTap, minHeight: Metrics.minTap, alignment: .trailing)
+                        .contentShape(Rectangle())
+                }
             }
-            .frame(height: Metrics.minTap)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
         .frame(width: 280, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Palette.surfaceSheet.color))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.lineHairline.color, lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 8)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Palette.surfaceSheet.color))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.lineHairline.color, lineWidth: 1))
+        // The sheets' warm shadow, not neutral black.
+        .shadow(color: Color(red: 60 / 255, green: 40 / 255, blue: 10 / 255).opacity(0.14), radius: 12, y: 8)
         .frame(maxWidth: .infinity, alignment: target.isUnderstood ? .leading : .center)
         .padding(.horizontal, Metrics.s24)
         .onAppear(perform: load)
