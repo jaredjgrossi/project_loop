@@ -142,6 +142,6 @@ enum Motion {
     /// The two routes not shown, once `final` arrived: faint dots, tappable.
     static let otherRouteOpacity: Double = 0.55
     /// The direction chevrons on the route line.
-    static let arrowOpacity: Double = 0.85
+    static let arrowOpacity: Double = 0.95
     static let outlineFade: TimeInterval = 0.5
 }

@@ -222,19 +222,19 @@ struct RouteMapView: UIViewRepresentable {
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
-        /// A tiny chevron pointing along the line (right, before the map rotates it), drawn as a mask
+        /// A thin chevron pointing along the line (right, before the map rotates it), drawn as a mask
         /// so the layer colours it.
         private static func arrowIcon() -> UIImage {
-            let size = CGSize(width: 6, height: 6)
+            let size = CGSize(width: 10, height: 10)
             return UIGraphicsImageRenderer(size: size).image { ctx in
                 let g = ctx.cgContext
                 g.setStrokeColor(UIColor.black.cgColor)
-                g.setLineWidth(1.1)
+                g.setLineWidth(1.5)
                 g.setLineCap(.round)
                 g.setLineJoin(.round)
-                g.move(to: CGPoint(x: 1.8, y: 0.9))
-                g.addLine(to: CGPoint(x: 4.4, y: 3))
-                g.addLine(to: CGPoint(x: 1.8, y: 5.1))
+                g.move(to: CGPoint(x: 3, y: 1.8))
+                g.addLine(to: CGPoint(x: 7, y: 5))
+                g.addLine(to: CGPoint(x: 3, y: 8.2))
                 g.strokePath()
             }.withRenderingMode(.alwaysTemplate)
         }
@@ -349,18 +349,19 @@ struct RouteMapView: UIViewRepresentable {
             lead.slot = slot
             try? map.addLayer(lead)
 
-            // Direction: tiny chevrons along the first pass of the route, no wider than the line and in
-            // the casing colour, so they read as faint notches in it (phone, 2026-11-13: the first
-            // bigger, haloed ones were bulky). Spaced in screen points, so they thin out when zoomed out.
+            // Direction: thin chevrons in the route's own colour along the first pass, a little wider
+            // than the line so they read as arrowheads growing from it. Phone, 2026-11-13: big haloed
+            // ones were bulky, tiny notches in the casing colour looked unintentional. Spaced in screen
+            // points, so they thin out when zoomed out.
             try? map.addImage(Self.arrowIcon(), id: Ids.arrowImage, sdf: true)
             var arrows = SymbolLayer(id: Ids.arrows, source: Ids.arrowsSource)
             arrows.iconImage = .constant(.name(Ids.arrowImage))
             arrows.symbolPlacement = .constant(.line)
-            arrows.symbolSpacing = .constant(64)
+            arrows.symbolSpacing = .constant(72)
             arrows.iconRotationAlignment = .constant(.map)
             arrows.iconAllowOverlap = .constant(true)
             arrows.iconIgnorePlacement = .constant(true)
-            arrows.iconSize = .constant(1.3)
+            arrows.iconSize = .constant(1)
             arrows.iconOpacity = .constant(0)
             arrows.slot = slot
             try? map.addLayer(arrows)
@@ -394,7 +395,7 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
-            try? map.setLayerProperty(for: Ids.arrows, property: "icon-color", value: Palette.routeCasing.hex(dark: dark))
+            try? map.setLayerProperty(for: Ids.arrows, property: "icon-color", value: (dark ? Palette.routeStreet : Palette.routeWater).hex(dark: dark))
             try? map.setLayerProperty(for: Ids.arrows, property: "icon-emissive-strength", value: 1.0)
             set(Ids.lead, "line-color", Palette.routeWater)
             set(Ids.base, "line-color", Palette.routeStreet)

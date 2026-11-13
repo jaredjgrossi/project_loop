@@ -7,10 +7,11 @@ Date: 2026-11-13 (phone test of PR #18). iOS only; no server change.
    deepest); path stays dashed. The tan street colour read as map, so only the waterfront looked like the
    route. The profile strip uses the same colours. Routes you are not on are neutral (warm white at night, ink on
    paper) at 55%, solid.
-2. **Direction arrows, first pass only.** Tiny chevrons, no wider than the line, in the casing colour, spaced in
-   screen points. `RouteDirection.firstPass` drops any stretch that retraces ground covered at least 150 m earlier
+2. **Direction arrows, first pass only.** Thin chevrons in the route's own colour (the lightest blue at night, the deepest on paper), a little
+   wider than the line so they read as arrowheads growing from it, spaced 72 pt apart in screen points. `RouteDirection.firstPass` drops any stretch that retraces ground covered at least 150 m earlier
    (within 14 m, for 5+ samples of 10 m), so an out-and-back or a lollipop's stick has arrows on the way out only.
-   Bigger arrows with a halo were tried and rejected as bulky.
+   Big haloed arrows were rejected as bulky and tiny casing-coloured notches as
+   unintentional-looking (phone, 2026-11-13); they follow the line as drawn at each zoom.
 3. **Directions list.** A pill on the card opens the steps, built by code from the file's stretches and turnaround
    (`Directions.steps`): start on X, continue onto Y for 0.25 mi, turn around, head back, finish. Stretches under
    0.03 mi fold into the one before; same-name neighbours merge. Names are `listed` (OSM and the corridor catalog)
