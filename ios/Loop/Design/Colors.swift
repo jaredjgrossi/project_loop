@@ -29,7 +29,11 @@ enum Palette {
     static let onAction = Token(paper: 0xFBF6EA, night: 0x14182E)
     static let routeWater = Token(paper: 0x2C3A8F, night: 0x9AA8F0)
     static let routePath = Token(paper: 0x5B6FBF, night: 0x7C8DE0)
-    static let routeStreet = Token(paper: 0x8A7862, night: 0xB3A18B)
+    /// The route is one blue line from start to finish: street is its lightest tint, path the middle
+    /// one, waterfront the deepest (phone, 2026-11-13: tan street pieces read as map, not route).
+    static let routeStreet = Token(paper: 0x6674CC, night: 0xBFC8F5)
+    /// The routes you are not on: neutral, so no blue or tan piece is mistaken for part of this route.
+    static let routeOther = Token(paper: 0x2B2620, night: 0xF1E9DA)
     static let routeCasing = Token(paper: 0xFBF6EA, night: 0x1C1915)
     static let accentStart = Token(paper: 0xD2492A, night: 0xF0764F)
     static let alert = Token(paper: 0xB23A1B, night: 0xFF8A66)

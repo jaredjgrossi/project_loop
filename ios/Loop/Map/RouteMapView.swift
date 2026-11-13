@@ -367,8 +367,8 @@ struct RouteMapView: UIViewRepresentable {
             try? map.setLayerProperty(for: Ids.warmWater, property: "fill-color", value: Palette.warmWater.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
-            set(Ids.others, "line-color", Palette.routeStreet)
-            set(Ids.alternates, "line-color", Palette.routeStreet)
+            set(Ids.others, "line-color", Palette.routeOther)
+            set(Ids.alternates, "line-color", Palette.routeOther)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
         }
 
