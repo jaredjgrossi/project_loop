@@ -187,10 +187,12 @@ These are the engine's three stream events (decision 024 and the streaming notes
   that came back as the best out-and-back, with the `no_good_loop` note), or when there is no route. `shown` is the
   kinds of the routes in `routes`. A run to an end is `one_way`.
 - **`kind`** is `loop`, `out_and_back`, `lollipop` (an out-and-back with a loop at the far end) or `a_to_b` (a one-way run).
-- **Route names** (`label`, `properties.name`) come from the stretch the route runs most, when it carries at least 40%
-  of the route and has a real name: "Out-and-back on East River Esplanade", "Loop through Central Park", "One way on
-  Hudson River Greenway". With no stretch that stands out they come from the generator: "Loop on the street grid".
-  "Unnamed path" and "waterfront path" never name a route.
+- **Route names** (`label`, `properties.name`; decision 050) are what a runner would say: the main stretch, which way it
+  heads and where it turns: "East River Esplanade, north to 34th", "Wythe Avenue, south to Myrtle", "Central Park,
+  clockwise", "1st Ave & E 30th St, clockwise". Never the route type (`kind` has it), compass degrees or generator words;
+  capitalized, at most 36 characters, and different for each of the three routes of a `final`. The `top3` and
+  `provisional` events still name routes from the generator ("Out-and-back on the waterfront"); show the `final` name.
+  `properties.plan` (the generator's label) is no longer in the files of a `final`.
 - **`summary.way`** (in each route's `file`): the stretch list for "The way", in order:
   ```json
   {"name": "East River Esplanade", "kind": "corridor", "from_mile": 0.52, "to_mile": 2.61,

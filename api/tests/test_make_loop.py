@@ -332,12 +332,12 @@ def test_the_route_file_is_named_after_the_stretch_it_runs_most(tmp_path):  # UI
                                                                            "source": "test", "trust": "listed"}]}}
     assert go(tmp_path, fake_generate([candidate()]), stretch_fn=lambda coords, ele, start: [stretch]) == 0
     props = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]
-    assert props["name"] == props["label"] == "Loop on East River Esplanade"
-    assert props["plan"]  # the generator's own label stays, for the pool and the evals
+    assert props["name"] == props["label"] == "East River Esplanade"  # the way round would make it 38 characters
+    assert props["plan"]  # the generator's own label stays in the file, for the pool and the evals (the engine drops it)
     assert props["summary"]["way"][0]["name"] == "East River Esplanade"
 
 
 def test_without_stretches_the_name_comes_from_the_generators_label(tmp_path):
     assert go(tmp_path, fake_generate([candidate()])) == 0
     props = json.loads((tmp_path / "loop.geojson").read_text())["features"][0]["properties"]
-    assert props["name"] == "Loop on the street grid"
+    assert props["name"] == "Street grid, counterclockwise"

@@ -91,7 +91,7 @@ def fake_generate(cands, threads=True):
 
 
 def engine(generate_fn, **kw) -> Engine:
-    base = dict(generate_fn=generate_fn, grid_fn=lambda lat, lon: GRID, closures_fn=None, stretch_fn=None,
+    base = dict(generate_fn=generate_fn, grid_fn=lambda lat, lon: GRID, closures_fn=None, stretch_fn=None, cross_fn=None,
                 anchor_fn=None, feature_anchor_fn=[], ready_fn=lambda: True,
                 context_for_fn=lambda *a, **kw: None)  # no Postgres in unit tests (decision 019): context not scored
     return Engine(**(base | kw))
@@ -106,9 +106,10 @@ def test_build_streams_top3_and_provisional_then_returns_final():
     assert [r["label"] for r in sent[1]["routes"]] == ["Loop", "Loop"]  # named from the kind (decision 044)
     assert final["event"] == "final" and final["pool_size"] == 17 and final["notes"] == []
     assert final["pool"] == {"candidates": 20, "best_of": 17}  # as the fixture's pool, so the app reads it unchanged
-    assert [r["label"] for r in final["routes"]] == ["Loop", "Loop"]
+    assert [r["label"] for r in final["routes"]] == ["Street run, counterclockwise", "Street run, 2.4 mi"]  # two, told apart
     props = final["route"]["features"][0]["properties"]
-    assert props["rank"] == 1 and props["label"] == "Loop" and props["plan"] == "first" and props["name"] == "Loop"
+    assert props["rank"] == 1 and props["label"] == props["name"] == "Street run, counterclockwise"
+    assert "plan" not in props and "name_ladder" not in props  # the generator's words never reach the app
     assert "summary" in props and "request" in props
 
 
@@ -181,7 +182,7 @@ def test_an_a_to_b_run_with_no_distance_is_the_shortest_way():
                                                                   "lat": EAST[0], "lon": EAST[1]}),
                                   Start(*KIPS_POINT, "x"), sent.append, "r_2", end=EAST)
     assert final["routes"][0]["kind"] == "a_to_b" and final["notes"] == []
-    assert final["route"]["features"][0]["properties"]["label"] == "One way, the shortest way"
+    assert final["route"]["features"][0]["properties"]["label"] == "Shortest way, east"
     assert any(e["event"] == "top3" for e in sent)
 
 
@@ -422,7 +423,7 @@ def test_loop_with_no_loop_shows_the_best_other_kind_and_says_so():
                                 rejected=Counter({"unwanted_out_and_back": 1}), fallback=[out_and_back])
     final = engine(no_loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_nl")
     assert [r["kind"] for r in final["routes"]] == ["out_and_back"]
-    assert final["routes"][0]["label"] == "Out-and-back on Riverside Walk"
+    assert final["routes"][0]["label"] == "Riverside Walk, north"
     assert final["notes"][0]["key"] == "no_good_loop"
     assert final["notes"][0]["text"] == "No good loop from here; showing the best out-and-back"
 
@@ -435,7 +436,7 @@ def test_with_loops_the_fallback_is_never_used():
         return GenerationResult(candidates=[candidate()], within_tolerance=True, grid=grid, generated=20,
                                 rejected=Counter(), fallback=[candidate(label="other")])
     final = engine(loops).build(rc(shape="loop"), Start(*KIPS_POINT, "x"), lambda e: None, "r_l")
-    assert final["notes"] == [] and final["routes"][0]["label"] == "Loop on the street grid"
+    assert final["notes"] == [] and final["routes"][0]["label"] == "Street grid, counterclockwise"
 
 
 def test_a_shape_edit_after_a_via_build_reads_candidates_not_vias():  # full review 7.2: `passed` was rebound
@@ -549,8 +550,9 @@ def test_the_routes_are_named_from_their_own_stretches():
     final = engine(fake_generate(three_candidates()), stretch_fn=stretch_fn).build(
         rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_f2")
     assert len(calls) == 3  # each route, not only the first
-    assert sorted(r["label"] for r in final["routes"]) == ["Loop on Central Park", "Loop on East River Esplanade",
-                                                           "Loop on Hudson River Greenway"]
+    assert sorted(r["label"] for r in final["routes"]) == ["Central Park, counterclockwise",
+                                                           "East River Esplanade",  # "..., counterclockwise" is 38
+                                                           "Hudson River Greenway"]
 
 
 def test_a_shape_edit_from_the_pool_has_all_three_files_too():
