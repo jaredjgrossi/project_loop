@@ -28,7 +28,11 @@ enum Directions {
     }
 
     static func steps(for detail: RouteDetail) -> [DirectionStep] {
-        steps(legs: detail.stretches.map { Leg(name: $0.name, from: $0.fromMile, to: $0.toMile) },
+        // The server's turns when the file has them; the stretch list for saved routes and older files.
+        if let turns = detail.summary.steps, !turns.isEmpty {
+            return steps(turns: turns, total: detail.distanceMi, backAtStart: detail.kindText != "ONE WAY")
+        }
+        return steps(legs: detail.stretches.map { Leg(name: $0.name, from: $0.fromMile, to: $0.toMile) },
               turnaround: detail.turnaround?.alongMi, total: detail.distanceMi,
               backAtStart: detail.kindText != "ONE WAY")
     }
@@ -68,6 +72,50 @@ enum Directions {
         }
         add(.finish, total, backAtStart ? "Finish back at the start" : "Finish")
         return out
+    }
+
+    /// The server's maneuvers as list lines: "Turn left onto East 33rd Street", "Continue onto ...".
+    /// A null street on a turn is deliberate (the runner is already on it): "Turn left", no "onto".
+    static func steps(turns: [RouteFile.Turn], total: Double, backAtStart: Bool) -> [DirectionStep] {
+        let ordered = turns.sorted { $0.index < $1.index }
+        var out: [DirectionStep] = []
+        for t in ordered {
+            let street = t.street.map(CardText.nameLine)
+            let miles = t.distance.miles
+            let kind: DirectionStep.Kind
+            let text: String
+            var run: Double? = miles
+            switch t.maneuver {
+            case "start":
+                kind = .start; text = street.map { "Start on \($0)" } ?? "Start"
+            case "turnaround":
+                kind = .turnaround
+                text = street.map { "Turn around, head back on \($0)" } ?? "Turn around"
+            case "finish":
+                kind = .finish; text = backAtStart ? "Finish back at the start" : "Finish"; run = nil
+            case "continue":
+                kind = .run; text = street.map { "Continue onto \($0)" } ?? "Continue"
+            default:
+                kind = .run; text = turnPhrase(t.maneuver, street: street)
+            }
+            out.append(DirectionStep(id: out.count, kind: kind, mile: t.fromMile, text: text, miles: run))
+        }
+        return out
+    }
+
+    private static func turnPhrase(_ maneuver: String, street: String?) -> String {
+        let verb: String
+        switch maneuver {
+        case "left": verb = "Turn left"
+        case "right": verb = "Turn right"
+        case "slight_left": verb = "Bear left"
+        case "slight_right": verb = "Bear right"
+        case "sharp_left": verb = "Turn sharp left"
+        case "sharp_right": verb = "Turn sharp right"
+        case "u_turn": verb = "Make a U-turn"
+        default: verb = "Continue"
+        }
+        return street.map { "\(verb) onto \($0)" } ?? verb
     }
 
     /// Short stretches join the one before them (the first joins the one after), and neighbours with the
