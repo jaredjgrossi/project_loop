@@ -656,13 +656,18 @@ struct RatingContent: View {
                         .background(Capsule().fill(Palette.surfaceSunken.color))
                         .padding(.top, 10)
                 }
-                HStack {
-                    Spacer()
-                    Button("Done") { noteFocused = false; model.finishNotForMe() }
-                        .typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
-                        .frame(minHeight: Metrics.minTap)
+                // The only way forward after "Not for me": a real button, like every other step
+                // that finishes something.
+                Button { noteFocused = false; model.finishNotForMe() } label: {
+                    Text("Done")
+                        .typeStyle(.bodyStrong)
+                        .foregroundStyle(Palette.onAction.color)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
                 }
-                .padding(.top, 4)
+                .buttonStyle(.plain)
+                .padding(.top, 14)
             } else {
                 Button("Not now") { model.closeRating() }
                     .typeStyle(.body).foregroundStyle(Palette.inkMuted.color)
