@@ -409,8 +409,24 @@ extension MainModel {
         locationPulsing = false
         reachFadeStart = reachStart == nil ? nil : CACurrentMediaTime()
         frameVersion += 1
+        // A build that stopped before its final leaves a card with nothing to act on: it slides
+        // away, so the notice is the only sheet (one edge, one way out), not a card on a card.
+        if Self.cardLeavesForNotice(sheetShown: sheetShown, build: build) {
+            withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.25)) {
+                sheetShown = false
+            }
+        }
         liveNotice = n
     }
+
+    /// The route card gives way to a notice only when the build never reached its final. A
+    /// finished route keeps its card: it can still be saved, shared and run.
+    static func cardLeavesForNotice(sheetShown: Bool, build: BuildState) -> Bool { sheetShown && !build.final }
+
+    #if DEBUG
+    /// Screenshots (`-LoopLateNotice`): the stream drops after the settle, before the final.
+    func debugLateNotice() { showNotice(LiveNotice(text: LiveCopy.unreachable, canRetry: true)) }
+    #endif
 
     #if DEBUG
     /// Screenshots (`-LoopQuestion`): the parser's question with no options.

@@ -85,4 +85,15 @@ final class BuildStateTests: XCTestCase {
         XCTAssertEqual(s.drawnFraction(at: 0, length: 5000, metresPerSecond: 2500), 1)
         XCTAssertNil(s.settleAt)
     }
+
+    @MainActor
+    func testTheCardLeavesForANoticeOnlyBeforeTheFinal() {
+        var build = BuildState()
+        build.apply(.top3([1, 2, 3]), at: 0)
+        build.apply(.provisional, at: 1)
+        XCTAssertTrue(MainModel.cardLeavesForNotice(sheetShown: true, build: build), "settled, no final: nothing to act on")
+        XCTAssertFalse(MainModel.cardLeavesForNotice(sheetShown: false, build: build), "no card up, nothing to move")
+        build.apply(.final([1, 2, 3]), at: 2)
+        XCTAssertFalse(MainModel.cardLeavesForNotice(sheetShown: true, build: build), "a finished route keeps its card")
+    }
 }

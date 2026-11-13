@@ -237,6 +237,12 @@ struct MainScreen: View {
                 model.fieldText = args[i + 1]
             }
         }
+        if args.contains("-LoopLateNotice") {
+            // Screenshots (with -LoopDemo): the build fails after the route settled, before the final.
+            while !model.cardRevealed { try? await Task.sleep(for: .seconds(0.1)) }
+            try? await Task.sleep(for: .seconds(1.3))
+            model.debugLateNotice()
+        }
         if args.contains("-LoopQuestion") {
             // Screenshots (with -LoopDemo): a question with no options, as the parser asks it.
             while model.stage != .reading { try? await Task.sleep(for: .seconds(0.1)) }
