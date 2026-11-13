@@ -317,6 +317,17 @@ Built in step 11 (decision 038):
   `Content-Disposition: attachment; filename="loop-<route id>.gpx"`. `{id}` is a route's own id or a build's (its first
   route). It holds the line, a `Start` waypoint, `Mile n` waypoints and `Turnaround` waypoints, and no elevation.
   Unknown: HTTP 404. Needs the token.
+- `GET /v1/weather/nyc` (decision 051): the city's current temperature for the header line. Needs the token. No
+  query, no location: the reading is for New York, so the phone's position is never sent to Loop or on to the
+  provider. `200`:
+  `{"v": 1, "temp_f": 41, "condition": "cloudy", "description": "Cloudy", "observed_at": "2026-11-13T18:51:00Z",
+  "station": "KNYC", "source": "National Weather Service, KNYC Central Park", "status": "measured"}`.
+  - `condition` is one of `clear`, `partly_cloudy`, `cloudy`, `fog`, `rain`, `snow`, `thunderstorm`, `other`
+    (`other` for haze, smoke and anything the mapping doesn't know; `description` is the station's own wording).
+  - `observed_at` is when the station took the reading (UTC), not when you asked. Cached on the server for 5 minutes,
+    so a reading can be a few minutes older than the request; it is never more than an hour old.
+  - HTTP 503 `{"detail": "weather_unavailable"}` when no station has a fresh reading. The app keeps its last reading
+    for its own 30 minutes, then hides the temperature.
 - `GET /v1/health`: the server is up and the engine is ready.
 
 ## Copy

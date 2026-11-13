@@ -96,12 +96,12 @@ def fake_places():
     yield FakePlaces()
 
 
-def client_for(by_text=None, engine=None, store=None, parse_fn=None, route_store=None, feedback_store=None):
+def client_for(by_text=None, engine=None, store=None, parse_fn=None, route_store=None, feedback_store=None, weather=None):
     parse_fn = parse_fn or fake_parse(by_text or {})
     app = create_app(token=TOKEN, parse_fn=parse_fn, places=fake_places, engine=engine or FakeEngine(),
                      route_store=FakeRouteStore() if route_store is None else route_store,
                      feedback_store=FakeFeedbackStore() if feedback_store is None else feedback_store,
-                     store=PendingStore() if store is None else store, health_fn=lambda: {"engine": True, "database": True,
+                     weather=weather, store=PendingStore() if store is None else store, health_fn=lambda: {"engine": True, "database": True,
                                                                        "parser": True}, warm=False)
     return TestClient(app), parse_fn
 
@@ -605,3 +605,49 @@ def test_gpx_for_an_unknown_route_is_404_and_needs_the_token():
     assert c.get("/v1/routes/r_nothere.1/gpx", headers=AUTH).status_code == 404
     assert c.get("/v1/routes/r_old00001.1/gpx").status_code == 401
     assert c.get("/v1/routes/r_old00001.9/gpx", headers=AUTH).status_code == 404  # a route the build didn't have
+
+
+# ---- the weather line (decision 051) -----------------------------------------------------------------------------------
+
+
+class FakeWeather:
+    def __init__(self, reading=None, fail=False):
+        self.calls, self._reading, self._fail = 0, reading, fail
+
+    def reading(self):
+        from api.weather import WeatherUnavailable
+        self.calls += 1
+        if self._fail:
+            raise WeatherUnavailable("no station")
+        return dict(self._reading)
+
+
+READING = {"temp_f": 41, "condition": "cloudy", "description": "Cloudy", "observed_at": "2026-11-13T18:51:00Z",
+           "station": "KNYC", "source": "National Weather Service, KNYC Central Park", "status": "measured"}
+
+
+def test_weather_needs_the_loop_token():
+    w = FakeWeather(READING)
+    c, _ = client_for(weather=w)
+    for headers in ({}, {"Authorization": "Bearer nope"}):
+        assert c.get("/v1/weather/nyc", headers=headers).status_code == 401
+    assert w.calls == 0
+
+
+def test_weather_is_the_stations_reading_with_its_time_and_source():
+    c, _ = client_for(weather=FakeWeather(READING))
+    r = c.get("/v1/weather/nyc", headers=AUTH)
+    assert r.status_code == 200 and r.json() == {"v": 1, **READING}
+
+
+def test_weather_takes_no_location_so_none_is_sent_on():
+    w = FakeWeather(READING)
+    c, _ = client_for(weather=w)
+    assert c.get("/v1/weather/nyc?lat=40.74&lon=-73.98", headers=AUTH).json() == {"v": 1, **READING}
+    assert w.calls == 1  # the service is asked for the city, whatever the query says
+
+
+def test_weather_is_an_error_not_an_old_reading_when_no_station_answers():
+    c, _ = client_for(weather=FakeWeather(fail=True))
+    r = c.get("/v1/weather/nyc", headers=AUTH)
+    assert r.status_code == 503 and r.json() == {"detail": "weather_unavailable"}
