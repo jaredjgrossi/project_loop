@@ -85,7 +85,8 @@ struct LandingSheet: View {
                 if !searching {
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Your runs")
+                        // Until the runner has saved or run a route, the tiles are Loop's suggestions.
+                        Text(runs.saved.isEmpty && runs.runs.isEmpty ? "Try one" : "Your runs")
                             .typeStyle(.eyebrow)
                             .foregroundStyle(Palette.inkMuted.color)
                             .padding(.top, 22)
