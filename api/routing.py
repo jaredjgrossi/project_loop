@@ -25,6 +25,9 @@ class Route:
     coordinates: list[list[float]]  # [lon, lat]
     seed: int = 0  # round-trip seed; 0 for routes through chosen waypoints
     elevation: list[float] | None = None  # meters, one per coordinate, when GraphHopper has elevation (decision 014)
+    # GraphHopper's turn instructions as (sign, index of the coordinate it starts at), for the Directions steps
+    # (decision 054); None for a route that wasn't routed (a stored line).
+    instructions: tuple[tuple[int, int], ...] | None = None
 
 
 def graphhopper_url() -> str:
@@ -46,7 +49,7 @@ def build_round_trip_request(
         "round_trip.distance": distance_m,
         "round_trip.seed": seed,
         "points_encoded": False,  # plain GeoJSON coordinates instead of an encoded polyline
-        "instructions": False,
+        "instructions": True,
         "elevation": True,
     }, custom_model)
 
@@ -57,7 +60,7 @@ def build_waypoint_request(points: list[tuple[float, float]], custom_model: dict
         "points": [[lon, lat] for lat, lon in points],
         "profile": "foot",
         "points_encoded": False,
-        "instructions": False,
+        "instructions": True,
         "elevation": True,
     }, custom_model)
 
@@ -74,6 +77,8 @@ def parse_route(response: dict, seed: int) -> Route:
         coordinates=[c[:2] for c in coords],
         seed=seed,
         elevation=[c[2] for c in coords] if coords and all(len(c) > 2 for c in coords) else None,
+        instructions=(tuple((i["sign"], i["interval"][0]) for i in path["instructions"])
+                      if path.get("instructions") else None),
     )
 
 

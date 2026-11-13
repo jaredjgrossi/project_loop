@@ -151,3 +151,17 @@ def test_requests_ask_for_elevation_and_routes_keep_it():
     assert r.coordinates == [[-73.9, 40.7], [-73.9, 40.71]] and r.elevation == [12.5, 13.0]
     flat = {"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": [[-73.9, 40.7], [-73.9, 40.71]]}}]}
     assert parse_route(flat, seed=0).elevation is None
+
+
+def test_requests_ask_for_turn_instructions_and_routes_keep_their_signs_and_points():
+    """Decision 054: the Directions list is built from GraphHopper's turn signs, each at a point of the route."""
+    assert build_waypoint_request([(40.7, -73.9), (40.71, -73.9)])["instructions"] is True
+    assert build_round_trip_request(40.7, -73.9, 5000)["instructions"] is True
+    coords = [[-73.9, 40.7], [-73.9, 40.705], [-73.9, 40.71], [-73.89, 40.71]]
+    got = {"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": coords}, "instructions": [
+        {"sign": 0, "interval": [0, 2], "street_name": "", "distance": 5, "text": "Continue"},
+        {"sign": 2, "interval": [2, 3], "street_name": "", "distance": 5, "text": "Turn right"},
+        {"sign": 4, "interval": [3, 3], "street_name": "", "distance": 0, "text": "Arrive at destination"}]}]}
+    assert parse_route(got, seed=0).instructions == ((0, 0), (2, 2), (4, 3))
+    bare = {"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": coords}}]}
+    assert parse_route(bare, seed=0).instructions is None  # a stored route, or a router without them
