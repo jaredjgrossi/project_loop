@@ -356,7 +356,7 @@ struct RouteMapView: UIViewRepresentable {
             var arrows = SymbolLayer(id: Ids.arrows, source: Ids.arrowsSource)
             arrows.iconImage = .constant(.name(Ids.arrowImage))
             arrows.symbolPlacement = .constant(.line)
-            arrows.symbolSpacing = .constant(84)
+            arrows.symbolSpacing = .constant(64)
             arrows.iconRotationAlignment = .constant(.map)
             arrows.iconAllowOverlap = .constant(true)
             arrows.iconIgnorePlacement = .constant(true)

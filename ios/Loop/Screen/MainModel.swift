@@ -17,7 +17,7 @@ final class MainModel {
     var build: BuildState
     @ObservationIgnored private var playback: Task<Void, Never>?
     @ObservationIgnored private var resampled: [Int: [GeoPoint]] = [:]
-    @ObservationIgnored private var arrowCache: (key: Polyline, runs: [[GeoPoint]])?
+    @ObservationIgnored private var arrowCache: (key: [GeoPoint], runs: [[GeoPoint]])?
     /// Bumped whenever what the map draws changes outside of time-based animation.
     var frameVersion = 0
     /// Bumped when the route settles, to send one ring out from the turnaround.
@@ -571,11 +571,13 @@ final class MainModel {
 
     /// The map frame for this moment. Constant-speed draw; a new leader before the flag morphs
     /// point by point from the line on screen (no redraw from scratch). Reduce Motion: drawn whole.
-    /// The first-pass runs for a route's line, worked out once per route.
-    private func arrowRuns(for route: Candidate) -> [[GeoPoint]] {
-        if let cached = arrowCache, cached.key == route.line { return cached.runs }
-        let runs = RouteDirection.firstPass(of: route.line.points)
-        arrowCache = (route.line, runs)
+    /// The first-pass runs of the line as drawn at this zoom (jogs under 2.5 pt already removed), so the
+    /// chevrons follow the drawn line and not the raw geometry. Worked out again only when the drawn
+    /// line changes.
+    private func arrowRuns(drawn: [GeoPoint]) -> [[GeoPoint]] {
+        if let cached = arrowCache, cached.key == drawn { return cached.runs }
+        let runs = RouteDirection.firstPass(of: drawn)
+        arrowCache = (drawn, runs)
         return runs
     }
 
@@ -616,7 +618,7 @@ final class MainModel {
             // Direction chevrons arrive as the last of the route is drawn, on the first pass only.
             let arrival = max(0, min(1, (fraction - 0.9) / 0.1))
             if arrival > 0, !shown.line.points.isEmpty {
-                frame.arrows = arrowRuns(for: shown)
+                frame.arrows = arrowRuns(drawn: drawn.casing)
                 frame.arrowsOpacity = arrival * Motion.arrowOpacity
             }
         }
