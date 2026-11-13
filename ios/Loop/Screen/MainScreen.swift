@@ -459,11 +459,15 @@ private struct RenameField: View {
 /// (it reads the sheet's read progress); the rest of the screen doesn't.
 private struct MarkerLayer: View {
     let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack(alignment: .top) {
             MarkerOverlay(model: model)
             SelectionOverlay(model: model)
         }
-        .opacity(1 - model.sheet.readProgress)
+        // Marks wait for the map's first full frame (the launch logo waits on the same flag), so
+        // on a slow load they never float on blank paper; then they arrive over 200 ms.
+        .opacity(model.mapReady ? 1 - model.sheet.readProgress : 0)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: model.mapReady)
     }
 }
