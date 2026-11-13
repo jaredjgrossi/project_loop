@@ -31,6 +31,41 @@ enum CardText {
         reason(waterfrontPct: s.waterfrontPct.value, lightsPerMile: s.lightsPerMile.value)
     }
 
+    /// The card's reason line: the server's own (`summary.reason`, decision 049: the park, the water,
+    /// the lights, flat or hilly, from the route's numbers) with a full stop, or, when the server sent
+    /// none or has nothing to say, the sentence built here from the waterfront share and the lights.
+    static func reasonLine(_ s: RouteFile.Summary) -> String? {
+        if let t = s.reason?.text?.trimmingCharacters(in: .whitespaces), !t.isEmpty {
+            let sentence = t.prefix(1).uppercased() + t.dropFirst()
+            return sentence.hasSuffix(".") ? sentence : sentence + "."
+        }
+        return reason(s)
+    }
+
+    // MARK: Route type not found
+
+    /// One plain line when the route type asked for wasn't found (`final.shape.met` false), else nil.
+    /// "No loop from here beats this out-and-back." Never worded as if the runner got what they asked for.
+    static func shapeNote(_ shape: ServerEvent.Shape?) -> String? {
+        guard let shape, !shape.met, let have = shape.shown.first.map(shapeWord) else { return nil }
+        switch shape.requested {
+        case "loop": return "No loop from here beats this \(have)."
+        case "out_and_back": return "No out-and-back found. This is the best \(have)."
+        case "one_way": return "No one-way run found. This is the best \(have)."
+        default: return nil
+        }
+    }
+
+    private static func shapeWord(_ kind: String) -> String {
+        switch kind {
+        case "loop": return "loop"
+        case "out_and_back": return "out-and-back"
+        case "lollipop": return "lollipop"
+        case "a_to_b": return "one-way run"
+        default: return kind.replacingOccurrences(of: "_", with: " ")
+        }
+    }
+
     // MARK: Eyebrow
 
     /// The mode first; at the final the count joins it: "TRAINING · BEST OF 31" (UI chat, 2026-11-08).

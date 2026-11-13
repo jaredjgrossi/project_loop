@@ -194,7 +194,8 @@ enum MapScale {
     static let minimumDashedPoints: Double = 30
 }
 
-/// One of the top 3. Only the file's #1 carries full detail; the others are outlines.
+/// One of the top 3. Final events carry every route in full (decision 049); top3 and provisional
+/// events, and older files, give #2 and #3 as outlines only (`detail` nil).
 struct Candidate: Identifiable {
     let rank: Int
     let line: Polyline
@@ -205,6 +206,11 @@ struct Candidate: Identifiable {
     var distanceSource: String? = nil
     let kindText: String
     let detail: RouteDetail?
+    /// The server's name for the route ("Out-and-back on East River Esplanade"). The top3 and provisional
+    /// names come before the stretches are measured and can change: show the `final` one.
+    var name: String? = nil
+    /// The server's id for this route (Save, feedback and History keep it).
+    var serverId: String? = nil
     var id: Int { rank }
 }
 
@@ -233,13 +239,41 @@ struct LoopData {
     }
 
     init(file: RouteFile) throws {
-        guard let routeFeature = file.route.features.first,
+        // The first route comes from `route`; the others from their own `file` (final events since
+        // decision 049), so every route has its stats, profile and stretches. An older file or a
+        // top3 event leaves #2 and #3 without detail (outline only).
+        let first = try RouteDetail.build(file.route)
+        candidates = file.top3.compactMap { t in
+            guard let coords = t.geometry.lineString, coords.count >= 2 else { return nil }
+            let detail: RouteDetail? = t.rank == 1 ? first : t.file.flatMap { try? RouteDetail.build($0) }
+            let summary = detail?.summary
+            return Candidate(
+                rank: t.rank,
+                line: detail?.line ?? Polyline(coords),
+                distanceMi: summary?.distance.miles ?? t.distance.miles,
+                distanceTrust: Trust(summary?.distance.status ?? t.distance.status),
+                distanceSource: summary?.distance.source ?? t.distance.source,
+                kindText: CardText.kindText(t.kind),
+                detail: detail,
+                name: t.label,
+                serverId: t.id)
+        }.sorted { $0.rank < $1.rank }
+
+        bestOf = file.pool.bestOf
+        request = CardText.request(items: file.request, about: file.about)
+    }
+}
+
+extension RouteDetail {
+    /// Everything the card and map need about one route, from its route file (`route`, or a route's `file`).
+    static func build(_ route: RouteFile.FeatureCollection) throws -> RouteDetail {
+        guard let routeFeature = route.features.first,
               let routeCoords = routeFeature.geometry.lineString,
               let summary = routeFeature.properties.summary
         else { throw CocoaError(.coderValueNotFound) }
 
         let line = Polyline(routeCoords)
-        let features = file.route.features
+        let features = route.features
 
         // Stretches: mile ranges from the file, mapped onto the route line in proportion
         // so they tile it exactly (the file's miles and the line length agree to a few metres).
@@ -293,20 +327,6 @@ struct LoopData {
             stretches: stretches, drawn: drawn, miles: miles, turnaround: turnaround, start: start,
             profile: elevation.profile, profileTrust: Trust(elevation.status),
             summary: summary)
-
-        candidates = file.top3.compactMap { t in
-            guard let coords = t.geometry.lineString, coords.count >= 2 else { return nil }
-            return Candidate(
-                rank: t.rank,
-                line: t.rank == 1 ? line : Polyline(coords),
-                distanceMi: t.rank == 1 ? summary.distance.miles : t.distance.miles,
-                distanceTrust: Trust(t.rank == 1 ? summary.distance.status : t.distance.status),
-                distanceSource: t.rank == 1 ? summary.distance.source : t.distance.source,
-                kindText: CardText.kindText(t.kind),
-                detail: t.rank == 1 ? detail : nil)
-        }.sorted { $0.rank < $1.rank }
-
-        bestOf = file.pool.bestOf
-        request = CardText.request(items: file.request, about: file.about)
+        return detail
     }
 }

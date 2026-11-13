@@ -371,5 +371,13 @@ enum ServerEvent {
         let pool: RouteFile.Pool?
         let poolSize: Int?
         let notes: [FinalNote]?
+        /// The route type asked for and whether it was found (decision 049). Absent from older servers.
+        let shape: Shape?
+    }
+
+    struct Shape: Decodable, Equatable {
+        let requested: String
+        let met: Bool
+        let shown: [String]
     }
 }
