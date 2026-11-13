@@ -203,6 +203,9 @@ struct RouteMapView: UIViewRepresentable {
             static let others = "loop-others-dots"
             static let alternatesSource = "loop-alternates"
             static let alternates = "loop-alternates-lines"
+            static let arrowsSource = "loop-arrows"
+            static let arrows = "loop-arrows-symbols"
+            static let arrowImage = "loop-arrow"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
             static let base = "loop-route-base"
@@ -219,9 +222,26 @@ struct RouteMapView: UIViewRepresentable {
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
 
+        /// A tiny chevron pointing along the line (right, before the map rotates it), drawn as a mask
+        /// so the layer colours it.
+        private static func arrowIcon() -> UIImage {
+            let size = CGSize(width: 6, height: 6)
+            return UIGraphicsImageRenderer(size: size).image { ctx in
+                let g = ctx.cgContext
+                g.setStrokeColor(UIColor.black.cgColor)
+                g.setLineWidth(1.1)
+                g.setLineCap(.round)
+                g.setLineJoin(.round)
+                g.move(to: CGPoint(x: 1.8, y: 0.9))
+                g.addLine(to: CGPoint(x: 4.4, y: 3))
+                g.addLine(to: CGPoint(x: 1.8, y: 5.1))
+                g.strokePath()
+            }.withRenderingMode(.alwaysTemplate)
+        }
+
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.alternatesSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.alternatesSource, Ids.arrowsSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -328,6 +348,22 @@ struct RouteMapView: UIViewRepresentable {
             lead.lineJoin = .constant(.round)
             lead.slot = slot
             try? map.addLayer(lead)
+
+            // Direction: tiny chevrons along the first pass of the route, no wider than the line and in
+            // the casing colour, so they read as faint notches in it (phone, 2026-11-13: the first
+            // bigger, haloed ones were bulky). Spaced in screen points, so they thin out when zoomed out.
+            try? map.addImage(Self.arrowIcon(), id: Ids.arrowImage, sdf: true)
+            var arrows = SymbolLayer(id: Ids.arrows, source: Ids.arrowsSource)
+            arrows.iconImage = .constant(.name(Ids.arrowImage))
+            arrows.symbolPlacement = .constant(.line)
+            arrows.symbolSpacing = .constant(84)
+            arrows.iconRotationAlignment = .constant(.map)
+            arrows.iconAllowOverlap = .constant(true)
+            arrows.iconIgnorePlacement = .constant(true)
+            arrows.iconSize = .constant(1.3)
+            arrows.iconOpacity = .constant(0)
+            arrows.slot = slot
+            try? map.addLayer(arrows)
             recolorRouteLayers(map)
         }
 
@@ -358,6 +394,8 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
+            try? map.setLayerProperty(for: Ids.arrows, property: "icon-color", value: Palette.routeCasing.hex(dark: dark))
+            try? map.setLayerProperty(for: Ids.arrows, property: "icon-emissive-strength", value: 1.0)
             set(Ids.lead, "line-color", Palette.routeWater)
             set(Ids.base, "line-color", Palette.routeStreet)
             set(Ids.pathBed, "line-color", Palette.routeCasing)
@@ -412,6 +450,15 @@ struct RouteMapView: UIViewRepresentable {
                     Feature(geometry: LineString($0.map(\.coordinate)))
                 }
                 map.updateGeoJSONSource(withId: Ids.othersSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.arrows != lastFrame?.arrows {
+                let features = frame.arrows.filter { $0.count >= 2 }.map {
+                    Feature(geometry: LineString($0.map(\.coordinate)))
+                }
+                map.updateGeoJSONSource(withId: Ids.arrowsSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.arrowsOpacity != lastFrame?.arrowsOpacity {
+                try? map.setLayerProperty(for: Ids.arrows, property: "icon-opacity", value: frame.arrowsOpacity)
             }
             if frame.alternates != lastFrame?.alternates {
                 let features = frame.alternates.filter { $0.count >= 2 }.map {

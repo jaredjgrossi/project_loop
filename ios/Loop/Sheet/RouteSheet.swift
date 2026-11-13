@@ -254,6 +254,7 @@ struct OpenSection: View {
 /// Eyebrow, distance and reason: the 96 pt block shared by both states.
 struct CardBlock: View {
     let model: MainModel
+    @State private var showDirections = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -274,14 +275,20 @@ struct CardBlock: View {
                 if model.cardRevealed, let shown = model.shown {
                     VStack(alignment: .leading, spacing: 0) {
                         // No trust word beside "mi": tapping the distance shows it (and the source).
-                        TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
-                                    .typeStyle(.numeralXL)
-                                    .foregroundStyle(Palette.ink.color)
-                                Text("mi")
-                                    .typeStyle(.numeralL)
-                                    .foregroundStyle(Palette.unitInk.color)
+                        HStack(spacing: 8) {
+                            TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
+                                        .typeStyle(.numeralXL)
+                                        .foregroundStyle(Palette.ink.color)
+                                    Text("mi")
+                                        .typeStyle(.numeralL)
+                                        .foregroundStyle(Palette.unitInk.color)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                            if let detail = shown.detail, !Directions.steps(for: detail).isEmpty {
+                                DirectionsButton { showDirections = true }
                             }
                         }
                         .frame(height: 56)
@@ -347,6 +354,15 @@ struct CardBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 96 + model.sheet.extra, alignment: .top)
+        .sheet(isPresented: $showDirections) {
+            if let shown = model.shown, let detail = shown.detail {
+                DirectionsSheet(name: shown.name ?? "", distanceMi: shown.distanceMi,
+                                steps: Directions.steps(for: detail)) { showDirections = false }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Palette.surfaceSheet.color)
+            }
+        }
     }
 }
 

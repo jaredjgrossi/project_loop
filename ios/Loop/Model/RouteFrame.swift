@@ -30,6 +30,9 @@ struct RouteFrame: Equatable {
     /// The routes the runner can still open, after `final`: thin, solid, faint.
     var alternates: [[GeoPoint]] = []
     var alternatesOpacity: Double = 0
+    /// Where the direction chevrons go: the first pass of the shown route, once it is drawn.
+    var arrows: [[GeoPoint]] = []
+    var arrowsOpacity: Double = 0
 
     /// The wait: the reach ring (dim outside, warm parks and water inside) and candidate lines.
     struct Reach: Equatable {
