@@ -206,6 +206,7 @@ struct MainScreen: View {
         if args.contains("-LoopSampleWeather") { WeatherStore.shared.useSample() }
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
+            model.logoShown = false
             model.requestText = model.data.request.text
             var read = ReadOut.simulated(model.data.request.text, data: model.data, file: nil)
             // -LoopCant G9[,G8]: show can't-do lines for screenshots.

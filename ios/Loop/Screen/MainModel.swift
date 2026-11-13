@@ -115,7 +115,8 @@ final class MainModel {
     /// come and go and the sheet bounce (phone, 2026-11-11).
     var fieldMatches: [RunMatch] = []
     /// The logo covering the map at launch.
-    var logoShown = false
+    /// Up from the first frame, so the launch screen's mark hands over to it with no blank frame.
+    var logoShown = true
     /// The landing sheet is up (it rises at launch and slides away on send).
     var landingShown = false
     /// The landing sheet's height, frame by frame (its own observable, like the route sheet).
