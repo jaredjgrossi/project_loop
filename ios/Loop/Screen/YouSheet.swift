@@ -147,18 +147,26 @@ struct YouSheet: View {
                         Text("Your defaults").typeStyle(.eyebrow).foregroundStyle(Palette.inkMuted.color)
                             .padding(.top, 26).accessibilityAddTraits(.isHeader)
                         DefaultsCard(model: model).padding(.top, 10)
-                        NavigationLink {
-                            HistoryList(model: model) { log in open { model.openHistory(log) } }
-                        } label: {
-                            HStack {
-                                Text(stats.count == 0 ? "No runs yet" : "All \(stats.count) run\(stats.count == 1 ? "" : "s")")
-                                    .typeStyle(.body).foregroundStyle(Palette.ink.color)
-                                Spacer()
-                                Text("History ›").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                        if stats.count == 0 {
+                            // No link to History until there is some: it led to an empty page.
+                            Text("No runs yet")
+                                .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                                .frame(minHeight: Metrics.minTap)
+                                .padding(.top, 14)
+                        } else {
+                            NavigationLink {
+                                HistoryList(model: model) { log in open { model.openHistory(log) } }
+                            } label: {
+                                HStack {
+                                    Text("All \(stats.count) run\(stats.count == 1 ? "" : "s")")
+                                        .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                                    Spacer()
+                                    Text("History ›").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                                }
+                                .frame(minHeight: Metrics.minTap)
                             }
-                            .frame(minHeight: Metrics.minTap)
+                            .padding(.top, 14)
                         }
-                        .padding(.top, 14)
                     }
                     .padding(.horizontal, Metrics.s24)
                     .padding(.bottom, 32)
