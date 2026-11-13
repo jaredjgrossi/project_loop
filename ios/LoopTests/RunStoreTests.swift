@@ -99,4 +99,33 @@ final class RunStoreTests: XCTestCase {
         XCTAssertEqual(store.matches("usu").first?.request, "3 miles from here", "and send their request")
         XCTAssertTrue(store.matches("zzz").isEmpty)
     }
+
+    func testARouteSavedAndRunShowsOnceWithItsNewestDate() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        func route(_ name: String, archive: String) -> RouteIdentity {
+            RouteIdentity(routeId: nil, archive: archive, name: name, request: "3 miles from here", distanceMi: 3,
+                          shape: [], stretches: [], startTime: nil)
+        }
+        let river = route("East River out-and-back", archive: "a"), loop = route("Kips Bay loop", archive: "b")
+        let store = RunStore(saved: [SavedRun(id: "s1", name: river.name, request: river.request, distanceMi: 3, shape: [],
+                                              savedAt: t0.addingTimeInterval(500), archive: "a")])
+        store.markRun(river, at: t0.addingTimeInterval(100))
+        store.markRun(loop, at: t0.addingTimeInterval(200))
+        store.markRun(loop, at: t0.addingTimeInterval(300))
+        let rows = store.matches("")
+        XCTAssertEqual(rows.map(\.title), ["East River out-and-back", "Kips Bay loop"], "one row per route")
+        XCTAssertEqual(rows.map(\.date), [t0.addingTimeInterval(500), t0.addingTimeInterval(300)], "its newest date")
+    }
+
+    func testTwoRoutesFromOneRequestStayTwoRows() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        func route(_ name: String) -> RouteIdentity {
+            RouteIdentity(routeId: nil, archive: nil, name: name, request: "3 miles from here", distanceMi: 3,
+                          shape: [], stretches: [], startTime: nil)
+        }
+        let store = RunStore()
+        store.markRun(route("Kips Bay loop"), at: t0)
+        store.markRun(route("Kips Bay out-and-back"), at: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.matches("").map(\.title), ["Kips Bay out-and-back", "Kips Bay loop"])
+    }
 }
