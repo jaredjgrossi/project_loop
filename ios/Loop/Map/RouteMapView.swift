@@ -201,6 +201,8 @@ struct RouteMapView: UIViewRepresentable {
             static let routeSource = "loop-route"
             static let othersSource = "loop-others"
             static let others = "loop-others-dots"
+            static let alternatesSource = "loop-alternates"
+            static let alternates = "loop-alternates-lines"
             static let casing = "loop-route-casing"
             static let lead = "loop-route-lead"     // plain line, no detail yet
             static let base = "loop-route-base"
@@ -219,7 +221,7 @@ struct RouteMapView: UIViewRepresentable {
 
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.alternatesSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -236,6 +238,15 @@ struct RouteMapView: UIViewRepresentable {
             others.lineDasharray = .constant([0.01, 2.2])   // round dots
             others.slot = slot
             try? map.addLayer(others)
+
+            // The routes the runner can still open: thin, solid, faint. Never dashed (dashes mean "path").
+            var alternates = LineLayer(id: Ids.alternates, source: Ids.alternatesSource)
+            alternates.lineWidth = .constant(2)
+            alternates.lineCap = .constant(.round)
+            alternates.lineJoin = .constant(.round)
+            alternates.lineOpacity = .constant(0)
+            alternates.slot = slot
+            try? map.addLayer(alternates)
 
             // The wait: warm water and parks (from Mapbox Streets' own shapes, token only), the dim
             // outside the reach ring, the ring, and the candidate lines. All under the route.
@@ -343,7 +354,7 @@ struct RouteMapView: UIViewRepresentable {
                 try? map.setLayerProperty(for: id, property: prop, value: token.hex(dark: dark))
             }
             // Our layers ignore the basemap's lighting, so the route is never dimmed by a light preset.
-            for id in [Ids.casing, Ids.base, Ids.pathBed, Ids.lead, Ids.others] + DrawKind.allCases.map(Ids.kind) {
+            for id in [Ids.casing, Ids.base, Ids.pathBed, Ids.lead, Ids.others, Ids.alternates] + DrawKind.allCases.map(Ids.kind) {
                 try? map.setLayerProperty(for: id, property: "line-emissive-strength", value: 1.0)
             }
             set(Ids.casing, "line-color", Palette.routeCasing)
@@ -357,6 +368,7 @@ struct RouteMapView: UIViewRepresentable {
             try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.waterMask, property: "fill-color", value: Palette.mapWater.hex(dark: dark))
             set(Ids.others, "line-color", Palette.routeStreet)
+            set(Ids.alternates, "line-color", Palette.routeStreet)
             for k in DrawKind.allCases { set(Ids.kind(k), "line-color", Palette.drawColor(k)) }
         }
 
@@ -400,6 +412,15 @@ struct RouteMapView: UIViewRepresentable {
                     Feature(geometry: LineString($0.map(\.coordinate)))
                 }
                 map.updateGeoJSONSource(withId: Ids.othersSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.alternates != lastFrame?.alternates {
+                let features = frame.alternates.filter { $0.count >= 2 }.map {
+                    Feature(geometry: LineString($0.map(\.coordinate)))
+                }
+                map.updateGeoJSONSource(withId: Ids.alternatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
+            }
+            if frame.alternatesOpacity != lastFrame?.alternatesOpacity {
+                try? map.setLayerProperty(for: Ids.alternates, property: "line-opacity", value: frame.alternatesOpacity)
             }
             if frame.reach != lastFrame?.reach { drawReach(map, frame.reach) }
             if frame.candidates != lastFrame?.candidates {

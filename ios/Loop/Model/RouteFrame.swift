@@ -27,6 +27,9 @@ struct RouteFrame: Equatable {
     var lead: [Segment] = []
     var others: [[GeoPoint]] = []
     var othersOpacity: Double = 0.35
+    /// The routes the runner can still open, after `final`: thin, solid, faint.
+    var alternates: [[GeoPoint]] = []
+    var alternatesOpacity: Double = 0
 
     /// The wait: the reach ring (dim outside, warm parks and water inside) and candidate lines.
     struct Reach: Equatable {

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Every sentence and label the card builds from the file, in one place so wording is easy to change.
 /// Rule 1: no numbers are made up here. Each value comes from the file and is only formatted.
@@ -68,16 +69,19 @@ enum CardText {
 
     // MARK: Eyebrow
 
-    /// The mode first; at the final the count joins it: "TRAINING · BEST OF 31" (UI chat, 2026-11-08).
-    static func eyebrow(kind: String, bestOf: Int?) -> String {
-        guard let n = bestOf else { return kind }
-        return kind.isEmpty ? "BEST OF \(n)" : "\(kind) · BEST OF \(n)"
+    /// "1 OF 3 · OUT AND BACK": the route's place among the routes and its type. Never the mode or the
+    /// size of the pool (phone, 2026-11-13). With one route, or before `final`, just the type.
+    static func eyebrow(kind: String, position: Int?, of count: Int?) -> String {
+        guard let position, let count, count > 1 else { return kind }
+        return kind.isEmpty ? "\(position) OF \(count)" : "\(position) OF \(count) · \(kind)"
     }
 
     static func kindText(_ kind: String) -> String {
         switch kind {
         case "out_and_back": return "OUT AND BACK"
         case "loop": return "LOOP"
+        case "lollipop": return "LOLLIPOP"
+        case "a_to_b", "one_way": return "ONE WAY"
         default: return kind.replacingOccurrences(of: "_", with: " ").uppercased()
         }
     }
@@ -100,7 +104,7 @@ enum CardText {
                  trust: Trust(s.lightsPerMile.status), source: s.lightsPerMile.source),
             Stat(value: s.waterfrontPct.value.map { "\(Int($0.rounded()))%" } ?? "–", label: "waterfront",
                  trust: Trust(s.waterfrontPct.status), source: s.waterfrontPct.source),
-            Stat(value: s.climb.value.map { "\(trimmed($0)) m" } ?? "–", label: "climb",
+            Stat(value: s.climb.value.map { "\(feet($0)) ft" } ?? "–", label: "climb",
                  trust: Trust(s.climb.status), source: s.climb.source),
         ]
     }
@@ -156,6 +160,25 @@ enum CardText {
         let compass = ["East": "E", "West": "W", "North": "N", "South": "S"]
         if words.count >= 2, let c = compass[words[0]], words[1].first?.isNumber == true { words[0] = c }
         return words.joined(separator: " ")
+    }
+
+    /// Metres as whole feet: the climb reads in feet, as the miles do (phone, 2026-11-13).
+    static func feet(_ metres: Double) -> Int { Int((metres * 3.28084).rounded()) }
+
+    /// The route's name for the card: first letter capitalised, never cut.
+    static func nameLine(_ name: String) -> String {
+        let t = name.trimmingCharacters(in: .whitespaces)
+        return t.prefix(1).uppercased() + t.dropFirst()
+    }
+
+    /// How many lines a name takes at the card's text width (1 or 2): the card reserves room for them.
+    static func nameLines(_ name: String, width: CGFloat) -> Int {
+        let style = TypeStyle.bodyStrong
+        let box = (nameLine(name) as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: style.uiFont, .kern: style.trackingPoints], context: nil)
+        return min(2, max(1, Int((box.height / style.uiFont.lineHeight).rounded(.up))))
     }
 
     static func distance(_ mi: Double) -> String { String(format: "%.2f", mi) }

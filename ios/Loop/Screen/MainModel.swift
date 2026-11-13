@@ -253,7 +253,9 @@ final class MainModel {
     }
 
     var eyebrowText: String {
-        CardText.eyebrow(kind: data.request.mode.uppercased(), bestOf: showsCount ? data.bestOf : nil)
+        // Position and type ("1 OF 3 · OUT AND BACK"); never the mode or the size of the pool.
+        let position = shownRank.flatMap { routeChoices.firstIndex(of: $0) }.map { $0 + 1 }
+        return CardText.eyebrow(kind: shown?.kindText ?? "", position: position, of: routeChoices.count)
     }
 
     // MARK: Interaction
@@ -296,6 +298,7 @@ final class MainModel {
         let wasBounds = shown.map { Self.fitPoints($0) }.map(GeoBounds.init)
         build.apply(event, at: t)
         frameVersion += 1
+        defer { refreshCardExtra() }
         // A new leader, the flag, or a final that changed the route: glide to fit it again.
         switch event {
         case .top3:
@@ -312,8 +315,24 @@ final class MainModel {
         }
     }
 
-    /// The three routes in order (their keys), for the dots and the map: only once `final` arrived.
-    var routeChoices: [Int] { build.final ? build.engineTop3.filter { data.candidate(rank: $0) != nil } : [] }
+    /// The routes the runner can open, in order (their keys): only once `final` arrived, and only routes the
+    /// server sent in full. A saved route from before `final` carried every route (or an older server)
+    /// has the one route, so it shows no dots, no swipe and no alternates (phone, 2026-11-13).
+    var routeChoices: [Int] {
+        guard build.final else { return [] }
+        let open = build.engineTop3.filter { data.candidate(rank: $0)?.detail != nil }
+        return open.count > 1 ? open : []
+    }
+
+    /// The shown route's place among the choices, 0-based.
+    var shownIndex: Int? { shownRank.flatMap { routeChoices.firstIndex(of: $0) } }
+
+    /// Swipe to the next (+1) or previous (-1) route. False at the ends.
+    @discardableResult func showNeighbour(_ step: Int) -> Bool {
+        guard let i = shownIndex, routeChoices.indices.contains(i + step) else { return false }
+        showRoute(rank: routeChoices[i + step])
+        return true
+    }
 
     /// Picks one of the three after `final`: morphs to it and fits it, and Save, "I ran it" and the
     /// feedback follow the route on the card.
@@ -328,6 +347,7 @@ final class MainModel {
         }
         routeCameraFree = false
         requestCamera(.overview, animated: true, duration: 0.5)
+        refreshCardExtra()
     }
 
     /// "A better route came in" → switch, morphing from the route on screen.
@@ -343,13 +363,28 @@ final class MainModel {
 
     // MARK: Read-out, edit mode and the editor
 
-    /// One line more on the card for each of: the route's name (24 pt, from the server), the route-type
-    /// note and the can't-do line (26 pt each). Both rests grow with it.
+    /// One line more on the card for each of: the route's name (24 pt for one line, 46 for two, from the
+    /// server), the route-type note and the can't-do line (26 pt each). Both rests grow with it. It
+    /// follows the route on the card, so the sheet is the size of what it shows.
     func applyReadOutToSheet() {
-        sheet.extra = (readOut?.cant.isEmpty ?? true ? 0 : 26) + (shapeNote == nil ? 0 : 26)
-            + (data.candidates.contains { $0.name != nil } ? 24 : 0)
+        sheet.extra = cardExtra
         if !(readOut?.hasReadIt ?? false) { sheet.readHeight = nil }
         sheet.refreshRest()
+    }
+
+    /// Re-sizes the card when the route on it changed (a swipe, a better route) and its lines differ.
+    func refreshCardExtra() {
+        if sheet.extra != cardExtra { applyReadOutToSheet() }
+    }
+
+    private var cardExtra: CGFloat {
+        var extra: CGFloat = (readOut?.cant.isEmpty ?? true ? 0 : 26) + (shapeNote == nil ? 0 : 26)
+        if let name = shown?.name {
+            // Its room is held from the first card (one line); the final name may need two.
+            let lines = showsCount ? CardText.nameLines(name, width: UIScreen.main.bounds.width - 2 * Metrics.s24) : 1
+            extra += lines == 2 ? 46 : 24
+        }
+        return extra
     }
 
     /// The card's can't-do line: open the sheet straight to "How Loop read it".
@@ -542,10 +577,14 @@ final class MainModel {
         let outline = reduceMotion
             ? (build.provisional ? 0 : Motion.outlinePeakOpacity)
             : build.outlineOpacity(at: now, peak: Motion.outlinePeakOpacity, fade: Motion.outlineFade)
-        // After `final` the other two routes stay on the map as faint dots; tap one to open it.
-        let others = build.final && build.provisional ? max(outline, Motion.otherRouteOpacity) : outline
-        frame.othersOpacity = others
-        frame.others = others > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
+        frame.othersOpacity = outline
+        frame.others = outline > 0 ? otherRanks.compactMap { data.candidate(rank: $0)?.line.points } : []
+        // After `final` the other routes stay on the map as thin solid lines; tap one to open it.
+        // (Dashes mean "path" in the route line, so the alternates are never dashed.)
+        if build.final, build.provisional {
+            frame.alternates = routeChoices.filter { $0 != shownRank }.compactMap { data.candidate(rank: $0)?.line.points }
+            frame.alternatesOpacity = Motion.otherRouteOpacity
+        }
         guard let shown else {
             if drawnFraction != 0 { drawnFraction = 0 }
             return frame

@@ -109,4 +109,56 @@ final class FinalRoutesTests: XCTestCase {
         b.select(9, at: 5)
         XCTAssertEqual(b.shownRank, 2, "not one of the three")
     }
+
+    // MARK: Phone test of PR #18 (2026-11-13)
+
+    @MainActor private func model(from data: LoopData) -> MainModel {
+        let m = MainModel(data: data, runs: RunStore())
+        return m
+    }
+
+    @MainActor func testOnlyFullRoutesAreOffered() throws {
+        // A saved route from before the server sent files: one route in full, two outlines.
+        let m = model(from: try LoopData(file: RouteFile.loadBundled()))
+        m.receiveEvent(.final([1, 2, 3]), at: 0)
+        XCTAssertEqual(m.routeChoices, [], "no dots, no swipe, no alternates for a single full route")
+        XCTAssertFalse(m.showNeighbour(1))
+        XCTAssertEqual(m.eyebrowText, "OUT AND BACK", "no position, no mode, no count")
+
+        let final = try finalEvent(shape: nil)
+        let full = try LoopData(file: XCTUnwrap(RouteFile.from(final: final, start: "Kips Bay Library")))
+        let n = model(from: full)
+        n.receiveEvent(.final([1, 2, 3]), at: 0)
+        XCTAssertEqual(n.routeChoices, [1, 2, 3])
+        XCTAssertEqual(n.eyebrowText, "1 OF 3 · OUT AND BACK")
+        XCTAssertTrue(n.showNeighbour(1))
+        XCTAssertEqual(n.shownRank, 2)
+        XCTAssertTrue(n.eyebrowText.hasPrefix("2 OF 3"))
+        XCTAssertFalse(n.eyebrowText.contains("BEST OF"))
+        XCTAssertTrue(n.showNeighbour(1))
+        XCTAssertFalse(n.showNeighbour(1), "no fourth route")
+        XCTAssertTrue(n.showNeighbour(-1))
+        XCTAssertEqual(n.shownRank, 2)
+    }
+
+    func testNameIsCapitalisedAndWrapsToTwoLines() {
+        XCTAssertEqual(CardText.nameLine("out-and-back on the waterfront"), "Out-and-back on the waterfront")
+        XCTAssertEqual(CardText.nameLines("Loop through Central Park", width: 342), 1)
+        XCTAssertEqual(CardText.nameLines("Out-and-back on the Franklin D. Roosevelt East River Drive Greenway", width: 342), 2)
+    }
+
+    func testClimbReadsInFeet() {
+        XCTAssertEqual(CardText.feet(10), 33)
+        XCTAssertEqual(CardText.feet(8), 26)
+    }
+
+    func testSwipeRules() {
+        XCTAssertEqual(RouteSwipe.axis(of: CGSize(width: -30, height: 4), canSwipe: true), .horizontal)
+        XCTAssertEqual(RouteSwipe.axis(of: CGSize(width: 10, height: -30), canSwipe: true), .vertical, "up and down is the sheet's")
+        XCTAssertEqual(RouteSwipe.axis(of: CGSize(width: 20, height: 18), canSwipe: true), .vertical, "a diagonal stays with the sheet")
+        XCTAssertEqual(RouteSwipe.axis(of: CGSize(width: -30, height: 2), canSwipe: false), .vertical, "one route: nothing to swipe to")
+        XCTAssertFalse(RouteSwipe.commits(translation: -20, predicted: -60))
+        XCTAssertTrue(RouteSwipe.commits(translation: -60, predicted: -80))
+        XCTAssertTrue(RouteSwipe.commits(translation: 20, predicted: 200), "a flick")
+    }
 }
