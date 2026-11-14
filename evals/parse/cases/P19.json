@@ -9,19 +9,14 @@
     "lookup"
   ],
   "needs": [],
-  "doc": "ASK (start, places) · \"Loop only covers New York City. Where should it start?\"",
+  "doc": "ERROR out_of_area (place \"Hoboken PATH\") \u00b7 \"Loop only covers New York City, and Hoboken PATH is outside it.\"",
   "expect": {
-    "outcome": "ASK",
-    "question": {
-      "about": "start",
-      "from": "places"
+    "outcome": "ERROR",
+    "error": {
+      "code": "out_of_area",
+      "place": "Hoboken PATH",
+      "covers": "New York City"
     }
   },
-  "must_not": [
-    {
-      "check": "field_absent",
-      "why": "Must not: start in New Jersey.",
-      "field": "start_place"
-    }
-  ]
+  "must_not": []
 }

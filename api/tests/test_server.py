@@ -49,7 +49,8 @@ def fake_parse(by_text: dict):
         if e is None:
             return {"error": "parse_failed", "text": "x"}
         out = build(e, Context.from_request(raw), FakePlaces())
-        out["trace"]["extraction"] = e
+        if "trace" in out:  # an error (out_of_area) has none
+            out["trace"]["extraction"] = e
         return out
 
     parse_fn.calls = calls
@@ -239,6 +240,29 @@ def test_a_body_that_isnt_json_is_a_bad_request():
 def test_a_parse_failure_is_an_error_event():
     c, _ = client_for({})
     assert [e.get("code") for e in post(c, body(text="??"))] == ["parse_failed"]
+
+
+def test_a_place_outside_the_area_is_its_own_error_event_with_the_place_and_what_loop_covers():
+    tampa = ext(distance=mi(5), start={"kind": "place", "name": "Tampa", "saved_id": None, "outside_nyc": True})
+    c, _ = client_for({"5 mile run from Tampa": tampa})
+    evs = post(c, body(text="5 mile run from Tampa"))
+    assert [e["event"] for e in evs] == ["error"]  # an error ends the stream, as the others do
+    assert evs[0] == {"event": "error", "v": 1, "code": "out_of_area", "place": "Tampa", "covers": "New York City",
+                      "text": "Loop only covers New York City, and Tampa is outside it."}
+
+
+def test_the_out_of_area_error_asks_no_question_and_builds_nothing():
+    tampa = ext(distance=mi(5), start={"kind": "place", "name": "Tampa", "saved_id": None, "outside_nyc": True})
+    engine = FakeEngine()
+    c, _ = client_for({"5 mile run from Tampa": tampa}, engine=engine)
+    evs = post(c, body(text="5 mile run from Tampa"))
+    assert not [e for e in evs if e["event"] in ("parsed", "question")] and engine.calls == []
+
+
+def test_other_parse_errors_stay_what_they_were():
+    c, _ = client_for({}, parse_fn=lambda raw: {"error": "something_else", "place": "Tampa", "text": "x"})
+    evs = post(c, body(text="anything"))
+    assert evs[0]["code"] == "parse_failed" and "place" not in evs[0] and "covers" not in evs[0]
 
 
 def test_a_chip_edit_sends_constraints_and_skips_claude():

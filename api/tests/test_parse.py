@@ -642,3 +642,47 @@ def test_a_generic_park_is_still_the_nearest_runnable_place(name):
 def test_a_named_park_that_isnt_found_asks_instead_of_taking_the_nearest():
     out = _park_build(distance=mi(5), via=[{"name": "Nowhere Park", "kind": "the_park", "whole_way": False}])
     assert out["parsed"]["question"]["about"] == "via"  # "Couldn't find Nowhere Park", never a silent substitute
+
+
+# ---- a request outside the area Loop covers is an error, not a question ----------------------------------------
+
+
+def outside(role="start", name="Tampa", **kw):
+    spec = place("place", name, outside_nyc=True)
+    return ext(distance=mi(5), **{role: spec}, **kw)
+
+
+def built(extraction, case_id="P19"):
+    return build(extraction, Context.from_request(build_request(CASES[case_id], CONTEXTS)), FakePlaces())
+
+
+@pytest.mark.parametrize("role", ["start", "end"])
+def test_a_place_outside_the_area_is_an_out_of_area_error_naming_the_place(role):
+    out = built(outside(role))
+    assert out["error"] == "out_of_area" and out["place"] == "Tampa" and out["covers"] == "New York City"
+    assert out["text"] == "Loop only covers New York City, and Tampa is outside it."
+    assert "parsed" not in out
+
+
+def test_the_place_is_the_one_the_runner_named_not_a_guess():
+    out = built(outside(name="  Jersey City  "))
+    assert out["place"] == "Jersey City"
+
+
+def test_an_outside_place_with_no_name_is_still_an_error_without_a_place():
+    out = built(outside(name=None))
+    assert out["error"] == "out_of_area" and out["place"] is None and out["covers"] == "New York City"
+    assert out["text"] == "That's outside the area Loop covers, which is New York City."
+
+
+def test_a_place_inside_the_area_is_not_an_error():
+    e = ext(distance=mi(5), start=place("place", "Penn Station"))
+    assert "error" not in built(e)
+
+
+def test_the_grader_passes_an_out_of_area_error_where_the_case_expects_one():
+    case = CASES["P19"]
+    assert case["expect"]["outcome"] == "ERROR"
+    assert grade(case, built(IDEAL["P19"])).reasons == []
+    assert grade(case, built(outside(name="Tampa"))).reasons != []  # the wrong place
+    assert grade(case, {"error": "parse_failed", "text": "x"}).reasons != []  # the wrong error

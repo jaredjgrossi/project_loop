@@ -370,6 +370,16 @@ def _weekday_of(iso: str) -> str:
 # ---- the result being built -------------------------------------------------------------------------------------
 
 
+COVERS = "New York City"  # the short name of the area Loop covers: the five boroughs (decision 056)
+
+
+class _OutOfArea(Exception):
+    """Raised when a place the runner named is outside the area Loop covers: an error, not a question."""
+
+    def __init__(self, place: str | None):
+        self.place = place
+
+
 class _Ask(Exception):
     """Raised by a rule that needs the one question."""
 
@@ -591,8 +601,7 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
     about = role if role in ("start", "end") else "via"
     typed = _typed_place(target)
     if spec.get("outside_nyc"):
-        b.ask(about, "places", "question.place.outside_nyc_end" if role == "end" else "question.place.outside_nyc",
-              typed=typed)
+        raise _OutOfArea(name or None)
     if kind == "subjective":
         b.ask(about, "parser", f"question.{'end' if role == 'end' else 'start'}.subjective", typed=typed)
     if kind == "saved":
@@ -1139,6 +1148,16 @@ def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) 
     """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
     trace. The question's answer map goes into the trace, never to the phone."""
     b = _Build(ctx, places, answers=dict(answers or {}))
+    try:
+        return _build(ext, ctx, b)
+    except _OutOfArea as out:  # no question: the runner is told, with the place and what Loop covers
+        values = {"covers": COVERS, "place": out.place}
+        text = render("error.out_of_area" if out.place else "error.out_of_area_unnamed", **values)
+        return {"error": "out_of_area", "text": text, **values}
+
+
+def _build(ext: dict, ctx: Context, b: "_Build") -> dict:
+    places = b.places
     said_miles = _miles(ext.get("distance"))
     b.run_miles = b.answers.get("distance") or (said_miles[0] if said_miles else None) or ctx.usual_mi
     _cant(b, ext)
