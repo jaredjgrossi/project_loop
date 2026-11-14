@@ -89,14 +89,14 @@ def reasons(case_id: str, output: dict) -> list[str]:
 
 # ---- the fixtures ----------------------------------------------------------------------------------------------
 
-def test_sixty_cases_with_the_docs_coverage():  # P50 joined for decision 035, P51-P53 for 043, P54-P59 for 047
-    assert len(CASES) == 60 and len(BY_ID) == 60
-    assert [c["seq"] for c in CASES] == list(range(1, 61))
-    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 21, "E": 4, "F": 7, "G": 6,
+def test_sixty_three_cases_with_the_docs_coverage():  # P50 joined for decision 035, P51-P53 for 043, P54-P59 for 047, P60-P62 for 057
+    assert len(CASES) == 63 and len(BY_ID) == 63
+    assert [c["seq"] for c in CASES] == list(range(1, 64))
+    assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 24, "E": 4, "F": 7, "G": 6,
                                                      "H": 5, "I": 3, "J": 3}
     assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 11  # P16, P46 parse since R19; P20 since 043; P19 errors
-    assert [c["id"] for c in CASES if c["expect"]["outcome"] == "ERROR"] == ["P19"]  # out of the area (decision 056)
-    assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 17
+    assert [c["id"] for c in CASES if c["expect"]["outcome"] == "ERROR"] == ["P19", "P60", "P61", "P62"]  # out of the area (decisions 056, 057)
+    assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 18
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])
@@ -147,8 +147,8 @@ def test_request_follows_the_contract_and_drops_human_labels():
 
 def test_stub_fails_every_case():
     rows = runner.run(runner.load_parser("evals.parse.stub:parse"))
-    assert len(rows) == 60 and not any(g.passed for _, g, _ in rows)
-    assert "passed 0/60" in runner.table(rows)
+    assert len(rows) == 63 and not any(g.passed for _, g, _ in rows)
+    assert "passed 0/63" in runner.table(rows)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c["id"])

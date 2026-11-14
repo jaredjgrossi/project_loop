@@ -1,0 +1,22 @@
+{
+  "id": "P62",
+  "seq": 63,
+  "category": "D",
+  "origin": "synthetic",
+  "context": "C1",
+  "text": "4 mi from 200 Fifth Ave, Naples, FL",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "ERROR out_of_area (place \"200 Fifth Ave, Naples, FL\") \u00b7 \"Loop only covers New York City, and 200 Fifth Ave, Naples, FL is outside it.\"",
+  "expect": {
+    "outcome": "ERROR",
+    "error": {
+      "code": "out_of_area",
+      "place": "200 Fifth Ave, Naples, FL",
+      "covers": "New York City"
+    }
+  },
+  "must_not": []
+}

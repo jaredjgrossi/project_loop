@@ -175,6 +175,25 @@ def _failure(out: dict, fallback: str = "parse_failed") -> _Fail:
 # ---- the app -----------------------------------------------------------------------------------------------------
 
 
+def _claude_area_fn() -> Callable[[str], bool]:
+    """Claude's area check for typed answers (decision 057): the Anthropic client is made when first needed."""
+    from api.parse import claude_area_check
+
+    made: list = []
+
+    def check(text: str) -> bool:
+        if not made:
+            import anthropic
+
+            from api.env import load_env
+            from api.llm_log import log_call
+            load_env()
+            made.append(claude_area_check(anthropic.Anthropic(), log=log_call))
+        return made[0](text)
+
+    return check
+
+
 def _db_places() -> Callable:
     @contextmanager
     def opened():
@@ -199,7 +218,7 @@ def _health_checks() -> dict:
 def create_app(*, token: str | None = None, parse_fn: Callable | None = None, places: Callable | None = None,
                engine: Engine | None = None, store: PendingStore | None = None,
                route_store=None, feedback_store=None, health_fn: Callable[[], dict] = _health_checks,
-               weather=None, warm: bool = True) -> FastAPI:
+               weather=None, area_fn: Callable[[str], bool] | None = None, warm: bool = True) -> FastAPI:
     """The app. Tests pass fakes; `uvicorn api.server:app` uses the real parser, places table and engine."""
     from api.env import load_env
 
@@ -207,6 +226,8 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
     token = token or os.environ.get("LOOP_TOKEN")
     if not token:
         raise RuntimeError("LOOP_TOKEN isn't set. Add a line LOOP_TOKEN=<random> to .env (see docs/phase3/ios-wiring.md).")
+    if area_fn is None and parse_fn is None:  # the real server: Claude's check, its client made on first use
+        area_fn = _claude_area_fn()
     parse_fn = parse_fn or parse
     places = places or _db_places()
     engine = Engine(prior_installs=prior_installs_from_env()) if engine is None else engine
@@ -277,7 +298,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
                 raise _Fail("bad_request") from exc
         try:
             with places() as p:
-                out = resume(pending.ext, ctx, p, {**pending.answers, **settled})
+                out = resume(pending.ext, ctx, p, {**pending.answers, **settled}, area=area_fn)
         except psycopg.Error as exc:
             raise _Fail("engine_unavailable") from exc
         if "error" in out:

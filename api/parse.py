@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from collections.abc import Callable
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -409,6 +410,24 @@ class _Build:
     amenity_from: list = field(default_factory=list)  # the same for amenity chips
     span_from: dict = field(default_factory=dict)  # a chip code set from another chip's words: chip id -> that id
     later: dict = field(default_factory=dict)  # answered values a later step builds (step 10: "+1 mi" on a reused route)
+    area: Callable[[str], bool] | None = None  # whether words name a place outside the five boroughs (decision 057)
+    area_seen: dict = field(default_factory=dict)  # each text is asked about once per build
+
+    def outside(self, text: str | None) -> bool:
+        """Whether `text` names a place outside the five boroughs. No check, or no words: no."""
+        text = (text or "").strip()
+        if not self.area or not text:
+            return False
+        if text not in self.area_seen:
+            self.area_seen[text] = bool(self.area(text))
+        return self.area_seen[text]
+
+    def not_found(self, about: str, typed: dict, name: str):
+        """The question "Couldn't find X. What's the address?", unless X is outside the five boroughs: that is an
+        error, never a question (decision 057)."""
+        if self.outside(name):
+            raise _OutOfArea(name.strip())
+        self.ask(about, "places", "question.place.not_found", typed=typed, name=name)
 
     def say(self, key: str, **values) -> str:
         text = render(key, **values)
@@ -596,6 +615,8 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
         return _ref(b.answers[f"place:{target}"])
     if f"text:{target}" in b.answers:  # a typed answer is a place name, or an address when it starts with a number
         typed = b.answers[f"text:{target}"]
+        if b.outside(typed):  # checked before the lookup: a Starbucks in NYC is not the Starbucks in Tampa
+            raise _OutOfArea(typed.strip())
         spec = {"kind": "address" if ADDRESS_LIKE.match(typed) else "place", "name": typed}
     kind, name = spec["kind"], (spec.get("name") or "").strip()
     about = role if role in ("start", "end") else "via"
@@ -631,7 +652,7 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
                       [("option.borough", {"borough": x}, {f"borough:{target}": x}) for x in boroughs],
                       typed={"kind": "borough", "target": target, "boroughs": list(boroughs)}, name=name)
         if hit is None:
-            b.ask(about, "places", "question.place.not_found", typed=typed, name=name)
+            b.not_found(about, typed, name)
         return PlaceRef(kind="address", name=name, borough=hit.borough, lat=hit.lat, lon=hit.lon,
                         source="NYC GeoSearch", trust="listed").model_dump(exclude_none=True)
     # A named place (R12)
@@ -643,7 +664,7 @@ def _resolve_place(b: _Build, spec: dict, role: str, ref_point, ref_borough, nea
     if not found and ADDRESS_LIKE.match(name):  # "11 Madison Ave" recorded as a place: it's an address
         return _resolve_place(b, spec | {"kind": "address"}, role, ref_point, ref_borough, target=target)
     if not found:
-        b.ask(about, "places", "question.place.not_found", typed=typed, name=name)
+        b.not_found(about, typed, name)
     chosen = found[0] if len(found) == 1 else b.places.pick(found, ref_borough)
     if chosen is None:
         b.ask(about, "places", "question.place.which", _options(found, target), typed=typed, name=name)
@@ -776,7 +797,7 @@ def _geocoded_via(b: _Build, name: str, target: str, ref_borough: str | None) ->
                   [("option.borough", {"borough": x}, {f"borough:{target}": x}) for x in boroughs],
                   typed={"kind": "borough", "target": target, "boroughs": list(boroughs)}, name=name)
     if hit is None:
-        b.ask("via", "places", "question.place.not_found", typed=_typed_place(target), name=name)
+        b.not_found("via", _typed_place(target), name)
     return PlaceMatch(name=name, kind="address", borough=hit.borough, lat=hit.lat, lon=hit.lon, matched=name,
                       source="NYC GeoSearch", ids=())
 
@@ -796,6 +817,8 @@ def _vias(b: _Build, ext: dict) -> list:
             continue
         named = loop_named(v["name"]) if v["kind"] == "place" else None  # "the Reservoir", "McCarren track"
         if f"text:{target}" in b.answers:
+            if b.outside(b.answers[f"text:{target}"]):
+                raise _OutOfArea(b.answers[f"text:{target}"].strip())
             v = {**v, "kind": "place", "name": b.answers[f"text:{target}"]}
         if v["kind"] == "the_park":
             major = b.places.major_parks_near(*point) if point else []
@@ -817,7 +840,7 @@ def _vias(b: _Build, ext: dict) -> list:
             b.via_from.append(i + 1)
             continue
         if not found:
-            b.ask("via", "places", "question.place.not_found", typed=typed, name=v["name"])
+            b.not_found("via", typed, v["name"])
         chosen = found[0] if len(found) == 1 else b.places.pick(found, borough)
         if chosen is None:
             b.ask("via", "places", "question.place.which", _options(found, target), typed=typed, name=v["name"])
@@ -1144,10 +1167,10 @@ def _attach_spans(b: _Build, ext: dict, chips: list[dict], question: dict | None
     return cid
 
 
-def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None) -> dict:
+def build(ext: dict, ctx: Context, places: Places, answers: dict | None = None, area=None) -> dict:
     """The deterministic half: extraction + context (+ what earlier answers settled) -> the parsed event and its
     trace. The question's answer map goes into the trace, never to the phone."""
-    b = _Build(ctx, places, answers=dict(answers or {}))
+    b = _Build(ctx, places, answers=dict(answers or {}), area=area)
     try:
         return _build(ext, ctx, b)
     except _OutOfArea as out:  # no question: the runner is told, with the place and what Loop covers
@@ -1273,9 +1296,9 @@ def answer_overrides(answer_map: dict | None, option_id: str | None, text: str |
     return {}
 
 
-def resume(ext: dict, ctx: Context, places: Places, answers: dict) -> dict:
+def resume(ext: dict, ctx: Context, places: Places, answers: dict, area=None) -> dict:
     """The merged request after an answer: the same extraction and context, with everything answered so far."""
-    return build(ext, ctx, places, answers=answers)
+    return build(ext, ctx, places, answers=answers, area=area)
 
 
 def parsed_for_constraints(constraints: dict, ctx: Context, places: Places) -> dict:
@@ -1347,15 +1370,65 @@ def extract(text: str, ctx: Context, client, model: str = DEFAULT_MODEL, effort:
     return ext, stats
 
 
+# ---- the area check ---------------------------------------------------------------------------------------------
+
+AREA_PROMPT_VERSION = "area_v1"
+AREA_PROMPT = (Path(__file__).parent / "prompts" / f"{AREA_PROMPT_VERSION}.md").read_text()
+AREA_TOOL = {"name": "record_area", "description": "Record whether the words name a place outside New York City.",
+             "input_schema": {"type": "object", "properties": {"outside_nyc": {"type": "boolean"}},
+                              "required": ["outside_nyc"], "additionalProperties": False}}
+
+
+def claude_area_check(client, model: str = DEFAULT_MODEL, log=None) -> Callable[[str], bool]:
+    """A function from words to whether they name a place outside the five boroughs (decision 057). Claude reads the
+    words only, never the runner's location, and answers true or false: code makes the error. Any failure answers
+    false, so the runner gets the old question rather than being blocked on a check that could not run."""
+    import anthropic
+
+    def check(text: str) -> bool:
+        t0 = time.perf_counter()
+        stats = {"purpose": "area", "prompt_version": AREA_PROMPT_VERSION, "model": model, "effort": "low",
+                 "thinking": "off", "request_text": text}
+        outside = False
+        try:
+            msg = client.messages.create(
+                model=model, max_tokens=200,
+                system=[{"type": "text", "text": AREA_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                tools=[AREA_TOOL], tool_choice={"type": "auto"}, output_config={"effort": "low"},
+                thinking={"type": "disabled"}, messages=[{"role": "user", "content": text}])
+            u = msg.usage
+            stats |= {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens,
+                      "cache_read_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
+                      "cache_write_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+                      "cost_usd": round(cost_usd(model, u), 8), "stop_reason": msg.stop_reason,
+                      "request_id": getattr(msg, "_request_id", None)}
+            call = next((blk.input for blk in msg.content
+                         if blk.type == "tool_use" and blk.name == AREA_TOOL["name"]), None)
+            if call is None:
+                stats["error"] = "no tool call"
+            else:
+                outside = call.get("outside_nyc") is True
+        except anthropic.APIError as exc:
+            stats["error"] = f"{exc.__class__.__name__}: {getattr(exc, 'message', exc)}"
+        stats["latency_ms"] = round((time.perf_counter() - t0) * 1000)
+        if log is not None:
+            log(stats)
+        return outside
+
+    return check
+
+
 def parse(request: dict, *, client=None, places: Places | None = None, model: str = DEFAULT_MODEL,
-          effort: str = DEFAULT_EFFORT, thinking: str = DEFAULT_THINKING, log=None) -> dict:
-    """A contract request with `text` -> {"parsed", "trace"} or {"error", "text"}. See the module docstring."""
+          effort: str = DEFAULT_EFFORT, thinking: str = DEFAULT_THINKING, log=None, area=None) -> dict:
+    """A contract request with `text` -> {"parsed", "trace"} or {"error", "text"}. See the module docstring. `area`
+    says whether words name a place outside the five boroughs; with no client given, Claude's check is used."""
     text = (request.get("text") or "").strip()
     if not text:
         return {"error": "bad_request", "text": render("error.bad_request")}
     ctx = Context.from_request(request)
     own = None
-    if client is None:
+    own_client = client is None
+    if own_client:
         import anthropic
 
         from api.env import load_env
@@ -1370,6 +1443,8 @@ def parse(request: dict, *, client=None, places: Places | None = None, model: st
     if log is None:
         from api.llm_log import log_call
         log = log_call
+    if area is None and own_client:
+        area = claude_area_check(client, model=model, log=log)
     try:
         for attempt in range(1 + SCHEMA_RETRIES):
             ext, stats = extract(text, ctx, client, model=model, effort=effort, thinking=thinking, log=log)
@@ -1386,7 +1461,7 @@ def parse(request: dict, *, client=None, places: Places | None = None, model: st
                 stats["error"] = f"schema: {exc}"
         else:
             return {"error": "parse_failed", "text": render("error.parse_failed"), "stats": stats}
-        out = build(ext, ctx, places)
+        out = build(ext, ctx, places, area=area)
         out.setdefault("trace", {})["stats"] = stats
         out["trace"]["extraction"] = ext
         return out

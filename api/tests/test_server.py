@@ -675,3 +675,17 @@ def test_weather_is_an_error_not_an_old_reading_when_no_station_answers():
     c, _ = client_for(weather=FakeWeather(fail=True))
     r = c.get("/v1/weather/nyc", headers=AUTH)
     assert r.status_code == 503 and r.json() == {"detail": "weather_unavailable"}
+
+
+def test_a_typed_answer_outside_nyc_is_an_out_of_area_error_event():
+    joe = ext(distance=mi(3), start={"kind": "place", "name": "Joe's Corner Cafe", "saved_id": None, "outside_nyc": False})
+    app = create_app(token=TOKEN, parse_fn=fake_parse({"3 mi from joe's": joe}), places=fake_places, engine=FakeEngine(),
+                     route_store=FakeRouteStore(), feedback_store=FakeFeedbackStore(), store=PendingStore(),
+                     area_fn=lambda text: "naples" in text.casefold(), warm=False,
+                     health_fn=lambda: {"engine": True, "database": True, "parser": True})
+    c = TestClient(app)
+    first = post(c, body(text="3 mi from joe's"))[0]
+    q, pid = first["question"], first["parse_id"]
+    evs = post(c, body(answer={"parse_id": pid, "question_id": q["id"], "text": "12 Gulf Shore Blvd, Naples"}))
+    assert [(e["event"], e.get("code"), e.get("place")) for e in evs] == [
+        ("error", "out_of_area", "12 Gulf Shore Blvd, Naples")]

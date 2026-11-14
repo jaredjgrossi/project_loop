@@ -162,6 +162,15 @@ PARSE · `start_place=place:"Penn Station" (said)` · `distance_mi=6 (said)`
 **P19** · C1 · `5 mi from hoboken path` · [lookup]
 ERROR `out_of_area` · place "Hoboken PATH" · covers "New York City" · "Loop only covers New York City, and Hoboken PATH is outside it." (decision 056; before it, ASK "Loop only covers New York City. Where should it start?"). No parsed event, so no start in New Jersey.
 
+**P60** · C1 · `3 miles from the Ritz Carlton Naples` · [lookup]
+ERROR `out_of_area` · place "Ritz Carlton Naples" · covers "New York City" (decision 057). From a phone test outside New York: it used to ask "Couldn't find Ritz Carlton Naples. What's the address?". Never a question for a place outside the five boroughs.
+
+**P61** · C1 · `5 mi from Starbucks Tampa` · [lookup]
+ERROR `out_of_area` · place "Starbucks Tampa". A chain that has branches in New York is still outside it when the runner names another city.
+
+**P62** · C1 · `4 mi from 200 Fifth Ave, Naples, FL` · [lookup]
+ERROR `out_of_area` · place "200 Fifth Ave, Naples, FL". An address in another city is out of the area, not "couldn't find" (the grader accepts the place with or without the city).
+
 **P20** · C1 · `start at the park, 3 mi`
 PARSE · `start_place=place:"East River Esplanade" (said "the park", R13)` · `distance_mi=3 (said)`. No major park within about 1 mi of Kips Bay; of the runnable places the esplanade (0.4 mi) clearly wins over the next (1.2 mi), so no question (decision 043; before it, ASK "Which park?").
 
@@ -299,7 +308,7 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | J. Impossible and feasibility | 3 | 2 | 0 |
 | **Total** | **60** | **12** | **17** |
 
-The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
+The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). P60–P62 (a named place, a place with a chain's name, and an address, each with a city outside New York: from a phone test outside New York, 2026-11-14) are the 61st to 63rd (decision 057). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
 
 Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, P40, P41 and P43. Each was covered by a real phrasing or another case, or was changed by a decision.
 

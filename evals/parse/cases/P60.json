@@ -1,0 +1,22 @@
+{
+  "id": "P60",
+  "seq": 61,
+  "category": "D",
+  "origin": "real",
+  "context": "C1",
+  "text": "3 miles from the Ritz Carlton Naples",
+  "tags": [
+    "lookup"
+  ],
+  "needs": [],
+  "doc": "ERROR out_of_area (place \"Ritz Carlton Naples\") \u00b7 \"Loop only covers New York City, and Ritz Carlton Naples is outside it.\"",
+  "expect": {
+    "outcome": "ERROR",
+    "error": {
+      "code": "out_of_area",
+      "place": "Ritz Carlton Naples",
+      "covers": "New York City"
+    }
+  },
+  "must_not": []
+}
