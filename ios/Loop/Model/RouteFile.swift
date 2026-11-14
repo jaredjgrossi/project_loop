@@ -177,6 +177,26 @@ struct RouteFile: Decodable {
         /// One line on why the route fits, written by the server from the route's own numbers (decision 049).
         /// Absent in older files; its `text` is null when nothing stands out.
         let reason: Reason?
+        /// Turn-by-turn maneuvers in order (decision 054). The key is absent for routes that weren't routed
+        /// (run-again, stored lines) and in older files: the stretch list stands in then.
+        let steps: [Turn]?
+    }
+
+    /// One maneuver from the server's turn instructions. `street` is null for a turn onto the street the
+    /// runner is already on, and for the finish.
+    struct Turn: Decodable, Equatable {
+        let index: Int
+        let maneuver: String
+        let street: String?
+        let fromMile: Double
+        let fromMeters: Double?
+        let distance: Measure
+        let trust: String?
+        let source: String?
+
+        static func == (a: Turn, b: Turn) -> Bool {
+            a.index == b.index && a.maneuver == b.maneuver && a.street == b.street && a.fromMile == b.fromMile
+        }
     }
 
     struct Reason: Decodable {
