@@ -42,8 +42,8 @@ This is the base version of signature moment D (`signature-moments-v1.md`). It i
 ## Not done
 - **Tilt, paper grain and sound** (the wildcard, D+). Left out on purpose.
 - **No setting to turn it off**, beyond Reduce Motion.
-- **The haptic pattern has not been felt.** It was written in the simulator, which has no haptic engine. Its
-  strengths and timings are first picks to tune on a phone.
+- **The haptic pattern is untuned.** It was written in the simulator, which has no haptic engine, so its strengths
+  and timings were first picks. It was felt on an iPhone on 2026-11-14 and kept as it was; no value was changed.
 - **Not checked against the live server.** With the bundled demo data the pencil phase lasts about 2.5 seconds. On a
   live build it lasts as long as the search, and a new leader before the flag morphs in pencil; that path is covered
   by unit tests on the frame, not by eye.
