@@ -3,7 +3,7 @@
 *2026-11-14 · branch `out-of-area-named`*
 
 ## What went wrong
-Jared's phone test from Florida (after decision 056): "3 miles from the Ritz Carlton Naples" made the server ask
+A phone test from outside New York (after decision 056): "3 miles from the Ritz Carlton Naples" made the server ask
 "Couldn't find Ritz Carlton Naples. What's the address?" and then "couldn't find" again. Decision 056 sent `out_of_area`
 only when Claude set `outside_nyc` on the extraction, and Haiku does not set it reliably: "Starbucks Tampa" was never
 flagged, and the same Naples request was flagged on one run and not on the next. A typed answer was never checked at all.
@@ -21,7 +21,7 @@ Claude still produces no geometry, numbers or copy. It runs:
 The extraction's own `outside_nyc` flag still short-circuits first and needs no second call.
 
 ## Choices worth knowing
-- **Words only.** The check gets the place text, never a location or any context. A phone in Naples sends no coordinates
+- **Words only.** The check gets the place text, never a location or any context. A phone outside New York sends no coordinates
   to Claude (the existing rule: Claude never receives coordinates).
 - **It fails open.** If the call fails or returns no tool call, the answer is "not outside" and the runner gets the old
   question. A broken check never blocks a request. Each call is logged in `llm_calls` with `purpose` "area" and
@@ -35,7 +35,7 @@ The extraction's own `outside_nyc` flag still short-circuits first and needs no 
   Its eval calls are in `llm_calls` under `parse_v8`.
 - **Evals:** P60 (Ritz Carlton Naples), P61 (Starbucks Tampa) and P62 (an address in Naples, FL) expect
   `ERROR out_of_area`. Typed answers are multi-turn, so they are unit-tested (`api/tests/test_area.py`,
-  `test_server.py`) and were run live against the branch server from a phone located in Naples.
+  `test_server.py`) and were run live against the branch server with the request's location set outside New York.
 
 ## Checked
 Live parse evals, P19 and P60 to P62: 4 of 4 on three runs in a row. Whole set, two runs each on this branch and on main:
