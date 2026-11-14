@@ -42,8 +42,8 @@ Live parse evals, P19 and P60 to P62: 4 of 4 on three runs in a row. Whole set, 
 the same cases flake on both (P23, P49, P54, and R02 and R05 on main), none new.
 
 ## Not done
-- **A bare chain name** with no city ("Starbucks", "the Ritz Carlton") is looked up in New York as before. A runner in
-  Florida who leaves out the city gets New York's Starbucks or a question; the server doesn't use the phone's location to
+- **A bare chain name** with no city ("Starbucks", "the Ritz Carlton") is looked up in New York as before. A runner outside
+  New York who leaves out the city gets New York's Starbucks or a question; the server doesn't use the phone's location to
   guess otherwise.
 - **The city can be dropped by Claude's extraction:** "200 Fifth Ave, Naples, FL" gave `place` "200 Fifth Ave" in one run.
   The error is right; the name in it is as good as the extraction.
