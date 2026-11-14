@@ -151,16 +151,25 @@ def _event(payload: dict) -> ServerSentEvent:
     return ServerSentEvent(event=payload["event"], data=payload)
 
 
-def _error(code: str) -> ServerSentEvent:
-    return _event({"event": "error", "v": 1, "code": code, "text": render(f"error.{code}")})
+def _error(code: str, **extra) -> ServerSentEvent:
+    """An error event: the code and its template text, plus the fields only some errors carry (`out_of_area`)."""
+    return _event({"event": "error", "v": 1, "code": code, "text": extra.pop("text", None) or render(f"error.{code}"),
+                   **extra})
 
 
 DONE = {"event": "done", "v": 1}
 
 
 class _Fail(Exception):
-    def __init__(self, code: str):
-        self.code = code
+    def __init__(self, code: str, **extra):
+        self.code, self.extra = code, extra
+
+
+def _failure(out: dict, fallback: str = "parse_failed") -> _Fail:
+    """The failure for a parse that returned an error. An `out_of_area` one keeps its place and what Loop covers."""
+    if out["error"] == "out_of_area":
+        return _Fail("out_of_area", place=out.get("place"), covers=out["covers"], text=out["text"])
+    return _Fail(out["error"] if out["error"] in ("parse_failed", "bad_request") else fallback)
 
 
 # ---- the app -----------------------------------------------------------------------------------------------------
@@ -242,7 +251,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         except psycopg.Error as exc:
             raise _Fail("engine_unavailable") from exc
         if "error" in out:
-            raise _Fail(out["error"] if out["error"] in ("parse_failed", "bad_request") else "parse_failed")
+            raise _failure(out)
         return out["parsed"], out["trace"], raw
 
     def from_answer(req: RunRequest) -> tuple[dict, dict, dict]:
@@ -272,7 +281,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         except psycopg.Error as exc:
             raise _Fail("engine_unavailable") from exc
         if "error" in out:
-            raise _Fail("parse_failed")
+            raise _failure(out)
         out["trace"]["extraction"] = pending.ext
         return out["parsed"], out["trace"], pending.request
 
@@ -400,7 +409,7 @@ def create_app(*, token: str | None = None, parse_fn: Callable | None = None, pl
         try:
             parsed, trace, kept = await run_in_threadpool(step, req)
         except _Fail as f:
-            yield _error(f.code)
+            yield _error(f.code, **f.extra)
             return
         if parsed.get("question"):
             q = parsed["question"]

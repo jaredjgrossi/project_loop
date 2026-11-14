@@ -29,7 +29,7 @@ import math
 import re
 from dataclasses import dataclass, field
 
-OUTCOMES = ("PARSE", "PARSE+CANT", "ASK")
+OUTCOMES = ("PARSE", "PARSE+CANT", "ASK", "ERROR")  # ERROR: an error event (out_of_area), no parsed event
 SOURCES = ("said", "preset", "default", "usual")
 ABOUTS = ("distance", "start", "end", "via", "time", "reuse", "amount")
 FROMS = ("parser", "places", "engine")
@@ -382,8 +382,29 @@ def _grade_expectation(exp: dict, parsed: dict, trace: dict, template_keys: set 
     return reasons
 
 
+def _grade_error(case: dict, output) -> Grade:
+    """A case whose right answer is an error event (a request outside the area Loop covers): the code must match, and
+    the place the runner named, as the places table reads names (so "Hoboken PATH station" is "Hoboken PATH")."""
+    want = case["expect"]["error"]
+    got = output if isinstance(output, dict) and "error" in output else {}
+    reasons = []
+    if got.get("error") != want["code"]:
+        reasons.append(f"error: expected {want['code']}, got {got.get('error') or 'a parsed event'}")
+    elif want.get("place") is not None:
+        a, b = norm(want["place"]), norm(got.get("place") or "")
+        if not b or (a not in b and b not in a):
+            reasons.append(f"error place: expected {want['place']!r}, got {got.get('place')!r}")
+    for k in ("covers",):
+        if k in want and got.get(k) != want[k]:
+            reasons.append(f"error {k}: expected {want[k]!r}, got {got.get(k)!r}")
+    return Grade(case["id"], not reasons, "ERROR" if got else None, reasons)
+
+
 def grade(case: dict, output: dict | None, template_keys: set | None = None) -> Grade:
     """Grade one parser output against one case. `template_keys`, when given, are the keys in api/copy.py."""
+    want = case["expect"]
+    if want["outcome"] == "ERROR":
+        return _grade_error(case, output)
     if not isinstance(output, dict) or "error" in output or not isinstance(output.get("parsed"), dict):
         err = output.get("error") if isinstance(output, dict) else None
         return Grade(case["id"], False, None, [f"parser failed: {err or 'no parsed result'}"])

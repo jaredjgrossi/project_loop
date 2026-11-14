@@ -171,6 +171,7 @@ or, typed, `"option_id": null, "text": "about 6 miles"`.
 | `expired` | Resend the original text request once (section 6) |
 | `parse_failed` | Show the text; the runner rewords |
 | `engine_unavailable` | Show the text; offer to retry |
+| `out_of_area` | The runner named a start or end outside the five boroughs. Show `text` as sent (it names `place`; `covers` is the short name, "New York City") and let them type another start. Nothing was built |
 | `bad_request` | A bug in the request we built: log it (no body, no location) and show the text |
 
 HTTP 401 means the token is wrong. Send the runner to the debug screen's token field.

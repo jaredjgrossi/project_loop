@@ -135,8 +135,6 @@ TEMPLATES: dict[str, str] = {
     "question.place.where_on": "Where on {name}?",
     "question.end.where": "Where do you want to end?",
     "question.place.not_found": "Couldn't find {name}. What's the address?",
-    "question.place.outside_nyc": "Loop only covers New York City. Where should it start?",
-    "question.place.outside_nyc_end": "Loop only covers New York City. Where should it end?",
     "question.place.saved_unknown": "What's the {word}'s address?",
     "question.place.neighborhood": "Where in {name} should it start?",
     "question.start.where": "Where should it start?",
@@ -208,6 +206,8 @@ TEMPLATES: dict[str, str] = {
     "error.parse_failed": "Couldn't read that request. Try saying it another way.",
     "error.engine_unavailable": "Can't build routes right now. Try again in a minute.",
     "error.bad_request": "Something was wrong with that request.",
+    "error.out_of_area": "Loop only covers {covers}, and {place} is outside it.",
+    "error.out_of_area_unnamed": "That's outside the area Loop covers, which is {covers}.",
     "error.expired": "That question timed out, so the request is being sent again.",
     "error.route_not_found": "Couldn't find that route. It may be from before Loop kept routes.",
 }

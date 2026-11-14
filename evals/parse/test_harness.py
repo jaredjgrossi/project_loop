@@ -35,6 +35,9 @@ def _actual(name, value):
 
 def oracle(case: dict, exp: dict | None = None) -> dict:
     exp = exp or case["expect"]
+    if exp["outcome"] == "ERROR":
+        return {"error": exp["error"]["code"], "text": "error", "place": exp["error"].get("place"),
+                "covers": exp["error"].get("covers")}
     listed = exp.get("fields") or exp.get("keep") or {}
     constraints, sources, chips, texts = {}, {}, [], []
 
@@ -91,7 +94,8 @@ def test_sixty_cases_with_the_docs_coverage():  # P50 joined for decision 035, P
     assert [c["seq"] for c in CASES] == list(range(1, 61))
     assert Counter(c["category"] for c in CASES) == {"A": 4, "B": 4, "C": 3, "D": 21, "E": 4, "F": 7, "G": 6,
                                                      "H": 5, "I": 3, "J": 3}
-    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 12  # P16, P46 parse since R19; P20 since 043
+    assert sum(c["expect"]["outcome"] == "ASK" for c in CASES) == 11  # P16, P46 parse since R19; P20 since 043; P19 errors
+    assert [c["id"] for c in CASES if c["expect"]["outcome"] == "ERROR"] == ["P19"]  # out of the area (decision 056)
     assert sum(c["origin"] in ("real", "endorsed") for c in CASES) == 17
 
 
@@ -103,6 +107,7 @@ def test_case_fixture_is_well_formed(case):
     for exp in [case["expect"], *case.get("alternatives", [])]:
         assert exp["outcome"] in OUTCOMES
         assert ("question" in exp) == (exp["outcome"] == "ASK")
+        assert ("error" in exp) == (exp["outcome"] == "ERROR")
         assert not ("fields" in exp and "keep" in exp)
         for name, spec in (exp.get("fields") or exp.get("keep") or {}).items():
             assert name in KNOWN_FIELDS

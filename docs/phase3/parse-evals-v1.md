@@ -160,8 +160,7 @@ If the lookup finds the same crossing in several boroughs, ASK (start, places) a
 PARSE · `start_place=place:"Penn Station" (said)` · `distance_mi=6 (said)`
 
 **P19** · C1 · `5 mi from hoboken path` · [lookup]
-ASK (start, places) · "Loop only covers New York City. Where should it start?"
-Must not: start in New Jersey.
+ERROR `out_of_area` · place "Hoboken PATH" · covers "New York City" · "Loop only covers New York City, and Hoboken PATH is outside it." (decision 056; before it, ASK "Loop only covers New York City. Where should it start?"). No parsed event, so no start in New Jersey.
 
 **P20** · C1 · `start at the park, 3 mi`
 PARSE · `start_place=place:"East River Esplanade" (said "the park", R13)` · `distance_mi=3 (said)`. No major park within about 1 mi of Kips Bay; of the runnable places the esplanade (0.4 mi) clearly wins over the next (1.2 mi), so no question (decision 043; before it, ASK "Which park?").

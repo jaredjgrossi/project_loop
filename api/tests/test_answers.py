@@ -76,8 +76,9 @@ def test_picking_a_side_of_the_park_settles_the_start():
 
 
 def test_a_typed_place_replaces_the_one_that_was_asked_about():
-    out, ctx = asked("P19")  # Hoboken PATH: outside NYC, where should it start?
-    after = answer(out, ctx, text="Penn Station", case_id="P19")
+    e = {**IDEAL["P19"], "start": {**IDEAL["P19"]["start"], "outside_nyc": False}}
+    out, ctx = asked("P19", e)  # a place the lookup can't find: what's the address?
+    after = answer(out, ctx, text="Penn Station", extraction=e)
     sp = after["parsed"]["constraints"]["start_place"]
     assert after["parsed"]["question"] is None and sp["name"] == "Penn Station"
 

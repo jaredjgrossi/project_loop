@@ -272,7 +272,8 @@ Built in step 11 (decision 038):
 
 ## Events: `done` and `error`
 - `done`: `{"event": "done"}`.
-- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request" | "expired" | "route_not_found", "text": "..."}`. The text comes from templates. `route_not_found`: "run again" of a route the server doesn't have.
+- `error`: `{"event": "error", "code": "engine_unavailable" | "parse_failed" | "bad_request" | "expired" | "route_not_found" | "out_of_area", "text": "..."}`. The text comes from templates. `route_not_found`: "run again" of a route the server doesn't have.
+  - `out_of_area` (decision 056) also carries `"place"` (the place the runner named, as they wrote it, e.g. `"Tampa"`; `null` when the request named none) and `"covers"` (the short name of what Loop covers, `"New York City"`: the five boroughs). It is sent instead of the question "Where should it start?" when the start or end the runner named is outside the five boroughs; the stream ends with it, nothing is built, and no `parsed` event comes first. Example: `{"event": "error", "v": 1, "code": "out_of_area", "text": "Loop only covers New York City, and Tampa is outside it.", "place": "Tampa", "covers": "New York City"}`. Show `text` as sent; the app may offer to type a new start. Not covered by it today: a *via* outside the five boroughs (the lookup finds nothing, so the runner is asked for an address), and a phone whose location is outside the five boroughs (the start falls back to the saved home, or a question).
 - `expired`: the answer's `parse_id` is unknown or older than 15 minutes (pending questions are kept in memory for 15 minutes, and a server restart forgets them). The app resends the original request (Jared, 2026-11-08).
 
 ## Built in step 5 (decision 029)
