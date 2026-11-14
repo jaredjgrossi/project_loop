@@ -9,7 +9,8 @@ enum Haptics {
     private static let notification = UINotificationFeedbackGenerator()
 
     static func prepareSettle() { light.prepare() }
-    /// The route settles at the provisional flag.
+    /// The route settles at the provisional flag. With Reduce Motion on, this one tap; otherwise
+    /// the settle is the ink's pattern (InkHaptics: a hum, a tick per mile, a knock).
     static func settle() { light.impactOccurred() }
 
     static func prepareScrub() { selection.prepare() }

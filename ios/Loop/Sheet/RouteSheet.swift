@@ -278,9 +278,16 @@ struct CardBlock: View {
                         HStack(spacing: 8) {
                             TrustTap(trust: shown.distanceTrust, source: shown.distanceSource) {
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
-                                        .typeStyle(.numeralXL)
-                                        .foregroundStyle(Palette.ink.color)
+                                    if shown.distanceTrust?.isEstimate == true {
+                                        Text(CardText.approx(CardText.distance(shown.distanceMi), shown.distanceTrust))
+                                            .typeStyle(.numeralXL)
+                                            .foregroundStyle(Palette.ink.color)
+                                    } else {
+                                        // Pencil, then ink (decision 052): the distance rolls up and lands with the ink.
+                                        RollingDistance(target: shown.distanceMi,
+                                                        duration: model.inkDuration(lengthM: shown.line.length),
+                                                        roll: !reduceMotion && model.inkIsMoving(now: CACurrentMediaTime()))
+                                    }
                                     Text("mi")
                                         .typeStyle(.numeralL)
                                         .foregroundStyle(Palette.unitInk.color)
@@ -299,7 +306,7 @@ struct CardBlock: View {
                         // The route's name from the server, once `final` has measured it (top3 names can change).
                         // Its room is held from the first card, so the sheet doesn't jump.
                         if shown.name != nil {
-                            Text(model.showsCount ? CardText.nameLine(shown.name ?? "") : "")
+                            Text(model.showsCount ? CardText.unbroken(CardText.nameLine(shown.name ?? "")) : "")
                                 .typeStyle(.bodyStrong)
                                 .foregroundStyle(Palette.ink.color)
                                 .lineLimit(2)
@@ -614,7 +621,7 @@ struct RatingContent: View {
                 .frame(maxWidth: .infinity).padding(.top, 10)
             Text("How was it?").typeStyle(.request).foregroundStyle(Palette.ink.color)
                 .padding(.top, 14).accessibilityAddTraits(.isHeader)
-            Text("\(state.route.name) · \(CardText.miles(state.route.distanceMi))")
+            Text("\(CardText.unbroken(state.route.name)) · \(CardText.miles(state.route.distanceMi))")
                 .typeStyle(.body).foregroundStyle(Palette.inkMuted.color).padding(.top, 4)
             HStack(spacing: 10) {
                 choice("Good", selected: false) { model.rateGood() }
@@ -649,13 +656,18 @@ struct RatingContent: View {
                         .background(Capsule().fill(Palette.surfaceSunken.color))
                         .padding(.top, 10)
                 }
-                HStack {
-                    Spacer()
-                    Button("Done") { noteFocused = false; model.finishNotForMe() }
-                        .typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
-                        .frame(minHeight: Metrics.minTap)
+                // The only way forward after "Not for me": a real button, like every other step
+                // that finishes something.
+                Button { noteFocused = false; model.finishNotForMe() } label: {
+                    Text("Done")
+                        .typeStyle(.bodyStrong)
+                        .foregroundStyle(Palette.onAction.color)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
                 }
-                .padding(.top, 4)
+                .buttonStyle(.plain)
+                .padding(.top, 14)
             } else {
                 Button("Not now") { model.closeRating() }
                     .typeStyle(.body).foregroundStyle(Palette.inkMuted.color)

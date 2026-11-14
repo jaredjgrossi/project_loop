@@ -49,6 +49,7 @@ targets:
           - InstrumentSans.ttf
         UILaunchScreen:
           UIColorName: LaunchBackground   # map-land, Paper and Night
+          UIImageName: LaunchMark         # the route L, where the in-app logo draws it
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false

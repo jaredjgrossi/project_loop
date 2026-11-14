@@ -85,7 +85,8 @@ struct LandingSheet: View {
                 if !searching {
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Your runs")
+                        // Until the runner has saved or run a route, the tiles are Loop's suggestions.
+                        Text(runs.saved.isEmpty && runs.runs.isEmpty ? "Try one" : "Your runs")
                             .typeStyle(.eyebrow)
                             .foregroundStyle(Palette.inkMuted.color)
                             .padding(.top, 22)
@@ -380,9 +381,7 @@ private struct RunTile: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
                     .frame(width: side, height: side)
                 VStack(spacing: 0) {
-                    Text(name)
-                        .typeStyle(.label)
-                        .foregroundStyle(Palette.ink.color)
+                    TileLabel(name: name, side: side, overhang: detail == nil ? 5 : 0)
                     if let detail {
                         Text(detail)
                             .typeStyle(.label)
@@ -402,6 +401,36 @@ private struct RunTile: View {
         .accessibilityHint(shape == nil ? "Sends this request" : "Shows this route")
         .accessibilityHidden(hidden)
         .allowsHitTesting(!hidden)
+    }
+}
+
+/// The name under a tile. As wide as the tile, so a long name wraps inside it and never runs
+/// into its neighbour or off the edge of a scrolling row. A name that fits on one line with up
+/// to `overhang` points to spare on each side keeps its line ("3 mi from here" is a hair wider
+/// than its tile). A long unbreakable word tightens, then shrinks a little, before it truncates.
+struct TileLabel: View {
+    let name: String
+    let side: CGFloat
+    var overhang: CGFloat = 0
+
+    var body: some View {
+        let name = CardText.unbroken(name)
+        ViewThatFits(in: .horizontal) {
+            Text(name)
+                .typeStyle(.label)
+                .lineLimit(1)
+                .fixedSize()
+            Text(name)
+                .typeStyle(.label)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .allowsTightening(true)
+                .minimumScaleFactor(0.88)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: side)
+        }
+        .foregroundStyle(Palette.ink.color)
+        .frame(width: side + 2 * overhang)
     }
 }
 
@@ -446,7 +475,7 @@ private struct RecentRow: View {
             HStack(spacing: 14) {
                 RouteThumbnail(shape: shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
-                Text(title)
+                Text(CardText.unbroken(title))
                     .typeStyle(.body)
                     .foregroundStyle(Palette.ink.color)
                     .lineLimit(1)
@@ -610,7 +639,7 @@ struct ReturnPrompt: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Palette.surfaceSheet.color)
                     .overlay(RouteThumbnail(shape: viewed.route.shape, lineWidth: 2, dot: 5, inset: 0.14))
                     .frame(width: 44, height: 44)
-                Text(MainModel.promptText(viewed))
+                Text(CardText.unbroken(MainModel.promptText(viewed)))
                     .typeStyle(.body).foregroundStyle(Palette.ink.color)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -211,20 +211,35 @@ final class RunStore {
     }
 
     /// Recent requests and saved runs whose title contains the typed text (any case), newest
-    /// first, at most `limit`. With nothing typed, the most recent.
+    /// first, at most `limit`. With nothing typed, the most recent. A route shows once: one that
+    /// was saved and run (or run several times) is one row, with its newest date.
     func matches(_ typed: String, limit: Int = 4) -> [RunMatch] {
-        var seen = Set<String>()
-        let runRows = runs.compactMap { r -> RunMatch? in
-            guard seen.insert(r.route.key).inserted else { return nil }
-            return RunMatch(id: "n_" + r.id, title: r.route.name, request: r.route.request, date: r.ranAt, shape: r.route.shape)
+        // (row, the route it stands for). Recent requests are sentences, not routes: never merged.
+        var rows: [(match: RunMatch, route: String?)] = recents.map {
+            (RunMatch(id: "r_" + $0.id, title: Self.sentence($0.request), request: $0.request, date: $0.date, shape: $0.shape), nil)
         }
-        let all = recents.map { RunMatch(id: "r_" + $0.id, title: Self.sentence($0.request), request: $0.request,
-                                         date: $0.date, shape: $0.shape) }
-            + saved.map { RunMatch(id: "s_" + $0.id, title: $0.name, request: $0.request, date: $0.savedAt, shape: $0.shape) }
-            + runRows
+        rows += saved.map {
+            (RunMatch(id: "s_" + $0.id, title: $0.name, request: $0.request, date: $0.savedAt, shape: $0.shape),
+             Self.routeTag($0.identity))
+        }
+        rows += runs.map {
+            (RunMatch(id: "n_" + $0.id, title: $0.route.name, request: $0.route.request, date: $0.ranAt, shape: $0.route.shape),
+             Self.routeTag($0.route))
+        }
+        var seen = Set<String>()
+        let all = rows.sorted { $0.match.date > $1.match.date }.filter { row in
+            guard let route = row.route else { return true }
+            return seen.insert(route).inserted
+        }.map(\.match)
         let q = typed.trimmingCharacters(in: .whitespaces)
         let hits = q.isEmpty ? all : all.filter { $0.title.localizedCaseInsensitiveContains(q) }
-        return Array(hits.sorted { $0.date > $1.date }.prefix(limit))
+        return Array(hits.prefix(limit))
+    }
+
+    /// What makes two rows the same route: the server's id or the archive when there is one;
+    /// otherwise the request and the name together (one request can build different routes).
+    private static func routeTag(_ r: RouteIdentity) -> String {
+        r.routeId ?? r.archive ?? (r.request + "|" + r.name.lowercased())
     }
 
     /// A request as the runner typed it, without the full stop the header adds.

@@ -116,4 +116,11 @@ final class ReadOutTests: XCTestCase {
         XCTAssertEqual((text as NSString).substring(with: NSRange(location: start.start, length: start.length)), "from the Kips Bay Library")
         XCTAssertFalse(r.filled.contains { $0.field == "start" }, "a start the runner said isn't listed as filled in")
     }
+
+    func testANameNeverBreaksInsideAHyphenatedWord() {
+        let shown = CardText.unbroken("East River out-and-back")
+        XCTAssertEqual(shown, "East River out-\u{2060}and-\u{2060}back", "a word joiner after each hyphen")
+        XCTAssertEqual(shown.replacingOccurrences(of: "\u{2060}", with: ""), "East River out-and-back", "nothing else changes")
+        XCTAssertEqual(CardText.unbroken("Kips Bay loop"), "Kips Bay loop")
+    }
 }

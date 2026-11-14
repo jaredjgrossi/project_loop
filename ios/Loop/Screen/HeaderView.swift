@@ -66,64 +66,113 @@ struct HeaderView: View {
     }
 }
 
-/// The sentence in edit mode: understood phrases are dotted-underlined buttons; other words, tapped,
-/// switch to editing the text.
+/// The sentence in edit mode: each understood phrase takes one dotted underline, through its spaces
+/// ("from the Kips Bay Library" is one piece), and opens its editor; any other word, tapped,
+/// switches to editing the text. One text, so it wraps exactly as the sentence does outside edit
+/// mode. VoiceOver gets the same pieces as buttons (the text's own links would read as links).
 struct EditableSentence: View {
     let sentence: String
     let understood: [ReadOut.Understood]
     let onUnderstood: (String) -> Void
     let onOtherWord: () -> Void
+    /// When a phrase was last tapped: the tap on the text behind it is then ignored.
+    @State private var phraseTapAt = Date.distantPast
 
-    private struct Token: Identifiable { let id: Int; let text: String; let field: String? }
+    /// A run of the sentence: an understood phrase (with its field) or the words between two.
+    struct Piece: Equatable, Identifiable {
+        let id: Int
+        let text: String
+        let field: String?
+    }
 
-    private var tokens: [Token] {
+    private static let scheme = "loop-edit:"
+
+    /// The sentence cut into pieces, in order, with nothing lost: joined, they are the sentence.
+    /// Phrases that overlap an earlier one, or run past the end, are left as plain words.
+    static func pieces(_ sentence: String, understood: [ReadOut.Understood]) -> [Piece] {
         let ns = sentence as NSString
-        var out: [Token] = []
-        var i = 0, n = 0
-        let spans = understood.sorted { $0.start < $1.start }
-        func words(_ s: String) {
-            for w in s.split(separator: " ", omittingEmptySubsequences: true) { out.append(Token(id: n, text: String(w), field: nil)); n += 1 }
+        var out: [Piece] = []
+        var i = 0
+        func add(_ text: String, _ field: String?) {
+            if !text.isEmpty { out.append(Piece(id: out.count, text: text, field: field)) }
         }
-        for u in spans where u.start >= i && u.start + u.length <= ns.length {
-            words(ns.substring(with: NSRange(location: i, length: u.start - i)))
-            // Each word of an understood phrase is its own button, so the sentence wraps naturally.
-            for w in ns.substring(with: NSRange(location: u.start, length: u.length)).split(separator: " ") {
-                out.append(Token(id: n, text: String(w), field: u.field)); n += 1
-            }
+        for u in understood.sorted(by: { $0.start < $1.start }) where u.start >= i && u.length > 0 && u.start + u.length <= ns.length {
+            add(ns.substring(with: NSRange(location: i, length: u.start - i)), nil)
+            add(ns.substring(with: NSRange(location: u.start, length: u.length)), u.field)
             i = u.start + u.length
         }
-        if i < ns.length { words(ns.substring(from: i)) }
-        // Punctuation sticks to the word before it, with no gap ("7 am.").
-        var merged: [Token] = []
-        for t in out {
-            if t.field == nil, t.text.allSatisfy({ ".,;:!?".contains($0) }), let last = merged.last {
-                merged[merged.count - 1] = Token(id: last.id, text: last.text + t.text, field: last.field)
-            } else { merged.append(t) }
+        if i < ns.length { add(ns.substring(from: i), nil) }
+        return out
+    }
+
+    /// The sentence with each understood phrase as one underlined link (`loop-edit:<field>`).
+    static func attributed(_ pieces: [Piece]) -> AttributedString {
+        var out = AttributedString()
+        for p in pieces {
+            var run = AttributedString(p.text)
+            if let field = p.field {
+                run.link = URL(string: scheme + field)
+                run.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: Palette.action.color)
+                run.swiftUI.foregroundColor = Palette.ink.color
+            }
+            out += run
         }
-        return merged
+        return out
+    }
+
+    /// What VoiceOver reads: the phrases, and the stretches of other words that have a letter or a
+    /// digit in them (a lone space or full stop is not a stop on the way).
+    static func spoken(_ pieces: [Piece]) -> [Piece] {
+        pieces.compactMap { p in
+            let text = p.field == nil ? p.text.trimmingCharacters(in: .whitespacesAndNewlines) : p.text
+            guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+            return Piece(id: p.id, text: text, field: p.field)
+        }
     }
 
     var body: some View {
-        FlowLayout(spacing: 7, lineSpacing: 4) {
-            ForEach(tokens) { t in
-                if let field = t.field {
-                    Button { onUnderstood(field) } label: {
-                        Text(t.text)
-                            .typeStyle(.request)
-                            .foregroundStyle(Palette.ink.color)
-                            .underline(true, pattern: .dot, color: Palette.action.color)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the editor")
-                } else {
-                    Text(t.text)
-                        .typeStyle(.request)
-                        .foregroundStyle(Palette.ink.color)
-                        .onTapGesture { onOtherWord() }
+        let pieces = Self.pieces(sentence, understood: understood)
+        Text(Self.attributed(pieces))
+            .typeStyle(.request)
+            .foregroundStyle(Palette.ink.color)
+            .tint(Palette.ink.color)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .environment(\.openURL, OpenURLAction { url in
+                let s = url.absoluteString
+                guard s.hasPrefix(Self.scheme) else { return .systemAction }
+                phraseTapAt = Date()
+                onUnderstood(String(s.dropFirst(Self.scheme.count)))
+                return .handled
+            })
+            .onTapGesture {
+                // A tap on a phrase is the phrase's, whichever handler hears it first.
+                DispatchQueue.main.async {
+                    if Date().timeIntervalSince(phraseTapAt) > 0.4 { onOtherWord() }
                 }
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityRepresentation {
+                // Each understood phrase is a button that opens its editor, in reading order; the
+                // other words are a button that edits the text, as a tap on them does. The buttons
+                // share the sentence's area as bands, top to bottom (a wrapped phrase has no one
+                // rectangle to give them).
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Self.spoken(pieces)) { p in
+                        Group {
+                            if let field = p.field {
+                                Button(p.text) { onUnderstood(field) }
+                                    .accessibilityHint("Opens the editor")
+                            } else {
+                                Button(p.text) { onOtherWord() }
+                                    .accessibilityHint("Edits the words")
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    }
+                }
+            }
     }
 }
 

@@ -159,9 +159,9 @@ struct RouteMapView: UIViewRepresentable {
             else { move(CameraRequest(kind: .overview)) }
         }
 
-        /// The candidate outlines are faint on purpose, but on the Night map 30% periwinkle barely
-        /// reads (device, 2026-11-09), so Night draws them at twice the opacity.
-        static func candidateBoost(dark: Bool) -> Double { dark ? 2 : 1 }
+        /// The candidate lines are pencil (graphite in the ink colour, which is light on the Night
+        /// map), drawn a little stronger than their faint opacity so they read as sketch lines.
+        static let pencilBoost = 1.5
 
         func setDark(_ value: Bool) {
             guard value != dark else { return }
@@ -218,6 +218,10 @@ struct RouteMapView: UIViewRepresentable {
             static let warmWater = "loop-warm-water"
             static let warmPark = "loop-warm-park"
             static let candidates = "loop-candidates"
+            static let candidates2 = "loop-candidates-2"
+            static let pencilSource = "loop-pencil"
+            static let pencil = "loop-pencil"
+            static let pencil2 = "loop-pencil-2"
             static let waterMask = "loop-water-mask"
             static func kind(_ k: DrawKind) -> String { "loop-route-\(k.rawValue)" }
         }
@@ -241,7 +245,7 @@ struct RouteMapView: UIViewRepresentable {
 
         private func addRouteLayers(_ map: MapboxMap) {
             let empty = FeatureCollection(features: [])
-            for id in [Ids.othersSource, Ids.alternatesSource, Ids.arrowsSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource] where !map.sourceExists(withId: id) {
+            for id in [Ids.othersSource, Ids.alternatesSource, Ids.arrowsSource, Ids.routeSource, Ids.reachSource, Ids.candidatesSource, Ids.pencilSource] where !map.sourceExists(withId: id) {
                 var s = GeoJSONSource(id: id)
                 s.data = .featureCollection(empty)
                 // No simplification: the route is ~140 vertices, and simplifying each feature on
@@ -307,6 +311,28 @@ struct RouteMapView: UIViewRepresentable {
             cands.lineEmissiveStrength = .constant(1)
             cands.slot = slot
             try? map.addLayer(cands)
+            // Pencil (decision 052): a second, thinner stroke a hair to one side makes a line read
+            // as sketched. The current best gets the same treatment, heavier.
+            var cands2 = LineLayer(id: Ids.candidates2, source: Ids.candidatesSource)
+            cands2.lineWidth = .constant(0.9)
+            cands2.lineOffset = .constant(1.6)
+            cands2.lineCap = .constant(.round)
+            cands2.lineJoin = .constant(.round)
+            cands2.lineOpacity = .constant(0)
+            cands2.lineEmissiveStrength = .constant(1)
+            cands2.slot = slot
+            try? map.addLayer(cands2)
+            for (id, width, offset, opacity) in [(Ids.pencil, 2.4, 0.0, 0.62), (Ids.pencil2, 1.1, 1.9, 0.3)] {
+                var l = LineLayer(id: id, source: Ids.pencilSource)
+                l.lineWidth = .constant(width)
+                l.lineOffset = .constant(offset)
+                l.lineCap = .constant(.round)
+                l.lineJoin = .constant(.round)
+                l.lineOpacity = .constant(opacity)
+                l.lineEmissiveStrength = .constant(1)
+                l.slot = slot
+                try? map.addLayer(l)
+            }
 
             // The casing is one line for the whole route (feature kind "casing"), under every run.
             var casing = LineLayer(id: Ids.casing, source: Ids.routeSource)
@@ -401,7 +427,8 @@ struct RouteMapView: UIViewRepresentable {
             set(Ids.base, "line-color", Palette.routeStreet)
             set(Ids.pathBed, "line-color", Palette.routeCasing)
             set(Ids.reachRing, "line-color", Palette.action)
-            set(Ids.candidates, "line-color", Palette.action)
+            // Everything Loop is still weighing is pencil: graphite, not the route's colours.
+            for id in [Ids.candidates, Ids.candidates2, Ids.pencil, Ids.pencil2] { set(id, "line-color", Palette.ink) }
             try? map.setLayerProperty(for: Ids.reachDim, property: "fill-color", value: Palette.reachDim.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmWater, property: "fill-color", value: Palette.warmWater.hex(dark: dark))
             try? map.setLayerProperty(for: Ids.warmPark, property: "fill-color", value: Palette.warmPark.hex(dark: dark))
@@ -476,8 +503,13 @@ struct RouteMapView: UIViewRepresentable {
                 map.updateGeoJSONSource(withId: Ids.candidatesSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
             if frame.candidateOpacity != lastFrame?.candidateOpacity {
-                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity",
-                                          value: frame.candidateOpacity * Self.candidateBoost(dark: dark))
+                let o = min(1, frame.candidateOpacity * Self.pencilBoost)
+                try? map.setLayerProperty(for: Ids.candidates, property: "line-opacity", value: o)
+                try? map.setLayerProperty(for: Ids.candidates2, property: "line-opacity", value: o * 0.55)
+            }
+            if frame.pencil != lastFrame?.pencil {
+                let features = frame.pencil.count >= 2 ? [Feature(geometry: LineString(frame.pencil.map(\.coordinate)))] : []
+                map.updateGeoJSONSource(withId: Ids.pencilSource, geoJSON: .featureCollection(FeatureCollection(features: features)))
             }
             if frame.othersOpacity != lastFrame?.othersOpacity {
                 try? map.setLayerProperty(for: Ids.others, property: "line-opacity", value: frame.othersOpacity)

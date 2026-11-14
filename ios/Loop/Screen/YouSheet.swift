@@ -94,7 +94,7 @@ struct HistoryRow: View {
                 RouteThumbnail(shape: log.route.shape, lineWidth: 1.8, dot: 0, inset: 0.06)
                     .frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(log.route.name)
+                    Text(CardText.unbroken(log.route.name))
                         .typeStyle(.body)
                         .foregroundStyle(Palette.ink.color)
                         .lineLimit(2)
@@ -147,18 +147,26 @@ struct YouSheet: View {
                         Text("Your defaults").typeStyle(.eyebrow).foregroundStyle(Palette.inkMuted.color)
                             .padding(.top, 26).accessibilityAddTraits(.isHeader)
                         DefaultsCard(model: model).padding(.top, 10)
-                        NavigationLink {
-                            HistoryList(model: model) { log in open { model.openHistory(log) } }
-                        } label: {
-                            HStack {
-                                Text(stats.count == 0 ? "No runs yet" : "All \(stats.count) run\(stats.count == 1 ? "" : "s")")
-                                    .typeStyle(.body).foregroundStyle(Palette.ink.color)
-                                Spacer()
-                                Text("History ›").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                        if stats.count == 0 {
+                            // No link to History until there is some: it led to an empty page.
+                            Text("No runs yet")
+                                .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                                .frame(minHeight: Metrics.minTap)
+                                .padding(.top, 14)
+                        } else {
+                            NavigationLink {
+                                HistoryList(model: model) { log in open { model.openHistory(log) } }
+                            } label: {
+                                HStack {
+                                    Text("All \(stats.count) run\(stats.count == 1 ? "" : "s")")
+                                        .typeStyle(.body).foregroundStyle(Palette.ink.color)
+                                    Spacer()
+                                    Text("History ›").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                                }
+                                .frame(minHeight: Metrics.minTap)
                             }
-                            .frame(minHeight: Metrics.minTap)
+                            .padding(.top, 14)
                         }
-                        .padding(.top, 14)
                     }
                     .padding(.horizontal, Metrics.s24)
                     .padding(.bottom, 32)
@@ -322,12 +330,8 @@ struct SavedTile: View {
                     .overlay(RouteThumbnail(shape: saved.shape, lineWidth: 2.4, dot: 7)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
                     .frame(width: side, height: side)
-                Text(saved.name)
-                    .typeStyle(.label)
-                    .foregroundStyle(Palette.ink.color)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(width: side + 10)
+                // No wider than the tile: in this scrolling row a wider label was cut off at the edge.
+                TileLabel(name: saved.name, side: side)
             }
         }
         .frame(width: side)

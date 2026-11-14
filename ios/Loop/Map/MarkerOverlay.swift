@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 /// Start dot, turnaround ring and mile marks, placed over the map from its projection.
@@ -11,6 +12,8 @@ struct MarkerOverlay: View {
 
     @ViewBuilder private func content(size: CGSize) -> some View {
         let showDetailMarks = model.zoom >= MapStyle.markerMinZoom
+        // Marks that appear while the ink runs land like stamps (decision 052).
+        let inking = model.inkIsMoving(now: CACurrentMediaTime())
         let selection = SelectionLayout.compute(model, size: size)
         let placements = showDetailMarks ? model.markPlacements() : [:]
         // START and TURN go beside their markers, away from the line and the mile marks.
@@ -25,6 +28,7 @@ struct MarkerOverlay: View {
                            let place = placements[m.mile], selection?.covers(place.center) != true {
                             MarkLeader(placement: place)
                             MileMarkButton(mile: m.mile) { model.tapMile(m.mile) }
+                                .modifier(StampIn(active: inking))
                                 .position(place.center)
                         }
                     }
@@ -32,7 +36,7 @@ struct MarkerOverlay: View {
                 if let t = detail.turnaround, model.isDrawn(alongM: t.alongM), let p = model.screenPoint(t.point) {
                     TurnaroundRing(pulseID: model.pulseID)
                         .position(p)
-                    if showDetailMarks, let c = labels.turn { MapLabel(text: "Turn").position(c) }
+                    if showDetailMarks, let c = labels.turn { MapLabel(text: "Turn").modifier(StampIn(active: inking)).position(c) }
                 }
             }
             // Every candidate starts at the same place, so the start shows as soon as a route does.

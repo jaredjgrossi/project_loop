@@ -100,8 +100,9 @@ struct QuestionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
+                // Loop is speaking: the question is set like the field under it, not as small print.
                 Text(question.text)
-                    .typeStyle(.body)
+                    .typeStyle(.field)
                     .foregroundStyle(Palette.ink.color)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -145,7 +146,7 @@ struct QuestionCard: View {
                     .background(Capsule().fill(Palette.surfaceSunken.color))
                     .overlay(alignment: .leading) {
                         if typed.isEmpty {
-                            Text("Or type an answer").typeStyle(.field).foregroundStyle(Palette.inkMuted.color)
+                            Text(question.options.isEmpty ? "Type an answer" : "Or type an answer").typeStyle(.field).foregroundStyle(Palette.inkMuted.color)
                                 .padding(.leading, 18).allowsHitTesting(false)
                         }
                     }

@@ -206,6 +206,7 @@ struct MainScreen: View {
         if args.contains("-LoopSampleWeather") { WeatherStore.shared.useSample() }
         let settledArgs = ["-LoopSettled", "-LoopMile", "-LoopSelectAt", "-LoopZoomAt", "-LoopZoomEsplanade", "-LoopPlay", "-LoopPinchTarget", "-LoopCant", "-LoopEdit", "-LoopReadIt"]
         if args.contains(where: settledArgs.contains) {
+            model.logoShown = false
             model.requestText = model.data.request.text
             var read = ReadOut.simulated(model.data.request.text, data: model.data, file: nil)
             // -LoopCant G9[,G8]: show can't-do lines for screenshots.
@@ -235,6 +236,18 @@ struct MainScreen: View {
                 try? await Task.sleep(for: .seconds(0.8))
                 model.fieldText = args[i + 1]
             }
+        }
+        if args.contains("-LoopLateNotice") {
+            // Screenshots (with -LoopDemo): the build fails after the route settled, before the final.
+            while !model.cardRevealed { try? await Task.sleep(for: .seconds(0.1)) }
+            try? await Task.sleep(for: .seconds(1.3))
+            model.debugLateNotice()
+        }
+        if args.contains("-LoopQuestion") {
+            // Screenshots (with -LoopDemo): a question with no options, as the parser asks it.
+            while model.stage != .reading { try? await Task.sleep(for: .seconds(0.1)) }
+            try? await Task.sleep(for: .seconds(0.8))
+            model.debugQuestion()
         }
         if args.contains("-LoopCollapsed") {
             // Screenshots: collapse the landing sheet once it has risen and typed its example.
@@ -458,11 +471,15 @@ private struct RenameField: View {
 /// (it reads the sheet's read progress); the rest of the screen doesn't.
 private struct MarkerLayer: View {
     let model: MainModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         ZStack(alignment: .top) {
             MarkerOverlay(model: model)
             SelectionOverlay(model: model)
         }
-        .opacity(1 - model.sheet.readProgress)
+        // Marks wait for the map's first full frame (the launch logo waits on the same flag), so
+        // on a slow load they never float on blank paper; then they arrive over 200 ms.
+        .opacity(model.mapReady ? 1 - model.sheet.readProgress : 0)
+        .animation(reduceMotion ? nil : Motion.textArrive, value: model.mapReady)
     }
 }
