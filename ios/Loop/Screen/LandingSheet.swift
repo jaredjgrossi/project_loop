@@ -65,6 +65,15 @@ struct LandingSheet: View {
                 .transition(.opacity)
             }
 
+            // Outside the covered area (checked on the phone): one quiet line, with the area's own name.
+            if let name = model.outsideCoverageName, !model.serverDown {
+                Text("Loop covers \(name) for now.")
+                    .typeStyle(.label)
+                    .foregroundStyle(Palette.inkSoft.color)
+                    .padding(.top, 10)
+                    .transition(.opacity)
+            }
+
             // Runs and Recent, or the typing list: both in place under the field, crossfading (200 ms).
             ZStack(alignment: .top) {
                 if searching {
@@ -348,7 +357,7 @@ private struct TileRow: View {
                     }
                     .contextMenu { SavedTileMenu(model: model, saved: run) }
                 }
-                ForEach(model.runs.suggestedTiles) { s in
+                ForEach(model.runs.suggestedTiles(outsideCoverage: model.outsideCoverageName != nil)) { s in
                     RunTile(side: side, name: s.name, detail: nil, shape: nil, glyph: s.glyph, hidden: hidden) {
                         model.send(s.request, reduceMotion: false)
                     }

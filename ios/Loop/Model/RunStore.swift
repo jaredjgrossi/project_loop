@@ -148,6 +148,12 @@ final class RunStore {
         SuggestedRun(id: "s_water", name: "By the water", request: "3 miles by the water", glyph: .water),
     ]
 
+    /// Starts inside the covered area, for when "from here" can't work (the phone has heard out_of_area).
+    static let coveredSuggestions = [
+        SuggestedRun(id: "s_bryant", name: "3 mi from Bryant Park", request: "3 miles from Bryant Park", glyph: .loop),
+        SuggestedRun(id: "s_kipsbay", name: "Kips Bay by the water", request: "3 miles by the water from Kips Bay", glyph: .water),
+    ]
+
     private struct File: Codable {
         var saved: [SavedRun]
         var recents: [RecentRoute]
@@ -164,8 +170,11 @@ final class RunStore {
     }
 
     /// The tiles: the runner's runs, then suggestions, three in all (the Save tile is the fourth).
-    var suggestedTiles: [SuggestedRun] {
-        Array(Self.suggestions.prefix(max(0, 3 - saved.count)))
+    var suggestedTiles: [SuggestedRun] { suggestedTiles(outsideCoverage: false) }
+
+    /// Outside coverage the examples name their start, in the covered area.
+    func suggestedTiles(outsideCoverage: Bool) -> [SuggestedRun] {
+        Array((outsideCoverage ? Self.coveredSuggestions : Self.suggestions).prefix(max(0, 3 - saved.count)))
     }
 
     nonisolated static var defaultURL: URL {

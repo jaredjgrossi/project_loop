@@ -196,6 +196,25 @@ final class MainModel {
     var pendingQuestion: ServerEvent.Question?
     /// A plain message instead of a spinner: the server is unreachable, or an error event.
     var liveNotice: LiveNotice?
+    /// The bundled outline of where Loop works. nil until the file is in the app.
+    @ObservationIgnored var coverageOutline: Coverage? = Coverage.loadBundled()
+    #if DEBUG
+    /// Screenshots (`-LoopCoverage`): an outline the runner is outside of.
+    var debugOutline: Coverage?
+    #endif
+    /// The covered area's name when the runner's own location (on the phone, never sent for this) is
+    /// outside it: the landing line and the examples follow it.
+    var outsideCoverageName: String? {
+        #if DEBUG
+        let outline = debugOutline ?? coverageOutline
+        #else
+        let outline = coverageOutline
+        #endif
+        guard let outline, LoopAPI.baseURL != nil || debugOutline != nil,
+              let h = locationProvider.here.map({ GeoPoint(lon: $0.coordinate.longitude, lat: $0.coordinate.latitude) })
+                ?? (debugOutline != nil ? fixtureStart : nil) else { return nil }
+        return outline.contains(h) ? nil : outline.name
+    }
     /// The token screen is up (no token yet, or the server said it's wrong).
     var needsToken = false
     var tokenMessage: String?
