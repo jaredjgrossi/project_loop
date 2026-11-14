@@ -110,8 +110,11 @@ struct LoopAPI {
                         continuation.yield(event)
                         if case .done = event { ended = true; break }
                         if case .error = event { ended = true; break }
+                        if case .outOfArea = event { ended = true; break }
                     }
-                    if !ended { throw Failure.unreachable }
+                    // A stream that closes with neither `done` nor `error` is the engine failing, not the
+                    // network (ios-wiring): its own words, with Try again.
+                    if !ended { continuation.yield(.error(code: "engine_unavailable", text: "")) }
                     continuation.finish()
                 } catch let f as Failure {
                     continuation.finish(throwing: f)

@@ -87,11 +87,27 @@ final class OutOfAreaTests: XCTestCase {
         XCTAssertNil(Coverage.decode(Data("nonsense".utf8)))
     }
 
-    func testNoBundledOutlineMeansNoGuess() {
-        // Until the file is in the app the phone says nothing about coverage.
-        if Bundle.main.url(forResource: "coverage", withExtension: "geojson") == nil {
-            XCTAssertNil(Coverage.loadBundled())
-        }
+    /// The real outline (Phase 3's coverage-nyc.geojson, simplified 0.0006 degrees, a little past the true edge).
+    func testTheBundledOutlineKnowsTheFiveBoroughsAndNotTheRest() throws {
+        let c = try XCTUnwrap(Coverage.loadBundled(), "coverage.geojson is in the app")
+        XCTAssertEqual(c.name, "New York City")
+        func at(_ lat: Double, _ lon: Double) -> Bool { c.contains(GeoPoint(lon: lon, lat: lat)) }
+        XCTAssertTrue(at(40.7425, -73.9800), "Kips Bay")
+        XCTAssertTrue(at(40.7829, -73.9654), "Central Park")
+        XCTAssertTrue(at(40.6602, -73.9690), "Prospect Park")
+        XCTAssertTrue(at(40.7676, -73.8330), "Flushing Meadows")
+        XCTAssertTrue(at(40.6413, -73.7781), "JFK")
+        XCTAssertTrue(at(40.5949, -73.7896), "Far Rockaway")
+        XCTAssertTrue(at(40.5120, -74.2430), "Tottenville")
+        XCTAssertTrue(at(40.6437, -74.0736), "St. George")
+        XCTAssertTrue(at(40.6895, -74.0168), "Governors Island")
+        XCTAssertTrue(at(40.7033, -74.0170), "Battery Park")
+        XCTAssertFalse(at(40.7359, -74.0306), "Hoboken PATH")
+        XCTAssertFalse(at(40.7032, -74.0570), "Liberty State Park")
+        XCTAssertFalse(at(40.7357, -74.1724), "Newark")
+        XCTAssertFalse(at(40.9312, -73.8988), "Yonkers")
+        XCTAssertFalse(at(27.9506, -82.4572), "Tampa")
+        XCTAssertFalse(at(48.8566, 2.3522), "Paris")
     }
 
     @MainActor func testTheTilesSwitchToStartsInsideCoverage() {
