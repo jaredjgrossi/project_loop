@@ -13,6 +13,7 @@ import pytest
 from api.constraints import RunConstraints
 from api.engine import Engine, Start
 from api.segments import route_stretches_and_pieces
+from api.steps import MIN_STEP_M
 from etl.load import database_url
 from evals.routes.live import load_starts, stack_problem, top_loops
 
@@ -78,6 +79,52 @@ def test_the_three_names_are_ones_a_runner_would_say(shape, miles):
         assert not r["label"].endswith(("waterfront path", "unnamed path")), r["label"]
         assert "plan" not in props and "name_ladder" not in props  # the generator's words never reach the app
     assert len(set(names)) == len(names), names
+
+
+MANEUVERS = {"start", "continue", "slight_left", "left", "sharp_left", "slight_right", "right", "sharp_right", "u_turn",
+             "turnaround", "finish"}
+
+
+def assert_steps_are_directions(r):
+    """Decision 054: steps for the Directions list tile the route and say something a runner can do."""
+    summary = r["file"]["features"][0]["properties"]["summary"]
+    steps = summary["steps"]
+    assert steps[0]["maneuver"] == "start" and steps[0]["from_meters"] == 0, r["label"]
+    assert steps[-1]["maneuver"] == "finish" and steps[-1]["from_meters"] == summary["distance"]["meters"], r["label"]
+    assert steps[-1]["distance"]["meters"] == 0 and steps[-1]["from_mile"] == summary["distance"]["value"]
+    for i, (a, b) in enumerate(zip(steps, steps[1:])):
+        assert a["index"] == i and a["maneuver"] in MANEUVERS
+        assert a["from_meters"] + a["distance"]["meters"] == b["from_meters"], (r["label"], a, b)
+        assert a["from_mile"] + a["distance"]["value"] == pytest.approx(b["from_mile"], abs=1e-9)
+        assert a["status"] == "measured" and a["trust"] in ("verified", "listed", "seasonal_or_closed") and a["source"]
+        if a["maneuver"] not in ("start", "turnaround"):
+            assert a["distance"]["meters"] >= MIN_STEP_M, (r["label"], a)  # no crossing or curb jog is a step of its own
+        if a["maneuver"] == "continue":
+            assert a["street"] and a["street"] != steps[i - 1]["street"], (r["label"], a)  # onto a different street
+    turns = [t["meters"] for t in summary["turnarounds"]]
+    got = [x["from_meters"] for x in steps if x["maneuver"] == "turnaround"]
+    assert len(got) == len(turns) and all(abs(g - t) <= 3 for g, t in zip(got, sorted(turns))), (r["label"], got, turns)
+    assert summary["way"]  # older clients keep the stretch list
+
+
+@pytest.mark.parametrize("shape, miles", [("any", 3.0), ("any", 6.0), ("loop", 4.0)])
+def test_every_route_of_the_final_has_steps_that_tile_it(shape, miles):
+    routes = built(shape, miles)["routes"]
+    assert len(routes) == 3
+    for r in routes:
+        assert_steps_are_directions(r)
+
+
+def test_a_one_way_run_through_central_park_has_steps_too():
+    """Grand Army Plaza (a public landmark) to Harlem Meer: the shortest way, which runs through the park."""
+    start, end = (40.7644, -73.9737), (40.7970, -73.9515)
+    place = {"kind": "place", "name": "Harlem Meer", "borough": "Manhattan", "lat": end[0], "lon": end[1]}
+    rc = RunConstraints(use_my_location=True, end_place=place)
+    final = Engine(use_prior=False, anchor_fn=None).build(rc, Start(*start, "Grand Army Plaza"), lambda e: None,
+                                                         "r_fd_park", end=end)
+    assert final["routes"] and all(r["kind"] == "a_to_b" for r in final["routes"])
+    for r in final["routes"]:
+        assert_steps_are_directions(r)
 
 
 def test_the_shape_flag_agrees_with_what_was_shown():

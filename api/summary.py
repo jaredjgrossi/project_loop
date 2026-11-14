@@ -15,6 +15,7 @@ from api.hills import hill_metrics
 from api.reason import route_reason
 from api.route_context import COMPOSITION
 from api.segments import COMPOSITION_SOURCE, SIGNALS_COUNTED
+from api.steps import route_steps
 
 METERS_PER_MILE = 1609.344
 DISTANCE_SOURCE = "route geometry (GraphHopper)"
@@ -134,6 +135,10 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
     turns = [m["properties"] for m in markers if m["properties"].get("feature") == "turnaround"]
     out["turnarounds"] = [_value(t["along_mi"], "mi", "measured", t["source"], meters=t["along_m"]) for t in turns]
     out["way"] = way_list(stretches, [t for t in (m["properties"] for m in markers) if t.get("feature") == "turnaround"])
+    steps = route_steps(c.route.coordinates, c.route.instructions, stretches, [t["along_m"] for t in turns],
+                        out["distance"]["meters"])
+    if steps:  # decision 054: a route that wasn't routed (a stored line) has none, and the app keeps `way`
+        out["steps"] = steps
     shown = lambda key: out[key]["value"] if out[key]["status"] == "measured" else None  # noqa: E731
     out["reason"] = route_reason(
         waterfront_pct=shown("waterfront_pct"), park_pct=shown("park_pct"), park_name=_park_name(stretches),

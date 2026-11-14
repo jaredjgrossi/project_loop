@@ -91,7 +91,7 @@ def fake_generate(cands, threads=True):
 
 
 def engine(generate_fn, **kw) -> Engine:
-    base = dict(generate_fn=generate_fn, grid_fn=lambda lat, lon: GRID, closures_fn=None, stretch_fn=None, cross_fn=None,
+    base = dict(generate_fn=generate_fn, grid_fn=lambda lat, lon: GRID, closures_fn=None, stretch_fn=None, cross_fn=None, instructions_fn=None,
                 anchor_fn=None, feature_anchor_fn=[], ready_fn=lambda: True,
                 context_for_fn=lambda *a, **kw: None)  # no Postgres in unit tests (decision 019): context not scored
     return Engine(**(base | kw))
@@ -538,6 +538,53 @@ def test_every_route_of_the_final_has_its_full_file():
         assert {"signalized_crossings", "climb", "waterfront_pct", "park_pct", "way", "reason"} <= set(props["summary"])
         assert r["label"] == props["label"] == props["name"]  # one name, in the list and in the file
     assert final["route"] == final["routes"][0]["file"]  # the first route's file, as before
+
+
+def routed_candidates():
+    """Three square loops whose routes carry GraphHopper's four right turns, as a routed candidate does (decision 054)."""
+    from dataclasses import replace
+
+    from api.markers import _along, _xy
+    out = []
+    for c in three_candidates():
+        a = _along(_xy(c.route.coordinates))  # the corners of the square, in meters along
+        out.append(replace(c, route=replace(c.route, instructions=((0, 0.0), (2, a[1]), (2, a[2]), (2, a[3]), (4, a[4])))))
+    return out
+
+
+def test_every_route_of_the_final_has_steps_that_tile_its_distance():
+    final = engine(fake_generate(routed_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_st")
+    assert len(final["routes"]) == 3
+    for r in final["routes"]:
+        summary = r["file"]["features"][0]["properties"]["summary"]
+        steps = summary["steps"]
+        assert [x["maneuver"] for x in steps] == ["start", "right", "right", "right", "finish"]
+        assert steps[0]["from_meters"] == 0 and steps[-1]["from_meters"] == summary["distance"]["meters"]
+        assert all(a["from_meters"] + a["distance"]["meters"] == b["from_meters"] for a, b in zip(steps, steps[1:]))
+        assert summary["way"] is not None  # older clients keep the stretch list
+    assert final["route"]["features"][0]["properties"]["summary"]["steps"]
+
+
+def test_only_the_final_routes_are_asked_again_for_instructions():
+    """Decision 054: asking changes a route's vertices, so the candidates (and the pinned top 3) are left as they were."""
+    from dataclasses import replace
+    asked = []
+
+    def instructions_fn(route):
+        asked.append(route)
+        return replace(route, instructions=((0, 0.0), (4, 1.0)))
+    final = engine(fake_generate(three_candidates()), instructions_fn=instructions_fn).build(
+        rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_ask")
+    assert len(asked) == 3 and all(r.instructions is None for r in asked)
+    for r in final["routes"]:
+        assert r["file"]["features"][0]["properties"]["summary"]["steps"]
+
+
+def test_a_route_without_instructions_has_no_steps_and_keeps_its_way():
+    final = engine(fake_generate(three_candidates())).build(rc(), Start(*KIPS_POINT, "x"), lambda e: None, "r_ns")
+    for r in final["routes"]:
+        summary = r["file"]["features"][0]["properties"]["summary"]
+        assert "steps" not in summary and "way" in summary
 
 
 def test_the_routes_are_named_from_their_own_stretches():

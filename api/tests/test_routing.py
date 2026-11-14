@@ -151,3 +151,72 @@ def test_requests_ask_for_elevation_and_routes_keep_it():
     assert r.coordinates == [[-73.9, 40.7], [-73.9, 40.71]] and r.elevation == [12.5, 13.0]
     flat = {"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": [[-73.9, 40.7], [-73.9, 40.71]]}}]}
     assert parse_route(flat, seed=0).elevation is None
+
+
+# ---- turn instructions for the final routes (decision 054) ---------------------------------------------------------------
+
+
+def line(n=11, step=0.0003):
+    """A straight northbound line of n points, about 33 m apart."""
+    return [[-73.98, 40.74 + i * step] for i in range(n)]
+
+
+def gh_path(coords, instructions, distance=100.0):
+    return {"paths": [{"distance": distance, "time": 1000, "points": {"coordinates": coords},
+                       "instructions": [{"sign": s, "interval": [a, b], "street_name": "", "distance": 1, "text": ""}
+                                        for s, a, b in instructions]}]}
+
+
+class FakeClient:
+    def __init__(self, payload, status=200):
+        self.payload, self.status, self.posted = payload, status, []
+
+    def post(self, url, json=None):
+        self.posted.append((url, json))
+        return httpx.Response(self.status, json=self.payload)
+
+
+def test_requests_stay_without_instructions_so_the_candidates_geometry_is_unchanged():
+    """With `instructions: true` GraphHopper keeps different vertices (same path, same length): every candidate would
+    change, and the pinned top 3 with it. Only the final routes are asked again, with instructions."""
+    assert build_waypoint_request([(40.7, -73.9), (40.71, -73.9)])["instructions"] is False
+    assert build_round_trip_request(40.7, -73.9, 5000)["instructions"] is False
+
+
+def test_a_routed_route_remembers_its_request_but_it_is_not_part_of_what_it_is():
+    resp = {"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": line(3)}}]}
+    client = FakeClient(resp)
+    route = request_route([(40.74, -73.98), (40.7406, -73.98)], client=client, base_url="http://gh.test")
+    assert route.request == ("http://gh.test", client.posted[0][1])
+    assert route.instructions is None
+    assert route == parse_route(resp, seed=0)  # equality is on the line, not the request
+
+
+def test_instructions_are_asked_for_again_on_the_same_request_and_placed_by_distance_along_the_route():
+    from api.routing import with_instructions
+    coords = line(11)
+    first = FakeClient({"paths": [{"distance": 332.0, "time": 1000, "points": {"coordinates": coords}}]})
+    route = request_route([(40.74, -73.98), (40.743, -73.98)], client=first, base_url="http://gh.test")
+    # The second answer has another vertex (GraphHopper keeps the instruction points): same path, same length.
+    extra = coords[:5] + [[-73.98, 40.7413]] + coords[5:]
+    second = FakeClient(gh_path(extra, [(0, 0, 5), (2, 5, 8), (4, 11, 11)], distance=332.0))
+    got = with_instructions(route, client=second)
+    assert second.posted[0][1] == {**first.posted[0][1], "instructions": True}
+    assert [s for s, _ in got.instructions] == [0, 2, 4]
+    assert got.instructions[0][1] == 0 and got.instructions[2][1] == pytest.approx(333, abs=3)
+    assert got.instructions[1][1] == pytest.approx(143.7, abs=1)  # the extra vertex, (40.7413 - 40.74) * 110,574 m along
+    assert got.coordinates == route.coordinates  # the route's own line is untouched
+
+
+def test_without_a_request_or_with_an_answer_that_doesnt_match_there_are_no_instructions():
+    from api.routing import with_instructions
+    route = parse_route({"paths": [{"distance": 10, "time": 1000, "points": {"coordinates": line(5)}}]}, seed=0)
+    assert with_instructions(route).instructions is None  # a stored line was never routed
+    routed = request_route([(40.74, -73.98), (40.7412, -73.98)], client=FakeClient(
+        {"paths": [{"distance": 133.0, "time": 1000, "points": {"coordinates": line(5)}}]}), base_url="http://gh.test")
+    other = FakeClient(gh_path(line(5, 0.0006), [(0, 0, 4), (4, 4, 4)]))  # a different path altogether
+    assert with_instructions(routed, client=other).instructions is None
+    assert with_instructions(routed, client=FakeClient({"message": "boom"}, status=500)).instructions is None
+    down = FakeClient({})
+    down.post = lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down"))
+    assert with_instructions(routed, client=down).instructions is None

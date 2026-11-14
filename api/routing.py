@@ -1,7 +1,7 @@
 """GraphHopper client: ask for a round-trip foot route and shape it as GeoJSON."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 import httpx
 
@@ -25,6 +25,12 @@ class Route:
     coordinates: list[list[float]]  # [lon, lat]
     seed: int = 0  # round-trip seed; 0 for routes through chosen waypoints
     elevation: list[float] | None = None  # meters, one per coordinate, when GraphHopper has elevation (decision 014)
+    # GraphHopper's turn instructions as (sign, meters along this route's own line), for the Directions steps
+    # (decision 054). Only the final routes have them (with_instructions); None for a stored line.
+    instructions: tuple[tuple[int, float], ...] | None = None
+    # (GraphHopper url, request body) this route came from, so a final route can be asked again with instructions.
+    # Not part of what the route is: left out of equality and repr.
+    request: tuple[str, dict] | None = field(default=None, compare=False, repr=False)
 
 
 def graphhopper_url() -> str:
@@ -93,7 +99,44 @@ def _post_route(body: dict, seed: int, client: httpx.Client | None, base_url: st
         payload = resp.json()
     except ValueError:
         raise RoutingError(f"GraphHopper returned HTTP {resp.status_code} with a non-JSON body") from None
-    return parse_route(payload, seed)
+    route = parse_route(payload, seed)
+    return replace(route, request=(base_url or graphhopper_url(), body))
+
+
+INSTRUCTION_LENGTH_TOLERANCE = 0.01  # the second answer must be the same path: its length within 1%
+
+
+def with_instructions(route: Route, client: httpx.Client | None = None) -> Route:
+    """The route with GraphHopper's turn instructions (decision 054), or unchanged when it has none to give.
+
+    Asking for instructions makes GraphHopper keep other vertices (the same path and length, a few points
+    different), which would change every candidate and the pinned top 3. So only the final routes are asked again,
+    on the request they came from, and each instruction is placed by its distance along the route: the two answers are
+    the same path, so the same meters. Returns the route as it was when it wasn't routed (a stored line), GraphHopper
+    is down, or the answer isn't the same path."""
+    from api.markers import _along, _xy
+    if route.request is None:
+        return route
+    url, body = route.request
+    owns_client = client is None
+    client = client or httpx.Client(timeout=60)
+    try:
+        resp = client.post(f"{url}/route", json={**body, "instructions": True})
+        paths = resp.json().get("paths") if resp.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        return route
+    finally:
+        if owns_client:
+            client.close()
+    if not paths or not paths[0].get("instructions"):
+        return route
+    coords = [c[:2] for c in paths[0]["points"]["coordinates"]]
+    got, own = _along(_xy(coords)), _along(_xy(route.coordinates))
+    if len(coords) < 2 or not own[-1] or abs(got[-1] - own[-1]) > INSTRUCTION_LENGTH_TOLERANCE * own[-1]:
+        return route
+    scale = own[-1] / got[-1]
+    return replace(route, instructions=tuple((i["sign"], round(got[min(i["interval"][0], len(got) - 1)] * scale, 1))
+                                             for i in paths[0]["instructions"]))
 
 
 def request_round_trip(
