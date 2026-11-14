@@ -26,10 +26,21 @@ All five boroughs, not Manhattan only:
 - **Parse evals:** P19 ("5 mi from hoboken path") now expects `ERROR` with code `out_of_area` and place "Hoboken PATH";
   the grader reads the place as the places table reads names, so "Hoboken PATH station" also passes.
 
+## The outline the phone checks (no coverage endpoint)
+There is no endpoint that takes a location: the phone's coordinates never go to the server. Instead the repo carries
+`docs/phase3/coverage-nyc.geojson` (about 3 KB, a FeatureCollection with one MultiPolygon, `[lon, lat]`, feature
+property `name` "New York City") for the iOS app to bundle and test its own location against. `etl/export_coverage.py`
+rebuilds it from the polygon the routing extract was clipped to, water edges included, so it is the area Loop routes in.
+- **It always contains the whole boundary** (grown by about 65 m, then simplified by the same), so a spot Loop covers is
+  never read as outside. The price is the other way: a point up to about 100 m beyond the true edge, over water or across
+  a borough line, can read as inside. The server still decides each request by the place the runner names.
+- **The copy is the app's.** With this outline the app tells a runner who is outside before any request; `text` on
+  `out_of_area` is a fallback for the requests that still reach the server, not the line the app shows.
+
 ## Not done
 - **A via outside the five boroughs** is not flagged (the via schema has no `outside_nyc`); the lookup finds nothing and
   the runner is asked for an address. Adding the flag means a new prompt version.
-- **A phone located outside the five boroughs** still falls back to the saved home or a question (R16); no place name
-  is known to put in an error.
+- **A phone located outside the five boroughs** still falls back to the saved home or a question (R16) on the server; no
+  place name is known to put in an error. The app uses the outline above to say so before it asks.
 - **Typed answers:** a place typed in answer to "Where should it start?" is not checked against the area, so it ends up
   as "Couldn't find X" if the lookup has nothing.
