@@ -165,6 +165,39 @@ struct NoticeCard: View {
     let notice: LiveNotice
 
     var body: some View {
+        if let area = notice.outOfArea { outOfArea(area) } else { plain }
+    }
+
+    /// Out of the covered area: Loop speaking, like a question. One way forward; × goes home.
+    private func outOfArea(_ area: OutOfArea) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(area.message)
+                    .typeStyle(.field)
+                    .foregroundStyle(Palette.ink.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                CloseCardButton { model.goHome() }
+                    .padding(.top, -10)
+                    .padding(.trailing, -10)
+                    .accessibilityLabel("Close")
+                    .accessibilityHint("Goes back to the start")
+            }
+            Button { model.changeTheStart() } label: {
+                Text(OutOfArea.buttonTitle).typeStyle(.bodyStrong).foregroundStyle(Palette.onAction.color)
+                    .frame(maxWidth: .infinity).frame(height: 50)
+                    .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Keeps what you typed so you can name a start there")
+        }
+        .padding(Metrics.s24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LiveCardBackground())
+    }
+
+    private var plain: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(notice.text)
                 .typeStyle(.body)

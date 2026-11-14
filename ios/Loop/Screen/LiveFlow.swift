@@ -8,6 +8,8 @@ struct LiveNotice: Equatable {
     let text: String
     /// Offer "Try again" (unreachable, engine_unavailable).
     let canRetry: Bool
+    /// An out_of_area answer: shown as a question card with one way forward, not an error.
+    var outOfArea: OutOfArea? = nil
 }
 
 /// Live builds from the Phase 3 server (`docs/phase3/ios-wiring.md`): parsed → candidates → top3 →
@@ -251,11 +253,34 @@ extension MainModel {
                 send(liveSentence, reduceMotion: reduceMotion)
                 return
             }
-            showNotice(LiveNotice(text: text.isEmpty ? LiveCopy.unreachable : text,
-                                  canRetry: code == "engine_unavailable" || code == "bad_final"))
+            // Every code has its own words; "can't reach" is for real network failures only.
+            let n = ErrorCopy.notice(code: code, text: text)
+            showNotice(LiveNotice(text: n.text, canRetry: n.canRetry))
+
+        case let .outOfArea(area):
+            // Nothing was built: a question for the runner, in the app's own words.
+            pendingQuestion = nil
+            showNotice(LiveNotice(text: area.message, canRetry: false, outOfArea: area))
 
         case .planned, .done, .other:
             break
+        }
+    }
+
+    /// "Change the start": back to the landing with what they typed still in the field, and the keyboard
+    /// up, so they can name a start inside the area.
+    func changeTheStart() {
+        let sentence = liveSentence
+        goHome()
+        fieldText = sentence
+        // The keyboard waits for the landing sheet to rise, or the field would open behind it.
+        Task { @MainActor [weak self] in
+            for _ in 0..<30 {
+                guard let self else { return }
+                if self.landingAnchor == nil, self.landingShown { break }
+                try? await Task.sleep(for: .seconds(0.1))
+            }
+            self?.focusFieldRequest += 1
         }
     }
 
@@ -426,6 +451,16 @@ extension MainModel {
     #if DEBUG
     /// Screenshots (`-LoopLateNotice`): the stream drops after the settle, before the final.
     func debugLateNotice() { showNotice(LiveNotice(text: LiveCopy.unreachable, canRetry: true)) }
+    #endif
+
+    #if DEBUG
+    /// Screenshots (`-LoopOutOfArea`): the out_of_area card, without a stream (the sentence is kept as typed).
+    func debugOutOfArea() {
+        let area = OutOfArea(place: "Tampa", covers: "New York City")
+        liveSentence = "3 miles from Tampa"
+        pendingQuestion = nil
+        showNotice(LiveNotice(text: area.message, canRetry: false, outOfArea: area))
+    }
     #endif
 
     #if DEBUG

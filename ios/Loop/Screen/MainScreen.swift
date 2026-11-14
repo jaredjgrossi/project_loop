@@ -243,6 +243,17 @@ struct MainScreen: View {
             try? await Task.sleep(for: .seconds(1.3))
             model.debugLateNotice()
         }
+        if args.contains("-LoopCoverage") {
+            // Screenshots: the landing after out_of_area (the line and the New York starts).
+            let tampa = [GeoPoint(lon: -82.6, lat: 27.8), GeoPoint(lon: -82.3, lat: 27.8), GeoPoint(lon: -82.3, lat: 28.1), GeoPoint(lon: -82.6, lat: 28.1)]
+            model.debugOutline = Coverage(name: "New York City", polygons: [.init(outer: tampa)])
+        }
+        if args.contains("-LoopOutOfArea") {
+            // Screenshots (with -LoopDemo): the out_of_area card, as the stream would show it.
+            while model.pendingQuestion == nil { try? await Task.sleep(for: .seconds(0.1)) }
+            try? await Task.sleep(for: .seconds(0.8))
+            model.debugOutOfArea()
+        }
         if args.contains("-LoopQuestion") {
             // Screenshots (with -LoopDemo): a question with no options, as the parser asks it.
             while model.stage != .reading { try? await Task.sleep(for: .seconds(0.1)) }

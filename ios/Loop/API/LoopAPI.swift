@@ -277,6 +277,8 @@ enum ServerEvent {
     case planned
     case done
     case error(code: String, text: String)
+    /// `error` with code out_of_area: a question for the runner, not a failure (decision 056).
+    case outOfArea(OutOfArea)
     case other
 
     static func decode(_ data: Data) -> ServerEvent {
@@ -298,6 +300,7 @@ enum ServerEvent {
         case "done": return .done
         case "error":
             let e = try? d.decode(ErrorEvent.self, from: data)
+            if e?.code == "out_of_area" { return .outOfArea(OutOfArea(place: e?.place, covers: e?.covers)) }
             return .error(code: e?.code ?? "engine_unavailable", text: e?.text ?? "")
         default: return .other
         }
@@ -305,7 +308,7 @@ enum ServerEvent {
 
     private struct Kind: Decodable { let event: String }
     private struct ConstraintsBox: Decodable { let constraints: JSONValue? }
-    private struct ErrorEvent: Decodable { let code: String; let text: String? }
+    private struct ErrorEvent: Decodable { let code: String; let text: String?; let place: String?; let covers: String? }
 
     struct Span: Decodable, Equatable {
         let text: String
