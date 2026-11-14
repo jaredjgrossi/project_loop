@@ -38,9 +38,6 @@ rebuilds it from the polygon the routing extract was clipped to, water edges inc
   `out_of_area` is a fallback for the requests that still reach the server, not the line the app shows.
 
 ## Not done
-- **A via outside the five boroughs** is not flagged (the via schema has no `outside_nyc`); the lookup finds nothing and
-  the runner is asked for an address. Adding the flag means a new prompt version.
 - **A phone located outside the five boroughs** still falls back to the saved home or a question (R16) on the server; no
   place name is known to put in an error. The app uses the outline above to say so before it asks.
-- **Typed answers:** a place typed in answer to "Where should it start?" is not checked against the area, so it ends up
-  as "Couldn't find X" if the lookup has nothing.
+- Decision 057 closed the gaps this note first listed (a via, a typed answer, a place whose lookup finds nothing).
