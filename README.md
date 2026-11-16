@@ -36,7 +36,7 @@ flowchart LR
 | Cost of reading a sentence | about $0.00026 (Claude Haiku 5.5), median 1.5 s |
 | First route on the phone | about 1.3 s median; the full search takes longer and keeps improving the top 3 |
 | Pinned top 3 for 30 start and distance pairs | 30 of 30 match the pinned results |
-| Unit tests | 1,392, none needing a database or network in CI |
+| Unit tests | 1,397; in CI 1,388 pass and 9 skip, with no database or network |
 | Live route, place, crowd and parse-harness evals | 395 of 396 on the last full run (2026-11-12), against the real stack on the Mac (one needs private run data and skips) |
 
 Every bad route that turns up in testing becomes a case in [`evals/routes/test_rejected_routes.py`](evals/routes/test_rejected_routes.py).
@@ -70,3 +70,6 @@ docs/      the plan, one note per decision, the API contract (phase3/), setup
 [`docs/SETUP.md`](docs/SETUP.md) has the whole setup for a Mac: Docker, the NYC map, the database, `make serve`.
 
 Data: NYC Open Data (parks, fountains, restrooms, neighborhoods, school calendars, pedestrian counts, subway ridership), NYC Ferry and SeaStreak schedules; map data © OpenStreetMap contributors via Geofabrik; addresses from NYC Planning Labs GeoSearch. Every loaded row keeps its source dataset ID, source row ID and load time.
+
+## License
+The code is under the [MIT License](LICENSE). The bundled fonts (Fraunces, Instrument Sans) are under the SIL Open Font License 1.1; their licence files sit beside them in `ios/Loop/Resources/Fonts/`.
