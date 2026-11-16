@@ -69,9 +69,10 @@ enum DemoSampleRuns {
         (3, 7, 3, "edit4", RunRating(verdict: .good)),
     ]
 
-    /// Two saved routes with the runner's own names (placeholders until Jared names them); the third, the East River
-    /// route, is saved live in segment B.
-    static let saved: [(name: String, key: String, daysAgo: Int)] = [("Saturday 4", "edit4", 20), ("To Union Square", "end_us_at7", 18)]
+    /// Two saved routes with the runner's own names (Jared's wording, 2026-11-16); the third, the East River route,
+    /// is saved live in segment B under Loop's name.
+    static let saved: [(name: String, key: String, daysAgo: Int)] = [("4 miles at 7am, by the water", "edit4", 20),
+                                                                      ("3 miles, ending at Union Square", "end_us_at7", 18)]
 
     /// The requests under "Recent" on the landing, newest first.
     static let recents: [(key: String, daysAgo: Int)] = [("edit4", 3), ("end_gc_at7", 9), ("lib7_at652", 13)]

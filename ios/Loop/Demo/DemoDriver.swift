@@ -60,7 +60,8 @@ final class DemoDriver {
 
     // MARK: Segments
 
-    /// A: 2 s still, 3 s of drift over the grid, the bar rises and types, send, the build in real time, 3 s on the card.
+    /// A: the real open (the mark fades into the map), 3 s of drift over the grid, the bar rises and types, send, the
+    /// build in real time, 3 s on the card.
     private func segmentA() async {
         guard let model else { return }
         LoopClock.pinned = DemoMode.morning
@@ -77,15 +78,20 @@ final class DemoDriver {
         model.fieldExample = ""
         model.clearSelection()
         model.landing.slide(to: 0, animated: false)   // as runLaunch leaves it before the sheet rises
-        model.logoShown = false
-        model.stage = .landing
+        model.logoShown = true
+        model.stage = .logo
         model.landingShown = false
+        // The real open: the route-L mark holds until the map has drawn, then fades into it (runLaunch's timings).
         await until("the map") { model.mapReady }
         model.requestCamera(.at(Self.driftFrom, zoom: Self.driftZoom), animated: false)
-        await hold(2.0)
+        await hold(MainModel.Timing.logoFade)
+        withAnimation(fast ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.6)) { model.logoShown = false }
+        await hold(0.6)
+        model.locationPulsing = !fast
+        model.stage = .landing
+        // Then the drift over the grid until the bar rises.
         model.requestCamera(.at(Self.driftTo, zoom: Self.driftZoom - 0.1), animated: true, duration: 3.2)
         await hold(3.0)
-        model.locationPulsing = !fast
         model.landingShown = true
         model.landingAnchor = model.landing.openHeight
         model.landing.settle(rest: .open, animated: !fast) { [weak model] in model?.landingAnchor = nil }
