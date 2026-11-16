@@ -15,7 +15,7 @@ with the routes, numbers and copy coming from the live engine.
    demo code: checked by `strings` on the Release binary (zero matches for the demo's type names, launch arguments,
    file names and copy; the only "demo" the binary knows is Mapbox's `MapCenterAltitudeMode` and the pre-existing
    `demoTyping` field name).
-2. **The script (`DemoDriver`) plays the brief's segments A to F,** segment B in its fallback form (Look Around out,
+2. **The script (`DemoDriver`) plays segments A to G** (the brief's A to F with two range beats in place of Union Square), segment B in its fallback form (Look Around out,
    decision 2026-11-14): a second mile on the strip, then routes #2 and #3. Every wait is tied to the thing it waits
    for (the parse, the card, the final, the landing, a view's frame), never a fixed sleep. Starting at a later
    segment plays the earlier ones first with holds skipped, then holds two seconds still. Taps are marked with a
@@ -38,9 +38,16 @@ with the routes, numbers and copy coming from the live engine.
    rebuild in C, the Union Square run in D, the History row in E and every number on the profile after E.
 
 ## The sequence as built
-A `3 miles by the water at 7` · B strip, two miles, #2, #3, bookmark · C edit 3 → 4 (two taps on +, Done), rebuild,
-sheet open on the crowd line · D `3 miles to Union Square at 7`, typed, six seconds · E prompt → I ran it → Good →
-History · F You: hero, numbers, 8 weeks, hero.
+A `3 miles by the water at 7` from the library · B strip, two miles, #2, #3, bookmark · C edit 3 → 4 (two taps on +,
+Done), rebuild, sheet open on the crowd line · D home, the location moves to 5th Ave & E 86th St, `a lap of the
+Reservoir at 7`, typed, six seconds · E home, the location moves to Grand Army Plaza, `3 miles around Prospect Park at
+7`; the engine asks for 4.3 mi and the script taps the first answer; six seconds · F back at the library, later the
+same morning: prompt → I ran it → Good → History · G You: hero, numbers, 8 weeks, hero. (Decided from the casting page
+on 2026-11-16: Union Square and the Hudson are out.)
+
+Starts are a short list of named public places (`DemoMode.starts`: the library, 5th Ave & E 86th St, Grand Army
+Plaza), each with the opening drift's camera points derived from it. The sample history and the Home default stay at
+the library whatever the segment's start. A question card's first option is a tap target, so a segment can answer.
 
 ## Also in this change
 - `MainModel.outsideCoverageName` read a Debug-only property outside `#if DEBUG`, so the Release configuration did

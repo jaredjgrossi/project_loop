@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 import UIKit
 
-/// Plays the demo video's sequence (the brief's segments A to F, decision 060) on the app itself: it types, taps,
+/// Plays the demo video's sequence (segments A to G, decision 060; the brief's A to F with two new range beats) on the app itself: it types, taps,
 /// scrolls and waits, with each wait tied to the thing it waits for (the parse, the card, the final, the sheet, the
 /// landing) rather than a fixed sleep, so a slow build can't break the timing. Every route and number on screen comes
 /// from the live server; the script only drives the app the way a finger would and marks each tap with a dot.
@@ -22,10 +22,9 @@ final class DemoDriver {
     private var routeA: RouteIdentity?
 
     static let requestA = "3 miles by the water at 7"
-    static let requestD = "3 miles to Union Square at 7"
-    /// The opening drift: Kips Bay's street grid at neighborhood zoom, no park in frame, ending near the start.
-    static let driftFrom = GeoPoint(lon: -73.9826, lat: 40.7449)
-    static let driftTo = GeoPoint(lon: -73.9815, lat: 40.7443)
+    static let requestD = "a lap of the Reservoir at 7"
+    static let requestE = "3 miles around Prospect Park at 7"
+    /// The opening drift's zoom: the street grid at neighborhood zoom; its points come from the start (DemoMode.Start).
     static let driftZoom = 15.35
 
     func start(model: MainModel, from segment: Character) {
@@ -37,7 +36,7 @@ final class DemoDriver {
     func stop() { task?.cancel() }
 
     private func run(from segment: Character) async {
-        let order: [Character] = ["A", "B", "C", "D", "E", "F"]
+        let order: [Character] = ["A", "B", "C", "D", "E", "F", "G"]
         let startAt = order.firstIndex(of: segment) ?? 0
         LoopClock.pinned = DemoMode.morning
         log("starting at \(segment)")
@@ -50,7 +49,8 @@ final class DemoDriver {
             case "C": await segmentC()
             case "D": await segmentD()
             case "E": await segmentE()
-            default: await segmentF()
+            case "F": await segmentF()
+            default: await segmentG()
             }
             guard !Task.isCancelled else { return }
             log("segment \(s) done")
@@ -60,11 +60,13 @@ final class DemoDriver {
 
     // MARK: Segments
 
-    /// A: the real open (the mark fades into the map), 3 s of drift over the grid, the bar rises and types, send, the
-    /// build in real time, 3 s on the card.
+    /// A: the real open (the mark fades into the map), 3 s of drift over the grid from the library, the bar rises and
+    /// types, send, the build in real time, 3 s on the card.
     private func segmentA() async {
         guard let model else { return }
         LoopClock.pinned = DemoMode.morning
+        let home = DemoMode.start("kips-bay-library")
+        model.locationProvider.simulate(home.point)
         // A clean map: no bundled route, no card, no sentence (what runLaunch resets, without its logo and camera).
         model.flow?.cancel()
         model.playbackCancel()
@@ -83,14 +85,14 @@ final class DemoDriver {
         model.landingShown = false
         // The real open: the route-L mark holds until the map has drawn, then fades into it (runLaunch's timings).
         await until("the map") { model.mapReady }
-        model.requestCamera(.at(Self.driftFrom, zoom: Self.driftZoom), animated: false)
+        model.requestCamera(.at(home.driftFrom, zoom: Self.driftZoom), animated: false)
         await hold(MainModel.Timing.logoFade)
         withAnimation(fast ? nil : .timingCurve(0.2, 0, 0, 1, duration: 0.6)) { model.logoShown = false }
         await hold(0.6)
         model.locationPulsing = !fast
         model.stage = .landing
         // Then the drift over the grid until the bar rises.
-        model.requestCamera(.at(Self.driftTo, zoom: Self.driftZoom - 0.1), animated: true, duration: 3.2)
+        model.requestCamera(.at(home.driftTo, zoom: Self.driftZoom - 0.1), animated: true, duration: 3.2)
         await hold(3.0)
         model.landingShown = true
         model.landingAnchor = model.landing.openHeight
@@ -158,36 +160,45 @@ final class DemoDriver {
         await hold(3.0)
     }
 
-    /// D: home, tap the field, type the Union Square request, send, the build, 6 s on the finished route.
+    /// D: home, the location moves to 5th Ave & E 86th St, the Reservoir lap is typed and sent, the build, 6 s held.
     private func segmentD() async {
-        guard let model else { return }
-        await tap("wordmark") { model.goHome() }
-        await until("the landing") { model.landingShown && model.landingAnchor == nil }
-        await hold(0.8)
-        await tap("field") { model.focusFieldRequest += 1 }
-        await until("typing", timeout: 3) { model.stage == .typing }
-        await hold(0.4)
-        await type(Self.requestD) { model.fieldText.append($0) }
-        await hold(0.7)
-        if let f = DemoTargets.frames["field"] { dot(CGPoint(x: f.maxX - 28, y: f.midY)) }
-        await sleep(fast ? 0 : 0.14)
-        // The field's own send, as the keyboard's Go key does it: a send from the script's task left the header stale.
-        model.demoSubmitRequest += 1
+        await goHomeAt("fifth-ave-86th")
+        await typeAndSend(Self.requestD)
         await awaitBuild()
         await hold(6.0)
     }
 
-    /// E: later the same morning. Home with the return prompt for segment A's route and the saved tile; "I ran it",
-    /// "Good"; the run at the top of History; 1.5 s on the list.
+    /// E: home, the location moves to Grand Army Plaza, the Prospect Park request is typed and sent; the engine asks
+    /// (the lap and the way there need more than 3 mi) and the script taps the first answer; the build, 6 s held.
     private func segmentE() async {
+        guard let model else { return }
+        await goHomeAt("grand-army-plaza")
+        await typeAndSend(Self.requestE)
+        // The parse lands first and the engine's question a moment later: wait for the card itself, or for a route
+        // if none comes.
+        await until("the question card", timeout: 40) { model.pendingQuestion != nil || model.cardRevealed || model.liveNotice != nil }
+        if let q = model.pendingQuestion, let first = q.options.first {
+            await hold(1.5)   // the card is read
+            await tap("questionOption1") { model.answerQuestion(optionId: first.id, text: nil) }
+        } else {
+            log("no question came for the Prospect Park lap")
+        }
+        await awaitBuild()
+        await hold(6.0)
+    }
+
+    /// F: later the same morning, back at the library. Home with the return prompt for segment A's route and the saved
+    /// tile; "I ran it", "Good"; the run at the top of History; 1.5 s on the list.
+    private func segmentF() async {
         guard let model else { return }
         LoopClock.pinned = DemoMode.laterMorning
         model.demoClockVersion += 1
         await WeatherStore.shared.refresh(force: true)
         if let a = routeA { model.runs.demoStageViewed(a, at: DemoMode.date(hour: 7, minute: 9)) }
+        model.locationProvider.simulate(DemoMode.start("kips-bay-library").point)
         model.goHome()
         await until("the landing") { model.landingShown && model.landingAnchor == nil }
-        if model.stage == .typing { model.cancelTyping() }   // the field kept its focus from D
+        if model.stage == .typing { model.cancelTyping() }   // the field kept its focus from the typed request
         model.demoBlurRequest += 1
         await sleep(0.3)
         model.checkReturnPrompt(openedAt: LoopClock.now())
@@ -207,14 +218,42 @@ final class DemoDriver {
         await hold(0.8)
     }
 
-    /// F: the route-L button; the hero map (draw-in), the numbers, the 8-week chart, back to the hero for 5 s.
-    private func segmentF() async {
+    /// G: the route-L button; the hero map (draw-in), the numbers, the 8-week chart, back to the hero for 5 s.
+    private func segmentG() async {
         guard let model else { return }
         await tap("you") { model.youShown = true }
         await hold(3.3)
         scroll("stats"); await hold(2.5)
         scroll("weeks"); await hold(2.5)
         scroll("hero"); await hold(5.0)
+    }
+
+    // MARK: Segment pieces
+
+    /// Home, then the simulated location moves to a named public start and the map eases there.
+    private func goHomeAt(_ key: String) async {
+        guard let model else { return }
+        await tap("wordmark") { model.goHome() }
+        await until("the landing") { model.landingShown && model.landingAnchor == nil }
+        if model.stage == .typing { model.cancelTyping() }
+        model.demoBlurRequest += 1
+        let start = DemoMode.start(key)
+        model.locationProvider.simulate(start.point)
+        model.requestCamera(.above(start.point, bottom: model.landing.openHeight, zoom: 14.2), animated: !fast, duration: 0.9)
+        await hold(1.3)
+    }
+
+    /// Tap the field, type the request a character at a time, send it the way the keyboard's Go key does.
+    private func typeAndSend(_ text: String) async {
+        guard let model else { return }
+        await tap("field") { model.focusFieldRequest += 1 }
+        await until("typing", timeout: 3) { model.stage == .typing }
+        await hold(0.4)
+        await type(text) { model.fieldText.append($0) }
+        await hold(0.7)
+        if let f = DemoTargets.frames["field"] { dot(CGPoint(x: f.maxX - 28, y: f.midY)) }
+        await sleep(fast ? 0 : 0.14)
+        model.demoSubmitRequest += 1
     }
 
     // MARK: Helpers

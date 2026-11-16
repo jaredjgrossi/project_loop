@@ -5,7 +5,7 @@ import SwiftUI
 /// Demo mode (decision 060): the app plays the demo video's sequence by itself on a real phone, from staged state at a
 /// public start, so the recording shows the real engine's routes with nothing personal on screen. Debug builds only:
 /// this whole folder is compiled out of Release. On with the launch argument `-LoopDemoMode [A-F]` (from the Mac:
-/// `xcrun devicectl device process launch ... -- -LoopDemoMode`) or a two-second press on the wordmark.
+/// `xcrun devicectl device process launch ... -- -LoopDemoMode [A-G]`) or a two-second press on the wordmark.
 ///
 /// Staged, so the post can say so: the clock (a school-day Tuesday, 6:52 for segments A to D, 9:40 for E and F), the
 /// location (the Kips Bay Library stand-in), the weather reading's temperature, the sample history, the saved routes,
@@ -17,8 +17,27 @@ enum DemoMode {
     /// The segment to start from ("A" plays everything).
     private(set) static var startSegment: Character = "A"
 
-    /// The public start: the Kips Bay Library stand-in (`evals/routes/starts.json`, `kips-bay`).
-    static let start = GeoPoint(lon: -73.97994, lat: 40.74384)
+    /// A named public start (never a home): the simulated location for a segment, and the opening drift's two camera
+    /// points derived from it (a little north-west, easing toward the start at neighborhood zoom).
+    struct Start {
+        let key: String
+        let name: String
+        let point: GeoPoint
+        var driftFrom: GeoPoint { GeoPoint(lon: point.lon - 0.0027, lat: point.lat + 0.0011) }
+        var driftTo: GeoPoint { GeoPoint(lon: point.lon - 0.0016, lat: point.lat + 0.0005) }
+    }
+
+    /// The short list. The first is the stand-in the sample history and the Home default use.
+    static let starts: [Start] = [
+        Start(key: "kips-bay-library", name: "Kips Bay Library", point: GeoPoint(lon: -73.97994, lat: 40.74384)),
+        Start(key: "fifth-ave-86th", name: "5th Ave & E 86th St", point: GeoPoint(lon: -73.9602, lat: 40.7794)),
+        Start(key: "grand-army-plaza", name: "Grand Army Plaza", point: GeoPoint(lon: -73.97105, lat: 40.67524)),
+    ]
+    static func start(_ key: String) -> Start { starts.first { $0.key == key } ?? starts[0] }
+
+    /// The public start the demo opens at and the history belongs to: the Kips Bay Library stand-in
+    /// (`evals/routes/starts.json`, `kips-bay`).
+    static let start = starts[0].point
     /// The weather line's fixed sample reading.
     static let sampleTemperature = "46°"
     static let sampleSymbol = "cloud.sun"
@@ -51,7 +70,7 @@ enum DemoMode {
         }
         guard let i = args.firstIndex(of: "-LoopDemoMode") else { return }
         active = true
-        if i + 1 < args.count, let c = args[i + 1].uppercased().first, "ABCDEF".contains(c) { startSegment = c }
+        if i + 1 < args.count, let c = args[i + 1].uppercased().first, "ABCDEFG".contains(c) { startSegment = c }
     }
 
     /// The hidden trigger on the phone: arms demo mode for the next launch (a two-second press on the wordmark).

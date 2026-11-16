@@ -119,6 +119,7 @@ struct QuestionCard: View {
                     ForEach(question.options, id: \.id) { o in
                         Button { model.answerQuestion(optionId: o.id, text: nil) } label: {
                             Text(o.text)
+                                .demoTarget(o.id == question.options.first?.id ? "questionOption1" : "questionOption-\(o.id)")
                                 .typeStyle(.bodyStrong)
                                 .foregroundStyle(Palette.ink.color)
                                 .padding(.horizontal, 16)
