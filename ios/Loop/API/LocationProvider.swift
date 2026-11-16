@@ -15,7 +15,19 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
     }
 
+    #if DEBUG
+    /// Demo mode (decision 060): a fixed location at a public start; Core Location is never asked.
+    private var simulated = false
+    func simulate(_ p: GeoPoint) {
+        simulated = true
+        here = CLLocation(latitude: p.lat, longitude: p.lon)
+    }
+    #endif
+
     func start() {
+        #if DEBUG
+        if simulated { return }
+        #endif
         switch manager.authorizationStatus {
         case .notDetermined: manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways: manager.startUpdatingLocation()

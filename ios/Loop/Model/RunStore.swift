@@ -184,7 +184,7 @@ final class RunStore {
 
     /// Reads the file. A first launch seeds "Usual" (and one recent) from the saved route file,
     /// until runs can be saved from a card.
-    static func load(data: LoopData, url: URL = defaultURL, now: Date = Date()) -> RunStore {
+    static func load(data: LoopData, url: URL = defaultURL, now: Date = LoopClock.now()) -> RunStore {
         if let bytes = try? Data(contentsOf: url),
            let file = try? JSONDecoder.runs.decode(File.self, from: bytes) {
             let store = RunStore(saved: file.saved, recents: file.recents, fileURL: url)
@@ -257,7 +257,7 @@ final class RunStore {
     /// A request that built a route goes to the top of Recent (the same request again moves up).
     /// `countsAsRun` false (dismissing a card) moves it up without counting another run.
     func addRecent(request: String, distanceMi: Double, line: Polyline, countsAsRun: Bool = true,
-                   serverId: String? = nil, now: Date = Date()) {
+                   serverId: String? = nil, now: Date = LoopClock.now()) {
         let text = request.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = Self.key(text)
         var times = 1
@@ -296,7 +296,7 @@ final class RunStore {
 
     func isSaved(_ r: RouteIdentity) -> Bool { saved.contains { same($0, r) } }
 
-    func save(_ r: RouteIdentity, now: Date = Date()) {
+    func save(_ r: RouteIdentity, now: Date = LoopClock.now()) {
         guard !isSaved(r) else { return }
         saved.insert(SavedRun(id: "sv_\(UUID().uuidString.prefix(8))", name: r.name, request: r.request, distanceMi: r.distanceMi,
                               shape: r.shape, savedAt: now, routeId: r.routeId, archive: r.archive), at: 0)
@@ -324,7 +324,7 @@ final class RunStore {
 
     /// "I ran it": the run is marked at once; the rating can follow, now or later.
     @discardableResult
-    func markRun(_ r: RouteIdentity, at: Date = Date()) -> RunLog {
+    func markRun(_ r: RouteIdentity, at: Date = LoopClock.now()) -> RunLog {
         let log = RunLog(id: "run_\(UUID().uuidString.prefix(10))", route: r, ranAt: at, rating: nil)
         runs.insert(log, at: 0)
         if let i = viewed.firstIndex(where: { $0.route.key == r.key }) { viewed[i].prompted = true }
@@ -341,7 +341,7 @@ final class RunStore {
     // MARK: The return prompt
 
     /// A route was viewed or shared.
-    func noteViewed(_ r: RouteIdentity, at: Date = Date()) {
+    func noteViewed(_ r: RouteIdentity, at: Date = LoopClock.now()) {
         viewed.removeAll { $0.route.key == r.key }
         viewed.insert(ViewedRoute(route: r, at: at), at: 0)
         if viewed.count > 10 { viewed.removeLast(viewed.count - 10) }
@@ -350,7 +350,7 @@ final class RunStore {
 
     /// At launch: the latest route viewed before this open, within 24 h, not marked as run and not
     /// asked about yet. Asked once.
-    func returnPrompt(openedAt: Date = Date()) -> ViewedRoute? {
+    func returnPrompt(openedAt: Date = LoopClock.now()) -> ViewedRoute? {
         viewed.first { v in
             !v.prompted && v.at < openedAt && openedAt.timeIntervalSince(v.at) < 24 * 3600
                 && !runs.contains { $0.route.key == v.route.key && $0.ranAt >= v.at }
@@ -395,7 +395,7 @@ final class RunStore {
     }
 
     /// "Today", "Yesterday", a weekday within the last week ("Sun"), else a date ("Nov 2").
-    static func dayText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    static func dayText(_ date: Date, now: Date = LoopClock.now(), calendar: Calendar = .current) -> String {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
         if days <= 0 { return "Today" }
         if days == 1 { return "Yesterday" }
@@ -441,6 +441,47 @@ extension RunStore {
                                     ? Calendar.current.startOfDay(for: now).addingTimeInterval(6.5 * 3600) : now.addingTimeInterval(-3600))]
         store.profile.home = .init(label: "Kips Bay Library", lat: first.detail?.start.lat ?? 40.7439, lon: first.detail?.start.lon ?? -73.9799)
         return store
+    }
+}
+#endif
+
+#if DEBUG
+extension RunStore {
+    /// Demo mode (decision 060): a believable first month from real engine routes (DemoSampleRuns, labeled sample),
+    /// in the demo's own file, so a segment can start again from it and the real store is never touched.
+    static func demoStaged(data: LoopData, reset: Bool, now: Date) -> RunStore {
+        let url = DemoMode.storeURL
+        if reset { try? FileManager.default.removeItem(at: url) }
+        if FileManager.default.fileExists(atPath: url.path) { return load(data: data, url: url, now: now) }
+        let store = RunStore(fileURL: url)
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = DemoMode.newYork
+        let day = cal.startOfDay(for: now)
+        func at(_ daysAgo: Int, _ hour: Int, _ minute: Int) -> Date {
+            cal.date(byAdding: .day, value: -daysAgo, to: day).flatMap { cal.date(bySettingHour: hour, minute: minute, second: 0, of: $0) } ?? now
+        }
+        let routes = DemoSampleRuns.routes
+        store.runs = DemoSampleRuns.plan.enumerated().compactMap { i, p in
+            routes[p.key].map { RunLog(id: "sample_run_\(i)", route: $0.identity, ranAt: at(p.daysAgo, p.hour, p.minute), rating: p.rating) }
+        }.sorted { $0.ranAt > $1.ranAt }
+        store.saved = DemoSampleRuns.saved.compactMap { s in
+            routes[s.key].map { SavedRun(id: "sample_saved_\(s.key)", name: s.name, request: $0.request, distanceMi: $0.distanceMi,
+                                         shape: $0.shape, savedAt: at(s.daysAgo, 7, 40)) }
+        }
+        store.recents = DemoSampleRuns.recents.compactMap { r in
+            routes[r.key].map { RecentRoute(id: "sample_recent_\(r.key)", date: at(r.daysAgo, 7, 0), name: $0.request, distanceMi: $0.distanceMi,
+                                            timesRun: 1, request: $0.request, shape: $0.shape) }
+        }
+        store.profile = RunnerProfile(usualDistanceMi: 3, usualTime: "07:00", usualShape: UsualShape.any.rawValue,
+                                      home: .init(label: "Kips Bay Library", lat: DemoMode.start.lat, lon: DemoMode.start.lon))
+        store.write()
+        return store
+    }
+
+    /// Segment E's staged return prompt: this route, viewed this morning, is the one waiting to be asked about.
+    func demoStageViewed(_ r: RouteIdentity, at: Date) {
+        viewed = [ViewedRoute(route: r, at: at)]
+        write()
     }
 }
 #endif

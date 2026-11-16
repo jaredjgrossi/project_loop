@@ -52,7 +52,7 @@ struct EditorPanel: View {
                 }
                 Spacer()
                 Button { done() } label: {
-                    Text("Done").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color)
+                    Text("Done").typeStyle(.bodyStrong).foregroundStyle(Palette.action.color).demoTarget("editorDone")
                         .frame(minWidth: Metrics.minTap, minHeight: Metrics.minTap, alignment: .trailing)
                         .contentShape(Rectangle())
                 }
@@ -68,6 +68,10 @@ struct EditorPanel: View {
         .frame(maxWidth: .infinity, alignment: target.isUnderstood ? .leading : .center)
         .padding(.horizontal, Metrics.s24)
         .onAppear(perform: load)
+        #if DEBUG
+        .onChange(of: model.demoEditorPlus) { _, _ in if target.field == "distance" { miles = min(30, miles + 0.5) } }
+        .onChange(of: model.demoEditorDone) { _, _ in done() }
+        #endif
     }
 
     @ViewBuilder private var control: some View {
@@ -105,7 +109,7 @@ struct EditorPanel: View {
             Spacer()
             Text(text).typeStyle(.numeralL).foregroundStyle(Palette.ink.color)
             Spacer()
-            roundButton("plus", label: "More", action: plus)
+            roundButton("plus", label: "More", action: plus).demoTarget("editorPlus")
         }
     }
 

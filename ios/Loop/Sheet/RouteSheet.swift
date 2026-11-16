@@ -58,6 +58,7 @@ struct RouteSheet: View {
                 .padding(.top, 10)
                 .frame(maxWidth: .infinity)
                 .frame(height: 14, alignment: .top)
+                .demoTarget("grabber")
                 .contentShape(Rectangle())
                 .accessibilityElement()
                 .accessibilityLabel(model.sheetIsOpen ? "Close route details" : "Open route details")
@@ -111,7 +112,7 @@ struct RouteSheet: View {
         .padding(.horizontal, Metrics.s24)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: -6) {
-                if model.currentRoute != nil { BookmarkButton(saved: model.isCurrentSaved) { model.toggleSave() } }
+                if model.currentRoute != nil { BookmarkButton(saved: model.isCurrentSaved) { model.toggleSave() }.demoTarget("bookmark") }
                 CloseCardButton { model.goHome() }
             }
             .padding(.top, 12).padding(.trailing, 14)
@@ -630,7 +631,7 @@ struct RatingContent: View {
             Text("\(CardText.unbroken(state.route.name)) · \(CardText.miles(state.route.distanceMi))")
                 .typeStyle(.body).foregroundStyle(Palette.inkMuted.color).padding(.top, 4)
             HStack(spacing: 10) {
-                choice("Good", selected: false) { model.rateGood() }
+                choice("Good", selected: false) { model.rateGood() }.demoTarget("rateGood")
                 choice("Not for me", selected: state.notForMe) { model.chooseNotForMe() }
             }
             .padding(.top, 18)

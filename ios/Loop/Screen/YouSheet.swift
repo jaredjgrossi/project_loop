@@ -16,6 +16,7 @@ struct YouButton: View {
                 .overlay(Circle().strokeBorder(Palette.controlBorder.color, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .demoTarget("you")
         .accessibilityLabel("You")
         .accessibilityHint("Your runs, saved routes and defaults")
     }
@@ -126,12 +127,16 @@ struct YouSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var runs: RunStore { model.runs }
+    #if DEBUG
+    @State private var demoHistory = false
+    #endif
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    hero
+                    hero.id("hero")
                     VStack(alignment: .leading, spacing: 0) {
                         let stats = RunStats(runs: runs.runs)
                         Text(stats.count == 0 ? "Your runs will draw here"
@@ -139,8 +144,8 @@ struct YouSheet: View {
                             .typeStyle(.label).foregroundStyle(Palette.inkMuted.color)
                             .padding(.top, 4)
                         if stats.count > 0 {
-                            statsRows(stats)
-                            weeks(stats)
+                            statsRows(stats).id("stats")
+                            weeks(stats).id("weeks")
                             mostRun(stats)
                             saved
                         }
@@ -166,6 +171,7 @@ struct YouSheet: View {
                                 .frame(minHeight: Metrics.minTap)
                             }
                             .padding(.top, 14)
+                            .demoTarget("historyLink")
                         }
                     }
                     .padding(.horizontal, Metrics.s24)
@@ -175,6 +181,19 @@ struct YouSheet: View {
             .scrollIndicators(.hidden)
             .background(Palette.surfaceSheet.color.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+            #if DEBUG
+            .navigationDestination(isPresented: $demoHistory) {
+                HistoryList(model: model) { log in open { model.openHistory(log) } }
+            }
+            .onChange(of: model.demoHistoryRequest) { _, _ in demoHistory = true }
+            .onChange(of: model.demoScrollRequest) { _, _ in
+                // Demo mode: a scripted scroll eases like a finger, one motion per change.
+                guard let t = model.demoScrollTarget else { return }
+                withAnimation(.timingCurve(0.3, 0, 0.2, 1, duration: 0.9)) { proxy.scrollTo(t, anchor: t == "weeks" ? .center : .top) }
+            }
+            .overlay { if DemoMode.active { TapDotLayer() } }
+            #endif
+            }
         }
         .presentationDetents([.large])
         .presentationBackground(Palette.surfaceSheet.color)
@@ -615,8 +634,27 @@ struct HeroMap: UIViewRepresentable {
             var homeFeature = Feature(geometry: Point(home.coordinate))
             homeFeature.properties = ["home": .boolean(true)]
             features.append(homeFeature)
+            #if DEBUG
+            // Demo mode (decision 060): the runs draw in one after another, oldest first, over about two seconds.
+            let drawIn = DemoMode.active && lines.count > 1
+            src.data = .featureCollection(FeatureCollection(features: drawIn ? [homeFeature] : features))
+            #else
             src.data = .featureCollection(FeatureCollection(features: features))
+            #endif
             try? map.addSource(src)
+            #if DEBUG
+            if drawIn {
+                let ordered = Array(features.dropLast().reversed())
+                Task { @MainActor [weak view] in
+                    for i in ordered.indices {
+                        try? await Task.sleep(for: .seconds(2.0 / Double(ordered.count)))
+                        guard let view, let map = view.mapboxMap else { return }
+                        map.updateGeoJSONSource(withId: "hero-runs",
+                                                data: .featureCollection(FeatureCollection(features: Array(ordered[...i]) + [homeFeature])))
+                    }
+                }
+            }
+            #endif
             var line = LineLayer(id: "hero-lines", source: "hero-runs")
             line.filter = Exp(.eq) { Exp(.geometryType); "LineString" }
             line.lineColor = .constant(StyleColor(Palette.routeWater.uiColor))

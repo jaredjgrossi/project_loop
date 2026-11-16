@@ -7,7 +7,7 @@ struct RunStats {
     let now: Date
     let calendar: Calendar
 
-    init(runs: [RunLog], now: Date = Date(), calendar: Calendar = RunStats.mondayCalendar) {
+    init(runs: [RunLog], now: Date = LoopClock.now(), calendar: Calendar = RunStats.mondayCalendar) {
         self.runs = runs
         self.now = now
         self.calendar = calendar

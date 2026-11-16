@@ -108,7 +108,7 @@ extension MainModel {
     }
 
     /// "Did you run the East River out-and-back route this morning?"
-    static func promptText(_ v: ViewedRoute, now: Date = Date(), calendar: Calendar = .current) -> String {
+    static func promptText(_ v: ViewedRoute, now: Date = LoopClock.now(), calendar: Calendar = .current) -> String {
         let when: String
         if calendar.isDate(v.at, inSameDayAs: now) {
             let h = calendar.component(.hour, from: v.at)

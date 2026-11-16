@@ -45,7 +45,7 @@ final class WeatherStore {
     }
 
     /// Asks the source. A failure keeps the old reading, which `visible(at:)` hides once it is too old.
-    func refresh(now: Date = Date(), force: Bool = false) async {
+    func refresh(now: Date = LoopClock.now(), force: Bool = false) async {
         if !force, let last = lastAttempt, now.timeIntervalSince(last) < Self.minimumGap { return }
         guard let provider else { return }
         lastAttempt = now
@@ -61,9 +61,9 @@ final class WeatherStore {
     }
 
     #if DEBUG
-    /// Screenshots only (`-LoopSampleWeather`): a fixed reading, always fresh.
-    func useSample() {
-        provider = { Reading(symbol: "cloud.sun", temperature: "48°", at: Date()) }
+    /// Screenshots (`-LoopSampleWeather`) and demo mode: a fixed reading, fresh on the app's clock.
+    func useSample(temperature: String = "48°", symbol: String = "cloud.sun") {
+        provider = { Reading(symbol: symbol, temperature: temperature, at: LoopClock.now()) }
     }
     #endif
 }

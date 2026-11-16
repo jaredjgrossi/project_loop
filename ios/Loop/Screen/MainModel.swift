@@ -93,6 +93,17 @@ final class MainModel {
     @ObservationIgnored var landingSearchBottom: CGFloat?
     /// The "You" sheet is up.
     var youShown = false
+    #if DEBUG
+    // Demo mode (decision 060): requests the script sends to views that own their own state.
+    var demoEditorPlus = 0
+    var demoEditorDone = 0
+    var demoScrollTarget: String?
+    var demoScrollRequest = 0
+    var demoHistoryRequest = 0
+    var demoClockVersion = 0
+    var demoBlurRequest = 0
+    var demoSubmitRequest = 0
+    #endif
     /// A saved route being renamed (long-press -> Rename).
     var renaming: SavedRun?
     /// Runs once the route has drawn and settled (opening a route to rate it from the prompt).
@@ -207,12 +218,14 @@ final class MainModel {
     var outsideCoverageName: String? {
         #if DEBUG
         let outline = debugOutline ?? coverageOutline
+        let debugging = debugOutline != nil
         #else
-        let outline = coverageOutline
+        let outline = coverageOutline   // `debugOutline` exists only in Debug; Release didn't compile without this split
+        let debugging = false
         #endif
-        guard let outline, LoopAPI.baseURL != nil || debugOutline != nil,
+        guard let outline, LoopAPI.baseURL != nil || debugging,
               let h = locationProvider.here.map({ GeoPoint(lon: $0.coordinate.longitude, lat: $0.coordinate.latitude) })
-                ?? (debugOutline != nil ? fixtureStart : nil) else { return nil }
+                ?? (debugging ? fixtureStart : nil) else { return nil }
         return outline.contains(h) ? nil : outline.name
     }
     /// The token screen is up (no token yet, or the server said it's wrong).

@@ -31,6 +31,15 @@ cd ios && xcodebuild -project Loop.xcodeproj -scheme Loop \
 ```
 Unit tests are in `LoopTests/`, UI tests in `LoopUITests/`. Neither runs in CI.
 
+## Demo mode (debug builds only)
+The app can play the demo video's sequence by itself from staged state at the public start (decision 060). It is
+compiled out of Release. From the Mac, with the simulator booted or the phone plugged in:
+```bash
+xcrun simctl launch booted com.jaredgrossi.loop -LoopDemoMode A
+```
+`A` to `F` picks the segment to start from (earlier ones are staged first). On the phone, a two-second press on the
+wordmark arms it for the next launch. The driver logs `Loop demo: …` lines to the system log.
+
 ## Fonts
 Fraunces and Instrument Sans (variable TTFs from google/fonts), each under the
 SIL Open Font License 1.1. The licence files sit beside the fonts and ship in the app bundle.

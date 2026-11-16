@@ -48,6 +48,7 @@ struct LandingSheet: View {
 
             RequestField(model: model)
                 .background(bottomReader { setCollapsed($0) })
+                .demoTarget("field")
 
             // The launch health check failed: one plain line, never a spinner.
             if model.serverDown {
@@ -312,6 +313,11 @@ struct RequestField: View {
             }
         }
         .onChange(of: model.focusFieldRequest) { _, _ in focused = true }
+        #if DEBUG
+        .onChange(of: model.demoBlurRequest) { _, _ in focused = false }
+        // The demo sends the way the keyboard's Go does, from the field itself.
+        .onChange(of: model.demoSubmitRequest) { _, _ in model.send(model.fieldText, reduceMotion: reduceMotion) }
+        #endif
     }
 }
 
@@ -603,7 +609,8 @@ struct WeatherLine: View {
 
     var body: some View {
         TimelineView(.everyMinute) { context in
-            let r = store.visible(at: context.date)
+            let date = LoopClock.now()
+            let r = store.visible(at: date)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if let r {
                     Image(systemName: r.symbol)
@@ -614,12 +621,12 @@ struct WeatherLine: View {
                         .typeStyle(.numeralS)
                         .foregroundStyle(Palette.inkSoft.color)
                 }
-                Text((r == nil ? "" : "· ") + Self.dayTime(context.date))
+                Text((r == nil ? "" : "· ") + Self.dayTime(date))
                     .typeStyle(.body)
                     .foregroundStyle(Palette.inkMuted.color)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(r.map { "\($0.temperature), \(Self.dayTime(context.date))" } ?? Self.dayTime(context.date))
+            .accessibilityLabel(r.map { "\($0.temperature), \(Self.dayTime(date))" } ?? Self.dayTime(date))
             .accessibilityHint(r.map { $0.source } ?? "")
         }
         .task { await store.run() }
@@ -670,6 +677,7 @@ struct ReturnPrompt: View {
                         .background(RoundedRectangle(cornerRadius: Metrics.radiusButton).fill(Palette.action.color))
                 }
                 .buttonStyle(.plain)
+                .demoTarget("promptRanIt")
             }
         }
     }

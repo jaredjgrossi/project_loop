@@ -41,7 +41,7 @@ extension RouteFile {
     /// engine read (`about` is made on the phone).
     static func from(final f: ServerEvent.Final, start: String) -> RouteFile? {
         guard let route = f.route, let first = route.features.first else { return nil }
-        return RouteFile(about: .init(generatedAt: ISO8601DateFormatter().string(from: Date()), start: start),
+        return RouteFile(about: .init(generatedAt: ISO8601DateFormatter().string(from: LoopClock.now()), start: start),
                          request: first.properties.request ?? [],
                          route: route, top3: f.routes,
                          pool: f.pool ?? .init(candidates: f.poolSize ?? 0, bestOf: f.poolSize ?? 0))
