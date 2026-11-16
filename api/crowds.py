@@ -91,15 +91,37 @@ def band_labels(bands: set) -> str | None:
     return ", ".join(labels) or None
 
 
-def pulse_level(way_id, sidewalk: bool, at: datetime | None, windows: dict) -> tuple | None:
-    """A path sample inside a scheduled pulse window (decision 022): high, with the cause as its basis. Sidewalks keep
-    decision 016's level; outside the windows a path stays not scored."""
+def pulse_window(way_id, sidewalk: bool, at: datetime | None, windows: dict):
+    """The scheduled pulse window a path sample falls in (decision 022), or None. Sidewalks keep decision 016's level;
+    outside the windows a path stays not scored."""
     if sidewalk or way_id not in windows:
         return None
     from api.pulses import hit
 
-    w = hit(at, windows[way_id])
+    return hit(at, windows[way_id])
+
+
+def pulse_level(way_id, sidewalk: bool, at: datetime | None, windows: dict) -> tuple | None:
+    """A path sample inside a scheduled pulse window: high, with the cause as its basis."""
+    w = pulse_window(way_id, sidewalk, at, windows)
     return ("high", w.basis, "pulse") if w else None
+
+
+def pulse_hits(hits: list[tuple], step_m: float) -> list[dict]:
+    """The pulses a route meets, one entry per window, from (window, along_m, time) sample hits in route order: the
+    cause in parts, where the run meets it (first to last sample, miles) and the clock when it first does. Everything
+    here is an estimate (the windows are assumed, decision 022); `source` is the window's basis prose."""
+    out: dict[str, dict] = {}
+    for w, along, t in hits:
+        e = out.get(w.basis)
+        if e is None:
+            out[w.basis] = e = {"cause": w.cause, "name": w.name, "place": w.place,
+                                "arrival": f"{w.arrival:%H:%M}" if w.arrival else None, "event": w.event,
+                                "from_mile": round(along / METERS_PER_MILE, 2), "to_mile": round(along / METERS_PER_MILE, 2),
+                                "at": f"{t:%H:%M}", "meters": 0, "status": "estimate", "source": w.basis}
+        e["to_mile"] = round(along / METERS_PER_MILE, 2)
+        e["meters"] += step_m
+    return sorted((dict(e, meters=round(e["meters"])) for e in out.values()), key=lambda e: e["from_mile"])
 
 
 def stretch_crowd(levels: list[tuple]) -> dict:
@@ -189,13 +211,14 @@ def route_crowds(conn, coords: list[list[float]], start: datetime | None, step_m
         from api.pulses import windows_by_way
 
         windows = windows_by_way(conn, list({r[1] for r in rows if r[1] is not None and not r[2]}), start.date())
-    out = []
-    for (ord_, way_id, sidewalk, sensor), t, (band, why) in zip(rows, times, bands):
+    out, hits = [], []
+    for (ord_, way_id, sidewalk, sensor), t, (band, why), a in zip(rows, times, bands, along):
         if sensor and t is not None and (sensor, daytype(t), t.hour) in per_hour:
             ph = per_hour[(sensor, daytype(t), t.hour)]
             out.append((counter_level(ph, th), f"DOT automated pedestrian counter {sensor}: {ph:.0f} people/hour", "counter"))
-        elif pulse := pulse_level(way_id, bool(sidewalk), t, windows):
-            out.append(pulse)
+        elif w := pulse_window(way_id, bool(sidewalk), t, windows):
+            out.append(("high", w.basis, "pulse"))
+            hits.append((w, a, t))
         elif way_id is None or not sidewalk:
             out.append((None, "no crowd data off mapped sidewalks (paths, greenways, bridges)", None))
         elif band is None:
@@ -207,4 +230,4 @@ def route_crowds(conn, coords: list[list[float]], start: datetime | None, step_m
     used = {b for b in (o[2] for o in out) if b and b != "counter"}
     return {**summary, "band": band_labels(used),
             "reason": bands[0][1] if not used else None, "start_band": start_band, "levels": out, "along_m": along,
-            "sidewalk_ways": [r[1] if r[2] else None for r in rows]}
+            "sidewalk_ways": [r[1] if r[2] else None for r in rows], "pulses": pulse_hits(hits, step_m)}

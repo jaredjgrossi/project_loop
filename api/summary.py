@@ -128,7 +128,7 @@ def route_summary(c: Candidate, stretches: list[dict], markers: list[dict], elev
     if crowd is not None and crowd.status == "estimate" and ctx is not None:
         out["crowds"] = _value(round(ctx.crowd_high_pct, 1), "% busy", "estimate",
                                f"subway volume and DOT counts, {ctx.crowd_band}",
-                               not_scored_pct=round(ctx.crowd_not_scored_pct, 1))
+                               not_scored_pct=round(ctx.crowd_not_scored_pct, 1), pulses=list(ctx.crowd_pulses))
     else:
         out["crowds"] = _not_scored((crowd.value if crowd is not None else "") or "no start time given")
 

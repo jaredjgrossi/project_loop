@@ -226,3 +226,21 @@ def test_a_route_with_no_stretches_has_steps_without_street_names():
     s = route_summary(c, [], marker_features(c.route.coordinates), ELEVATION)
     assert [x["maneuver"] for x in s["steps"]] == ["start", "turnaround", "finish"]
     assert all(x["street"] is None for x in s["steps"])
+
+
+def test_crowds_carry_the_pulses_the_route_meets():
+    pulse = {"cause": "ferry", "name": "SeaStreak", "place": "East 35th St", "arrival": "08:00", "event": None,
+             "from_mile": 0.57, "to_mile": 0.65, "at": "08:05", "meters": 100, "status": "estimate",
+             "source": "SeaStreak arrival 08:00 at East 35th St (window -2/+8 min assumed, estimate)"}
+    ctx = ContextScores(park_pct=0.0, waterfront_pct=60.4, park_or_water_pct=60.4, crossings_per_mile=4.0,
+                        signals_per_mile=1.8, familiar_pct=None, crowd_high_pct=9.1, crowd_medium_pct=0.0,
+                        crowd_low_pct=27.4, crowd_not_scored_pct=61.2, crowd_band="weekday 7-9am",
+                        crowd_start_band="weekday_am", crowd_pulses=(pulse,))
+    s = route_summary(candidate(ctx), [], [], ELEVATION)
+    assert s["crowds"]["status"] == "estimate" and s["crowds"]["value"] == 9.1
+    assert s["crowds"]["pulses"] == [pulse]  # the app's crowd line names the first of these
+    # No pulses met: the list is there and empty, so a client never has to guess.
+    quiet = route_summary(candidate(ContextScores(**{**ctx.__dict__, "crowd_pulses": ()})), [], [], ELEVATION)
+    assert quiet["crowds"]["pulses"] == []
+    # Crowds not scored: no list at all, as before.
+    assert "pulses" not in route_summary(candidate(CONTEXT), [], [], ELEVATION)["crowds"]

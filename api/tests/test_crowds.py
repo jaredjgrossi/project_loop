@@ -97,3 +97,29 @@ def test_pulse_stretches_and_summaries_say_scheduled_pulse():
     s = stretch_crowd([("high", "school arrival at X", "pulse")] * 3)
     assert s["value"] == "high" and s["band"] == PULSE_LABEL and s["basis"] == "school arrival at X"
     assert band_labels({"weekday_am", "pulse", "counter"}) == f"{BANDS['weekday_am'][2]}, {PULSE_LABEL}"
+
+
+def test_pulse_hits_list_each_window_once_with_where_and_when_the_run_meets_it():
+    from datetime import date, time
+
+    from api.crowds import pulse_hits
+    from api.pulses import ferry_windows, school_windows
+    from api.pulses import load_calendar
+
+    day = date(2026, 11, 17)  # a Monday school day
+    ferry = ferry_windows(day, [time(8, 0)], "SeaStreak", "East 35th St")[0]
+    school = school_windows(day, load_calendar(), "United Nations International School")[0]
+    at = lambda h, m: datetime(2026, 11, 17, h, m)
+    # Route order: the ferry at the landing (five samples, 920-1000 m), the school twice (out and back).
+    hits = [(ferry, 920.0, at(8, 5)), (ferry, 940.0, at(8, 5)), (ferry, 960.0, at(8, 6)), (ferry, 980.0, at(8, 6)),
+            (ferry, 1000.0, at(8, 6)), (school, 1800.0, at(8, 11)), (school, 1820.0, at(8, 11)),
+            (school, 3040.0, at(8, 18)), (school, 3060.0, at(8, 19))]
+    out = pulse_hits(hits, step_m=20.0)
+    assert [p["cause"] for p in out] == ["ferry", "school"]
+    f, s = out
+    assert f == {"cause": "ferry", "name": "SeaStreak", "place": "East 35th St", "arrival": "08:00", "event": None,
+                 "from_mile": 0.57, "to_mile": 0.62, "at": "08:05", "meters": 100, "status": "estimate",
+                 "source": ferry.basis}
+    assert (s["name"], s["event"], s["place"], s["arrival"]) == ("United Nations International School", "arrival", None, None)
+    assert (s["from_mile"], s["to_mile"], s["at"], s["meters"]) == (1.12, 1.9, "08:11", 80)  # out and back, one entry
+    assert pulse_hits([], 20.0) == []

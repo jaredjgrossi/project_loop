@@ -237,6 +237,14 @@ These are the engine's three stream events (decision 024 and the streaming notes
     is `measured` for the maneuver and the distance; `trust` and `source` are for the street name.
   - `point` is the position on the route where the step begins. Routes that weren't routed (a stored line, "run
     again") have no `steps` key at all: keep the stretch list as the fallback.
+- **`summary.crowds.pulses`** (in each route's `file`; decision 059): the scheduled crowd pulses the route meets
+  (decision 022), in route order, one entry per ferry arrival or school window, each an estimate with the window's
+  prose as its `source`: `{"cause": "ferry" | "school", "name": "SeaStreak" | "NYC Ferry" | the school's name,
+  "place": the landing (ferries) or null, "arrival": "08:00" (ferries) or null, "event": "arrival" | "dismissal"
+  (schools) or null, "from_mile": 0.57, "to_mile": 0.65, "meters": 100, "at": "08:05", "status": "estimate",
+  "source": "..."}`. `at` is the clock when the run first meets it, at the engine's assumed pace. The list is empty
+  when the route meets none, and absent when crowds aren't scored. The app's crowd line is written from these parts,
+  never from the `basis` prose; a stretch's majority level can hide a pulse on a long stretch, this list cannot.
 - **`summary.reason`**: one line on why the route fits, written by code from its own numbers, never by the model:
   `{"text": "58% on the waterfront, 22 lights, flat", "parts": [{"key": "water", "text": "...", "status": "measured"}],
   "status": "estimate", "source": "..."}`. Parts, in this order and at most three:
