@@ -1,5 +1,5 @@
 # Parse evals — v1
-*Status: **v1, decisions applied** (2026-11-05). 50 cases: 11 real phrasings, 5 past-route phrasings Jared endorsed, 34 synthetic. Diary phrasings (Jared, R1, R2 typing real requests before runs) replace synthetic cases as they arrive; the cap stays 50. Contract: `phase3/parse-contract-v1.md`. Build: `phase3/build-brief-v1.md`.*
+*Status: **v1, decisions applied** (2026-11-05); cases P50–P62 added since, 63 in all (updated 2026-11-16). The first 50 cases: 11 real phrasings, 5 past-route phrasings Jared endorsed, 34 synthetic. Diary phrasings (Jared, R1, R2 typing real requests before runs) replace synthetic cases as they arrive; the cap stays 50. Contract: `phase3/parse-contract-v1.md`. Build: `phase3/build-brief-v1.md`.*
 
 ## What this is
 The test set for Phase 3's parser: a plain-English request goes in. What comes out is `RunConstraints` plus request chips, "can't do yet" lines and notes, or exactly one clarifying question. Each case states what must come out and what must not happen. Phase 3 step 1 turns each case into a repo fixture.
@@ -33,6 +33,7 @@ Every case names its context, so defaults are deterministic. Places are public s
 - `cant:` a "can't do yet" line, with its gap id
 - `note:` a caveat that isn't a refusal
 - **ASK (about, from):** the single question. `about` is what it's for; `from` is parser, places or engine
+- **ERROR `code`:** an error event instead of a parsed event (today only `out_of_area`, decisions 056–057), with the place in the runner's own words
 - **[lookup]** the case needs the places table. **[engine]** the end-to-end result depends on routing (R9)
 
 ### Fields
@@ -191,6 +192,24 @@ PARSE · `start_place=place:"W 71st St" (Manhattan, said)` · `distance_mi=4 (sa
 **P53** · C1 · `71st and Columbus, 5k` · [lookup]
 PARSE · `start_place=place:"Columbus Ave & W 71st St" (Manhattan, said)` · `distance_mi=3.11 (said)`
 
+**P54** · C1 · `5 miles in Central Park` · [lookup] [engine]
+PARSE · `distance_mi=5 (said)` · `via_places=[place:"Central Park"] (said)` · `scenery=park_or_water (said)`. A named park is that park, never "the nearest park" (decision 047, full review Q1; before it, the park's name was thrown away and the run went to the East River Esplanade).
+
+**P55** · C2 · `4 miles around Prospect Park` · [lookup] [engine]
+PARSE · `distance_mi=4 (said)` · `via_places=[place:"Prospect Park", around] (said)` · `scenery=park_or_water (said)`. With a named park there is no "Which park?" (full review Q2).
+
+**P56** · C3 · `3 miles in Washington Square Park` · [lookup] [engine]
+PARSE · `distance_mi=3 (said)` · `via_places=[place:"Washington Square Park"] (said)` · `scenery=park_or_water (said)`
+
+**P57** · C3 · `5k in Riverside Park` · [lookup] [engine]
+PARSE · `distance_mi=3.11 (said, 5 km)` · `via_places=[place:"Riverside Park"] (said)` · `scenery=park_or_water (said)`
+
+**P58** · C2 · `4 mi around Fort Greene Park` · [lookup] [engine]
+PARSE · `distance_mi=4 (said)` · `via_places=[place:"Fort Greene Park", around] (said)` · `scenery=park_or_water (said)`
+
+**P59** · C1 · `10k past the Met then home` · [lookup] [engine]
+PARSE · `distance_mi=6.21 (said, 10 km)` · `end_place=saved:home (said, "then home")` · `via_places=[place:"Metropolitan Museum of Art"] (said)`. A landmark in the places table (decision 047, full review Q4; before it, "Couldn't find Metropolitan Museum of Art").
+
 ### E. Avoid
 **R07** · C1 · `I want to head out for a run, please avoid the chaos of 42nd st` *(Jared)* · [lookup] [engine]
 PARSE · `avoid_places=["42nd St" (along)] (said)` · `crowds=avoid (said)` · `distance_mi=3.1 (usual)` · `use_my_location (default)`
@@ -294,19 +313,21 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 ---
 
 ## Coverage
-| Category | Cases | Asks | Real or endorsed |
-|---|---|---|---|
-| A. Bare and vague | 4 | 1 | 2 |
-| B. Distance and units | 4 | 1 | 0 |
-| C. Time | 3 | 0 | 1 |
-| D. Start, end and places | 21 | 4 | 5 |
-| E. Avoid | 4 | 0 | 1 |
-| F. Preferences | 7 | 0 | 0 |
-| G. Training, Exploring and novelty | 6 | 2 | 3 |
-| H. Past routes | 5 | 2 | 5 |
-| I. Multi-part and contradictory | 3 | 0 | 0 |
-| J. Impossible and feasibility | 3 | 2 | 0 |
-| **Total** | **60** | **12** | **17** |
+| Category | Cases | Asks | Errors | Real or endorsed |
+|---|---|---|---|---|
+| A. Bare and vague | 4 | 1 | 0 | 2 |
+| B. Distance and units | 4 | 1 | 0 | 0 |
+| C. Time | 3 | 0 | 0 | 1 |
+| D. Start, end and places | 24 | 3 | 4 | 6 |
+| E. Avoid | 4 | 0 | 0 | 1 |
+| F. Preferences | 7 | 0 | 0 | 0 |
+| G. Training, Exploring and novelty | 6 | 2 | 0 | 3 |
+| H. Past routes | 5 | 2 | 0 | 5 |
+| I. Multi-part and contradictory | 3 | 0 | 0 | 0 |
+| J. Impossible and feasibility | 3 | 2 | 0 | 0 |
+| **Total** | **63** | **11** | **4** | **18** |
+
+Counted from `evals/parse/cases/` (2026-11-16). P19 moved from Asks to Errors with decision 056.
 
 The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). P60–P62 (a named place, a place with a chain's name, and an address, each with a city outside New York: from a phone test outside New York, 2026-11-14) are the 61st to 63rd (decision 057). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
 
@@ -314,7 +335,7 @@ Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, 
 
 ## Grading
 A case passes when:
-1. The outcome matches (PARSE, PARSE + CANT, ASK).
+1. The outcome matches (PARSE, PARSE + CANT, ASK, ERROR). For an ERROR, the code and place match and there is no parsed event.
 2. Every listed field matches: distance within 0.05 mi, times to the minute, and the chip source matches.
 3. No unlisted field is set beyond code-filled defaults.
 4. Every `cant` and `note` listed is present, matched by gap id or note key, not by wording.
@@ -342,6 +363,14 @@ Cases marked [lookup] run against the places table. Cases marked [engine] also h
 | G9 | Lighting and safety | Can't do |
 | G10 | Timed avoids | Mostly covered by crowd pulses (schools, ferries, decision 022) |
 | G11 | Two runs in one request | **Phase 3** (`planned`) |
+
+---
+
+## Follow-ups (2026-11-16, noted, not fixed)
+- **P49**, "15 miles staying on the east river path the whole time": on the 2026-11-14 run `surface` came back unset where the case expects `paths`; the distance, the via place and the can't-do line were right. Re-run it three times before deciding whether it is a flake or the prompt reading "path" as a place rather than a surface.
+- **Cases that vary between runs.** Decision 057's two whole-set runs on `main` saw P23, P49, P54, R02 and R05 each fail at least once. None is new to the out-of-area work; each wants the same three-run check as P49.
+- **One run is not the bar.** Decision 028's bar is 44 or more cases passing all three runs (of 50); the latest whole-set number, 59 of 60 on 2026-11-14 (before P60–P62), is one run. A three-run pass on all 63 would make the number comparable.
+- **The live app-request tests fail instead of skipping under the CI plugin.** `evals/parse/test_app_requests.py` (5 tests) skips when there is no Claude key or database. On a Mac with both in `.env`, `uv run pytest -p ci.no_network` runs them with the network blocked, and all 5 fail with `parse_failed`. Without `-p ci.no_network` they pass. CI has no key, so it skips them as intended.
 
 ## Decisions applied (2026-11-05, borough rule 2026-11-06)
 D1: "loop" means any route back to the start. D2/D3: places and intersections come from the OSM places table, and anything unclear gets a question. D4: default hours as proposed. D5: 0.5–30 mi. D6: build both runs and save the later one. Also: the start defaults to the current location; `lights=waits` for "no lights"; `hills`, `via_places`, `end_place`, past routes and minimal storage are in Phase 3. Borough rule (2026-11-06): R19; P16 and P46 now PARSE.

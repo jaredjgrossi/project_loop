@@ -1,6 +1,6 @@
 # Parse evals
 
-The 51 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
+The 63 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
 
 ```
 make eval-parse                          # the stub parser: every case fails

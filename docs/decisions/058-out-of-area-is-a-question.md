@@ -1,4 +1,4 @@
-# 057 — Out of area is a question, and every error has its own words
+# 058 — Out of area is a question, and every error has its own words
 
 **Status:** accepted · pairs with the server's 056 (`out_of_area`)
 

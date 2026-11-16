@@ -4,7 +4,7 @@
 
 Describe a run in a sentence, like "6 mi loop from Kips Bay, mostly waterfront, I wait at lights", and get real New York City routes that fit it. Each one is scored with NYC data, and Loop says so when a limit can't be met.
 
-Claude reads the sentence. Code decides everything else. The model never draws a route or produces a number: it turns words into a typed request, and later explains routes using fields the code already scored. Routing and scoring are deterministic, so a route that's wrong becomes a failing test, not a prompt tweak.
+Claude reads the sentence. Code decides everything else. The model never draws a route or produces a number: it turns words into a typed request and says whether a place is outside New York. Code names each route and writes every line the runner reads. Routing and scoring are deterministic, so a route that's wrong becomes a failing test, not a prompt tweak.
 
 ## How it works
 
@@ -20,11 +20,11 @@ flowchart LR
 1. **Parse.** One Claude Haiku call fills a strict schema (distance, start, places to pass, preferences). Code looks every place up, applies the rules, and asks one clarifying question when it can't be sure. It never guesses.
 2. **Generate.** Several generators propose routes from the start: grid-aligned loops, out-and-backs, waterfront and park corridors, laps of a named loop, one-way runs. GraphHopper routes them along real paths and streets.
 3. **Score.** Each candidate gets measured values: signals per mile, expected wait at lights, crowds (scheduled ferry and school pulses, sidewalk counts), hills, share on water or in parks, shape.
-4. **Rank and stream.** The best three reach the phone while the search is still running. Every value carries a source and a trust label (`verified`, `listed` or `seasonal_or_closed`).
+4. **Rank and stream.** The best three reach the phone while the search is still running. Every value carries a source and a trust word (`measured`, `estimate`, `listed`, `verified` or `not scored`).
 
 ### Rules the product keeps
-- The LLM never generates geometry or numbers.
-- Every amenity or fact has a source and a trust label.
+- The LLM never generates geometry or numbers, and writes none of the words the runner reads.
+- Every amenity, fact and scored value has a source and a trust word.
 - If a limit can't be met, Loop returns the nearest route and how far off it is. It never relaxes a limit quietly.
 - If parsing fails validation, Loop asks a question.
 
@@ -32,12 +32,12 @@ flowchart LR
 
 | | |
 |---|---|
-| Parse evals (live Claude, 60 cases) | 58 of 60 on the latest run (two older cases vary between runs) |
-| Cost of reading a sentence | about $0.00024 (Claude Haiku 5.5), median 1.4 s |
+| Parse evals (live Claude, 63 cases) | 59 of 60 on the last full run (2026-11-14); the three outside-New-York cases added since pass on three runs in a row. A handful of cases vary between runs |
+| Cost of reading a sentence | about $0.00026 (Claude Haiku 5.5), median 1.5 s |
 | First route on the phone | about 1.3 s median; the full search takes longer and keeps improving the top 3 |
 | Pinned top 3 for 30 start and distance pairs | 30 of 30 match the pinned results |
-| Unit tests | 1,131, none needing a database or network in CI |
-| Live route, place, crowd and parse-harness evals | 395 of 396 on the latest run, against the real stack on the Mac (one needs private run data and skips) |
+| Unit tests | 1,392, none needing a database or network in CI |
+| Live route, place, crowd and parse-harness evals | 395 of 396 on the last full run (2026-11-12), against the real stack on the Mac (one needs private run data and skips) |
 
 Every bad route that turns up in testing becomes a case in [`evals/routes/test_rejected_routes.py`](evals/routes/test_rejected_routes.py).
 
@@ -49,7 +49,6 @@ The reasoning is in [`docs/decisions/`](docs/decisions/), one short note per cho
 - [044: honest kinds and no padding](docs/decisions/044-honest-kinds-spurs-loop-climb.md) and [045](docs/decisions/045-waypoint-spurs.md): name a route by what it measures, and never stretch a run with a quick out-and-back.
 
 ## What I'd do next
-- Let the app switch between the top three routes. The engine ranks three; the phone shows one.
 - Plan restroom and water stops. The data is loaded, but Loop says it can't plan them yet instead of ignoring the request.
 - Count the climb of bridges. The elevation source is a ground model, so a bridge reads as the river under it.
 - Host it off the Mac, with a key per install, a retention limit on stored routes and a way to delete your data.
@@ -62,6 +61,7 @@ api/       FastAPI server, parser, route generators, scoring and ranking, GPX ex
 ios/       the iPhone app (SwiftUI, Mapbox); see ios/README.md
 etl/       NYC Open Data and OpenStreetMap into PostGIS: places, landmarks, corridors, closures, crowds
 routing/   GraphHopper config and the custom foot model
+ci/        keeps the unit tests off the network in CI
 evals/     parse evals (live Claude), route, place and crowd evals (live stack)
 docs/      the plan, one note per decision, the API contract (phase3/), setup
 ```
