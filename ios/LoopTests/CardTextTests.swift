@@ -78,6 +78,103 @@ final class CardTextTests: XCTestCase {
         XCTAssertEqual(Trust("verified").text, "verified")
     }
 
+    /// All five product words explain themselves in one line (decision 059); any other word shows bare.
+    func testEveryTrustWordHasOneLineAndNoOtherWordDoes() {
+        for word in ["measured", "estimate", "listed", "verified", "not_scored"] {
+            let line = Trust(word).description
+            XCTAssertNotNil(line, word)
+            XCTAssertFalse(line!.contains("\n"), word)
+        }
+        XCTAssertEqual(Trust("verified").description, "Checked on the ground by a runner.")
+        XCTAssertNil(Trust("provisional").description, "a word the file sends that isn't one of the five shows bare")
+        XCTAssertNil(Trust("").description)
+    }
+
+    // MARK: Crowd sentence from the pulses the route meets (decision 059)
+
+    private static let ferry: [String: Any] = [
+        "cause": "ferry", "name": "SeaStreak", "place": "East 35th St", "arrival": "08:00", "event": NSNull(),
+        "from_mile": 0.57, "to_mile": 0.65, "meters": 100, "at": "08:05", "status": "estimate",
+        "source": "SeaStreak arrival 08:00 at East 35th St (window -2/+8 min assumed, estimate)"]
+    private static let school: [String: Any] = [
+        "cause": "school", "name": "United Nations International School", "place": NSNull(), "arrival": NSNull(),
+        "event": "arrival", "from_mile": 1.11, "to_mile": 1.92, "meters": 200, "at": "08:11", "status": "estimate",
+        "source": "school arrival at United Nations International School (window 07:30-08:30 assumed, estimate)"]
+
+    /// The bundled fixture with `summary.crowds.pulses` set on the #1 route, as the server now sends it.
+    private func fixture(pulses: [[String: Any]]?) throws -> RouteFile {
+        let url = Bundle.main.url(forResource: "kips3-ui", withExtension: "json")!
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var route = json["route"] as! [String: Any]
+        var features = route["features"] as! [[String: Any]]
+        for i in features.indices {
+            var props = features[i]["properties"] as! [String: Any]
+            guard var summary = props["summary"] as? [String: Any] else { continue }
+            var crowds = summary["crowds"] as! [String: Any]
+            if let pulses { crowds["pulses"] = pulses } else { crowds.removeValue(forKey: "pulses") }
+            summary["crowds"] = crowds
+            props["summary"] = summary
+            features[i]["properties"] = props
+        }
+        route["features"] = features
+        json["route"] = route
+        return try RouteFile.decode(JSONSerialization.data(withJSONObject: json))
+    }
+
+    func testFerryPulseNamesTheLandingAndTheClock() throws {
+        let data = try LoopData(file: fixture(pulses: [Self.ferry]))
+        let detail = data.candidate(rank: 1)!.detail!
+        XCTAssertEqual(detail.summary.crowds.pulses?.count, 1)
+        XCTAssertEqual(detail.summary.crowds.pulses?.first?.place, "East 35th St")
+        XCTAssertEqual(CardText.crowdSentence(detail, startTime: "8:00"), "≈ Busy near the E 35th St ferry around 8:05.")
+    }
+
+    func testSchoolPulseSaysDropOffOrPickUp() throws {
+        let data = try LoopData(file: fixture(pulses: [Self.school]))
+        XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: "8:00"),
+                       "≈ Busy near a school at drop-off around 8:11.")
+        var dismissal = Self.school
+        dismissal["event"] = "dismissal"
+        dismissal["at"] = "14:40"
+        let later = try LoopData(file: fixture(pulses: [dismissal]))
+        XCTAssertEqual(CardText.crowdSentence(later.candidate(rank: 1)!.detail!, startTime: "14:30"),
+                       "≈ Busy near a school at pick-up around 14:40.")
+    }
+
+    func testFirstPulseInRouteOrderNamesTheLine() throws {
+        let data = try LoopData(file: fixture(pulses: [Self.ferry, Self.school]))
+        XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: "8:00"),
+                       "≈ Busy near the E 35th St ferry around 8:05.")
+    }
+
+    func testNoPulsesFallsBackToTheStretchSentence() throws {
+        // An empty list (crowds scored, no pulse met) and no list at all (older file) both read the stretches.
+        for pulses in [[[String: Any]]?.some([]), nil] {
+            let data = try LoopData(file: fixture(pulses: pulses))
+            XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: data.request.startHourText),
+                           "Busier on E 31st St around 7.")
+        }
+    }
+
+    func testPulseSentenceNeverInventsACause() throws {
+        var odd = Self.ferry
+        odd["cause"] = "parade"
+        let data = try LoopData(file: fixture(pulses: [odd]))
+        XCTAssertEqual(CardText.crowdSentence(data.candidate(rank: 1)!.detail!, startTime: "7:00"),
+                       "Busier on E 31st St around 7.", "an unknown cause falls back to the stretches")
+        var noPlace = Self.ferry
+        noPlace["place"] = NSNull()
+        XCTAssertEqual(CardText.pulseSentence(try LoopData(file: fixture(pulses: [noPlace])).candidate(rank: 1)!.detail!
+                                                .summary.crowds.pulses!.first!),
+                       "≈ Busy near the ferry landing around 8:05.")
+    }
+
+    func testClockText() {
+        XCTAssertEqual(CardText.clockText("08:05"), "8:05")
+        XCTAssertEqual(CardText.clockText("08:00"), "8")
+        XCTAssertEqual(CardText.clockText("14:20"), "14:20")
+    }
+
     func testSelectionChip() {
         XCTAssertEqual(CardText.selectionChip(stretchName: "East River Esplanade", alongMi: 1.0, lookAround: true),
                        "East River Esplanade · 1.0 mi · Look around")

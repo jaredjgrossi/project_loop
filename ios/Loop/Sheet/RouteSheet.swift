@@ -520,6 +520,12 @@ struct TrustTap<Content: View>: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(trust.text.prefix(1).uppercased() + trust.text.dropFirst())
                             .typeStyle(.label).foregroundStyle(Palette.ink.color)
+                        // What the word means, one line, for all five words (decision 059).
+                        if let meaning = trust.description {
+                            Text(meaning)
+                                .typeStyle(.label).foregroundStyle(Palette.inkSoft.color)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if let source, !source.isEmpty {
                             Text(source)
                                 .typeStyle(.label).foregroundStyle(Palette.inkMuted.color)

@@ -114,10 +114,45 @@ enum CardText {
         trust?.isEstimate == true ? "≈ " + value : value
     }
 
-    /// One sentence, only when a stretch is moderate or busy at the start time: "Busier on E 31st St
-    /// around 7." Names the busiest band present (busy, else moderate), longest first, at most two.
-    /// nil when every scored stretch is quiet or nothing is scored: then the sheet shows no line.
+    /// One sentence about crowds, or nil (then the sheet shows no line). When the route meets a scheduled
+    /// ferry or school pulse (decision 059), the first one in route order names the cause and when the run
+    /// gets there: "≈ Busy near the E 35th St ferry around 8:05." Otherwise, only when a stretch is
+    /// moderate or busy at the start time: "Busier on E 31st St around 7.", naming the busiest band present
+    /// (busy, else moderate), longest first, at most two.
     static func crowdSentence(_ d: RouteDetail, startTime: String) -> String? {
+        if let pulse = d.summary.crowds.pulses?.first, let line = pulseSentence(pulse) {
+            return line
+        }
+        return stretchCrowdSentence(d, startTime: startTime)
+    }
+
+    /// "≈ Busy near the E 35th St ferry around 8:05." for a ferry arrival; "≈ Busy near a school at drop-off
+    /// around 8:11." (or "at pick-up" for a dismissal) for a school. The "≈" is the estimate mark the stats
+    /// use; the clock is the server's `at`, the moment the run first meets the pulse. Nothing here is made up:
+    /// an unknown cause gives nil and the stretch sentence stands in.
+    static func pulseSentence(_ p: RouteFile.Pulse) -> String? {
+        let when = clockText(p.at)
+        switch p.cause {
+        case "ferry":
+            let where_ = p.place.map { "the \(shortName($0)) ferry" } ?? "the ferry landing"
+            return "≈ Busy near \(where_) around \(when)."
+        case "school":
+            let moment = p.event == "dismissal" ? "pick-up" : "drop-off"
+            return "≈ Busy near a school at \(moment) around \(when)."
+        default:
+            return nil
+        }
+    }
+
+    /// "08:05" → "8:05", "08:00" → "8", "14:20" → "14:20" (the card keeps the server's 24-hour clock, as the
+    /// request line's hour does).
+    static func clockText(_ hhmm: String) -> String {
+        let trimmed = hhmm.hasPrefix("0") ? String(hhmm.dropFirst()) : hhmm
+        return hourText(trimmed)
+    }
+
+    /// The stretch-level sentence: the busiest band present (high "Busier", else medium), longest first.
+    static func stretchCrowdSentence(_ d: RouteDetail, startTime: String) -> String? {
         for band in ["high", "medium"] {
             let hits = d.stretches.filter { $0.crowd == band }
             guard !hits.isEmpty else { continue }
