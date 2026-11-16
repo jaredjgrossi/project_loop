@@ -108,7 +108,7 @@ def test_without_a_start_time_crowds_are_not_sampled_and_the_summary_is_unchange
     conn = _OnlyRegclass()
     assert _crowd_fields(conn, coords, None) == {
         "crowd_high_pct": 0.0, "crowd_medium_pct": 0.0, "crowd_low_pct": 0.0, "crowd_not_scored_pct": 100.0,
-        "crowd_band": None, "crowd_reason": "no start time given", "crowd_start_band": None}
+        "crowd_band": None, "crowd_reason": "no start time given", "crowd_start_band": None, "crowd_pulses": ()}
     assert len(conn.queries) == 1
 
 
