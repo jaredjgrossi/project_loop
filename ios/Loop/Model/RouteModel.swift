@@ -39,6 +39,18 @@ struct Trust: Equatable {
     var text: String { raw.replacingOccurrences(of: "_", with: " ") }
     /// Estimates carry "≈" before the number; measured values carry nothing (UI review, 2026-11-09).
     var isEstimate: Bool { raw == "estimate" }
+    /// One line on what the word means, for the popover (decision 059). The five product words only (product
+    /// rule 2); any other word the file sends shows bare, never with a description it didn't earn.
+    var description: String? {
+        switch raw {
+        case "measured": return "Straight from the map or a dataset."
+        case "estimate": return "From a model with assumptions."
+        case "listed": return "In a public listing, not checked on the ground."
+        case "verified": return "Checked on the ground by a runner."
+        case "not_scored": return "No data for this, so Loop claims nothing."
+        default: return nil
+        }
+    }
 }
 
 struct Stretch: Equatable {

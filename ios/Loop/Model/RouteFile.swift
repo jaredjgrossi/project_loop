@@ -151,6 +151,31 @@ struct RouteFile: Decodable {
         let status: String
         let source: String?
         let notScoredPct: Double?
+        /// The scheduled ferry and school pulses the route meets, in route order (decision 059). Empty when it
+        /// meets none; absent when crowds aren't scored and in older files.
+        let pulses: [Pulse]?
+    }
+
+    /// One pulse the route meets: its cause in parts, where the run meets it and the clock when it first does.
+    /// The crowd line is written from these parts, never from the server's prose (`source`).
+    struct Pulse: Decodable, Equatable {
+        /// "ferry" or "school".
+        let cause: String
+        /// The operator ("SeaStreak", "NYC Ferry") or the school's name.
+        let name: String
+        /// The landing, ferries only.
+        let place: String?
+        /// The boat's arrival clock ("08:00"), ferries only.
+        let arrival: String?
+        /// "arrival" or "dismissal", schools only.
+        let event: String?
+        let fromMile: Double
+        let toMile: Double
+        let meters: Double
+        /// When the run first meets it ("08:05"), at the engine's assumed pace.
+        let at: String
+        let status: String
+        let source: String
     }
 
     struct RankMeasure: Decodable {
