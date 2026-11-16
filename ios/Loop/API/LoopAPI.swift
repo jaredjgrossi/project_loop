@@ -250,7 +250,7 @@ struct RunRequest: Encodable {
     }
     private enum CodingKeys: String, CodingKey { case v, text, answer, constraints, routeId, mode, shape, client, profile, recentRoutes }
 
-    static func client(location: Location?, now: Date = Date()) -> Client {
+    static func client(location: Location?, now: Date = LoopClock.now()) -> Client {
         let f = ISO8601DateFormatter()
         f.timeZone = .current
         return Client(now: f.string(from: now), tz: TimeZone.current.identifier, location: location)

@@ -18,6 +18,8 @@ struct HeaderView: View {
                     .frame(minHeight: Metrics.minTap)
                     .contentShape(Rectangle())
                     .onTapGesture { model.goHome() }
+                    .demoTarget("wordmark")
+                    .onLongPressGesture(minimumDuration: 2) { armDemo() }
                     .accessibilityAddTraits(model.requestText != nil ? [.isHeader, .isButton] : .isHeader)
                     .accessibilityHint(model.requestText != nil ? "Goes back home" : "")
                 Spacer()
@@ -27,6 +29,7 @@ struct HeaderView: View {
             }
             if model.requestText == nil {
                 WeatherLine()
+                    .id(clockVersion)
                     .padding(.top, -6)
                     .transition(.opacity)
             }
@@ -40,6 +43,7 @@ struct HeaderView: View {
                         } onOtherWord: {
                             model.editingText = true
                         }
+                        .demoTarget("sentence")
                     } else {
                         Text(sentence)
                             .typeStyle(.request)
@@ -49,6 +53,7 @@ struct HeaderView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .onTapGesture { model.enterEditMode() }
+                            .demoTarget("sentence")
                             .accessibilityLabel("Your run: \(sentence)")
                             .accessibilityHint("Double-tap to edit")
                             .accessibilityAddTraits(.isButton)
@@ -63,6 +68,24 @@ struct HeaderView: View {
         }
         .padding(.horizontal, Metrics.s24)
         .padding(.top, 4)
+    }
+
+    /// Demo mode re-reads the weather line when its pinned clock jumps; nothing in Release.
+    private var clockVersion: Int {
+        #if DEBUG
+        return model.demoClockVersion
+        #else
+        return 0
+        #endif
+    }
+
+    /// The hidden trigger on the phone (debug builds): a two-second press on the wordmark arms demo mode for the
+    /// next launch. Nothing in Release.
+    private func armDemo() {
+        #if DEBUG
+        DemoMode.arm()
+        Haptics.saved()
+        #endif
     }
 }
 

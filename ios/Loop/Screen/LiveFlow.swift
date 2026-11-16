@@ -343,7 +343,7 @@ extension MainModel {
             return
         }
         let start = readOut?.understood.first { $0.field == "start" }?.value ?? "the start"
-        let file = RouteFile(about: .init(generatedAt: ISO8601DateFormatter().string(from: Date()), start: start),
+        let file = RouteFile(about: .init(generatedAt: ISO8601DateFormatter().string(from: LoopClock.now()), start: start),
                              request: first.properties.request ?? [],
                              route: route, top3: f.routes,
                              pool: f.pool ?? .init(candidates: f.poolSize ?? 0, bestOf: f.poolSize ?? 0))

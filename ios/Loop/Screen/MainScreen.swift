@@ -9,10 +9,27 @@ struct MainScreen: View {
         _model = State(initialValue: MainModel(data: data, runs: Self.makeRunStore(data)))
     }
 
+    /// Demo mode hides the status bar, so the phone's real clock can't disagree with the pinned one. Nothing in Release.
+    private static var demoStatusBarHidden: Bool {
+        #if DEBUG
+        return DemoMode.active
+        #else
+        return false
+        #endif
+    }
+
+    /// The tap dots of demo mode's scripted taps. Nothing in Release.
+    @ViewBuilder private var demoDots: some View {
+        #if DEBUG
+        if DemoMode.active { TapDotLayer() }
+        #endif
+    }
+
     /// Saved runs and recents from the phone. Debug `-LoopNewUser` shows a new runner's landing
     /// (suggestions only) from an in-memory store, leaving the real file alone.
     private static func makeRunStore(_ data: LoopData) -> RunStore {
         #if DEBUG
+        if DemoMode.active { return RunStore.demoStaged(data: data, reset: true, now: DemoMode.morning) }
         if ProcessInfo.processInfo.arguments.contains("-LoopNewUser") { return RunStore() }
         if ProcessInfo.processInfo.arguments.contains("-LoopDemoData") { return RunStore.demo(data: data) }
         #endif
@@ -150,6 +167,8 @@ struct MainScreen: View {
             }
         }
         .background(Palette.mapLand.color)
+        .overlay { demoDots }
+        .statusBarHidden(Self.demoStatusBarHidden)
         .fullScreenCover(item: $model.lookAroundTarget) { target in
             LookAroundScreen(scene: target.scene, title: target.title)
         }
@@ -157,7 +176,7 @@ struct MainScreen: View {
         // Back in the foreground on the home sheet: the return prompt, if a route is waiting.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, model.stage == .landing, model.returnPrompt == nil {
-                withAnimation(reduceMotion ? nil : Motion.crossfade) { model.checkReturnPrompt(openedAt: Date()) }
+                withAnimation(reduceMotion ? nil : Motion.crossfade) { model.checkReturnPrompt(openedAt: LoopClock.now()) }
             }
         }
         .alert("Rename", isPresented: Binding(get: { model.renaming != nil }, set: { if !$0 { model.renaming = nil } })) {
@@ -188,7 +207,7 @@ struct MainScreen: View {
     /// The replay button exists only in Debug builds.
     private var debugTrailing: AnyView? {
         #if DEBUG
-        AnyView(PlayBuildButton(model: model))
+        DemoMode.active ? nil : AnyView(PlayBuildButton(model: model))   // no debug controls in a recording
         #else
         nil
         #endif
@@ -197,6 +216,16 @@ struct MainScreen: View {
     /// Launch: the logo fades into the map and the bar types an example. Debug launch arguments
     /// that need a finished route (-LoopSettled, -LoopMile, -LoopZoomAt ...) skip straight to it.
     private func start() async {
+        #if DEBUG
+        if DemoMode.active {
+            // Demo mode (decision 060): the public start, a sample weather reading, and the script drives the rest.
+            model.locationProvider.simulate(DemoMode.start)
+            model.checkHealth()
+            WeatherStore.shared.useSample(temperature: DemoMode.sampleTemperature, symbol: DemoMode.sampleSymbol)
+            DemoDriver.shared.start(model: model, from: DemoMode.startSegment)
+            return
+        }
+        #endif
         if LoopAPI.baseURL != nil {
             model.locationProvider.start()
             model.checkHealth()
@@ -219,7 +248,7 @@ struct MainScreen: View {
             await applyLaunchArguments()
             return
         }
-        model.checkReturnPrompt(openedAt: Date())
+        model.checkReturnPrompt(openedAt: LoopClock.now())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: args.contains("-LoopDemo"))
         if args.contains("-LoopYou") {
             // Screenshots: open "You" once the landing sheet is up.
@@ -267,7 +296,7 @@ struct MainScreen: View {
             model.landing.settle(rest: .collapsed, animated: true)
         }
         #else
-        model.checkReturnPrompt(openedAt: Date())
+        model.checkReturnPrompt(openedAt: LoopClock.now())
         model.runLaunch(reduceMotion: reduceMotion, autoSend: false)
         #endif
     }

@@ -2,6 +2,12 @@ import SwiftUI
 
 @main
 struct LoopApp: App {
+    init() {
+        #if DEBUG
+        DemoMode.configure()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -12,6 +18,7 @@ struct LoopApp: App {
     /// Debug: `-LoopTheme light|dark` forces Paper or Night (device screenshots of both themes).
     private static var forcedScheme: ColorScheme? {
         #if DEBUG
+        if DemoMode.active { return .light }   // the demo records the Paper theme
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-LoopTheme"), i + 1 < args.count {
             return args[i + 1] == "dark" ? .dark : args[i + 1] == "light" ? .light : nil
