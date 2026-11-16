@@ -16,10 +16,12 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     }
 
     #if DEBUG
-    /// Demo mode (decision 060): a fixed location at a public start; Core Location is never asked.
+    /// Demo mode (decision 060): a fixed location at a public start. Core Location is never started, and a fix it
+    /// delivers on its own (the manager starts updates on an authorized phone the moment it exists) is ignored.
     private var simulated = false
     func simulate(_ p: GeoPoint) {
         simulated = true
+        manager.stopUpdatingLocation()
         here = CLLocation(latitude: p.lat, longitude: p.lon)
     }
     #endif
@@ -43,6 +45,10 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         MainActor.assumeIsolated {
+            #if DEBUG
+            // Demo mode: an authorized phone would start real updates here and overwrite the stand-in.
+            if simulated { return }
+            #endif
             switch manager.authorizationStatus {
             case .authorizedWhenInUse, .authorizedAlways: manager.startUpdatingLocation()
             default: self.here = nil
@@ -52,7 +58,12 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let last = locations.last else { return }
-        MainActor.assumeIsolated { self.here = last }
+        MainActor.assumeIsolated {
+            #if DEBUG
+            if simulated { return }
+            #endif
+            self.here = last
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
