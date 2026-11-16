@@ -1,6 +1,8 @@
 # NYC Run Builder — Project Plan
 *Working name: **Loop**. Rename whenever.*
 
+*The original plan (2026-10-30). Phases 0–3 are built; the frontend became the iPhone app in `ios/` rather than the web app below, and deploy, auth and analytics are not built. The current state is in the [README](../README.md) and the reasons for each choice in [`decisions/`](decisions/).*
+
 ## 1. The pitch
 **Tell it the run you want. It builds that run, using real NYC data.**
 
@@ -32,7 +34,7 @@ This is the part that makes the project read as product work. Talk to **5–8 NY
 ## 3. v1 scope
 **In:**
 - Start point by address or "use my location"
-- Loop or out-and-back, with a target distance (within ±5%). *GraphHopper's round trips only approximate the distance, so this needs a retry-and-pick loop (Phase 2; see §12).*
+- Loop or out-and-back, with a target distance (within ±5%). *GraphHopper's round trips only approximate the distance, so this needs a retry-and-pick loop (Phase 2; see §11).*
 - Preferences: park or waterfront share, fewer street crossings, bathroom or water near mile X
 - 3 route options, each with a score card: distance, % park/waterfront, estimated crossings and amenity stops (with trust labels)
 - Map view and GPX export (so routes load into a watch or Strava)
@@ -74,7 +76,7 @@ FastAPI ─────────────── Claude API (tool use)
 
 **How a request flows:**
 1. **Parse:** Claude turns the text into a strict constraints object (`distance_mi`, `shape`, `prefer_green`, `max_crossings`, `amenity_at_mile`, …). Validate it with Pydantic. If validation fails, ask the user to clarify; never guess.
-2. **Generate:** call GraphHopper about 10–20 times with different seeds and headings, plus a custom model that weights park and waterfront paths more heavily. Rescale the requested distance by requested/actual and retry, keep the candidate closest to the target, and report the miss if none lands within ±5% (a single `round_trip` call can be 24% short or 2.5× long; see §12). The custom model must keep ferries excluded (the stock `foot` profile routes the Staten Island Ferry).
+2. **Generate:** call GraphHopper about 10–20 times with different seeds and headings, plus a custom model that weights park and waterfront paths more heavily. Rescale the requested distance by requested/actual and retry, keep the candidate closest to the target, and report the miss if none lands within ±5% (a single `round_trip` call can be 24% short or 2.5× long; see §11). The custom model must keep ferries excluded (the stock `foot` profile routes the Staten Island Ferry).
 3. **Score:** use PostGIS to measure how much of each route is park or waterfront, count crossings (OSM traffic signals and crossing points), and find amenities near the target mile with their trust labels.
 4. **Rank and explain:** return the top 3. Claude writes the summary using only the scored numbers, never its own.
 
@@ -144,26 +146,16 @@ Each phase ends with something you can run. If a week slips, cut scope, not qual
 
 ---
 
-## 10. Resume and interview story (target)
-- *Built and launched **Loop**, an AI run-route planner for NYC. Ran discovery interviews with X runners, shipped v1 in 8 weeks and grew to X weekly runners with X% of generated routes completed.*
-- *Designed a grounded LLM pipeline (Claude tool use → deterministic routing and geospatial scoring) with a XX-case eval suite; XX% parse accuracy at $0.00X per route.*
-- *Stack: React, FastAPI, Postgres/PostGIS, GraphHopper, Claude API; deployed on Fly.io and Vercel.*
-
-Fill in the X's with real numbers. That's the point.
-
----
-
-## 11. Risks (see §12 for what Phase 1 changed)
+## 10. Risks (see §11 for what Phase 1 changed)
 | Risk | Mitigation |
 |---|---|
 | Route quality is mediocre, so nobody comes back | Phase 2 is the core work; test-run your own routes weekly. Ratings drive custom-model tuning |
 | Amenity data is stale or seasonal | Trust labels and "report a problem" button; this becomes a crowdsourced data loop later |
 | Scope creep into v2 too early | v2 is locked until 10+ weekly returning users |
-| Conflict with day job | Personal time and personal equipment only; no Lemonade data, code or branding. Check the outside-work policy |
 
 ---
 
-## 12. Findings (what the real data and tools changed)
+## 11. Findings (what the real data and tools changed)
 Checked 2026-10-30. Details and reasoning are in `docs/decisions/`.
 
 | Finding | Effect on the plan |

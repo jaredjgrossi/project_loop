@@ -52,7 +52,7 @@ The reviewer exported 1,640 Apple Health workout routes from 2020 to now. Their 
 | Signalized crosswalks per mile | 2.2 | 6.3 | 5.5 |
 | Ends within 400 m of start | 82% | 100% | 100% |
 
-"Before step 3" is the step 1 generator (ranking and no-go zones only), measured with the fixed definitions. "After step 3" adds park/water, signals and the runner prior to the ranking, and familiar placement. The kips-bay review start is a public stand-in (Kips Bay Library) 192 m from the reviewer's address. "Before" was measured from the reviewer's address, "after" from the stand-in.
+"Before step 3" is the step 1 generator (ranking and no-go zones only), measured with the fixed definitions. "After step 3" adds park/water, signals and the runner prior to the ranking, and familiar placement. The kips-bay review start is a public stand-in (Kips Bay Library) near the reviewer's address. "Before" was measured from the reviewer's address, "after" from the stand-in.
 
 Positive eval at 3 mi:
 
@@ -62,7 +62,7 @@ Positive eval at 3 mi:
 | kips-bay (89 runs) | 50 | 82 | fails |
 | flatiron (the same 89 runs) | 64 | 82 | fails |
 
-With "matches routes you run" switched off, the Kips Bay gap is 61 against 77, so the gap is park, water and signals, not familiarity. (From the reviewer's own address, 192 m away, the best generated route scored 60, or 63 with familiarity off.)
+With "matches routes you run" switched off, the Kips Bay gap is 61 against 77, so the gap is park, water and signals, not familiarity.
 
 ## What this says (one runner; hypotheses)
 - Real runs turn more than generated ones (3.4 against 2.1 turns per mile) and accept that to reach parks and water. A fewer-turns default works against what this runner does, so the turn weight must not be locked in.

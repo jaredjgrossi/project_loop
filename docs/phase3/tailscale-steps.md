@@ -22,9 +22,9 @@ Nothing is exposed to the internet: serve isn't Funnel.
 ## Each time
 4. **Terminal tab 1**, the API:
    ```bash
-   cd ~/Developer/loop/.claude/worktrees/phase3 && caffeinate -i make serve
+   cd ~/Developer/loop && caffeinate -i make serve
    ```
-   Leave it running. The `phase3` branch isn't merged yet, so run it from this worktree; it reads `~/Developer/loop/.env`.
+   Leave it running. It reads `.env` at the repo root.
    `caffeinate -i` keeps the Mac awake while it runs (keep it plugged in; closing the lid still sleeps it).
 5. **Terminal tab 2**, the HTTPS address (once; it stays on across restarts until you turn it off):
    ```bash

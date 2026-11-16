@@ -92,7 +92,7 @@ final class OutOfAreaTests: XCTestCase {
         let c = try XCTUnwrap(Coverage.loadBundled(), "coverage.geojson is in the app")
         XCTAssertEqual(c.name, "New York City")
         func at(_ lat: Double, _ lon: Double) -> Bool { c.contains(GeoPoint(lon: lon, lat: lat)) }
-        XCTAssertTrue(at(40.7425, -73.9800), "Kips Bay")
+        XCTAssertTrue(at(40.7364, -73.9756), "Kips Bay, Asser Levy Playground")
         XCTAssertTrue(at(40.7829, -73.9654), "Central Park")
         XCTAssertTrue(at(40.6602, -73.9690), "Prospect Park")
         XCTAssertTrue(at(40.7676, -73.8330), "Flushing Meadows")

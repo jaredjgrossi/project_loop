@@ -5,11 +5,11 @@ import XCTest
 final class GPXTests: XCTestCase {
     func testTrackWaypointsAndEscaping() {
         let gpx = GPX.make(name: "Kips Bay & \"the\" <river>",
-                           track: [GeoPoint(lon: -73.9780000, lat: 40.7430000), GeoPoint(lon: -73.9700000, lat: 40.7480000)],
+                           track: [GeoPoint(lon: -73.9756000, lat: 40.7364000), GeoPoint(lon: -73.9700000, lat: 40.7480000)],
                            waypoints: [.init(point: GeoPoint(lon: -73.97, lat: 40.748), name: "Turnaround")])
         XCTAssertTrue(gpx.hasPrefix("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"))
         XCTAssertTrue(gpx.contains("<name>Kips Bay &amp; &quot;the&quot; &lt;river&gt;</name>"))
-        XCTAssertTrue(gpx.contains("<trkpt lat=\"40.7430000\" lon=\"-73.9780000\">"))
+        XCTAssertTrue(gpx.contains("<trkpt lat=\"40.7364000\" lon=\"-73.9756000\">"))
         XCTAssertTrue(gpx.contains("<wpt lat=\"40.7480000\" lon=\"-73.9700000\"><name>Turnaround</name></wpt>"))
         XCTAssertEqual(gpx.components(separatedBy: "<trkpt").count - 1, 2)
         // Well-formed XML.
