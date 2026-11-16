@@ -7,7 +7,7 @@ prompt or generator changed; the 30 pinned top-3 rows are unchanged.
 Decision 022 gives every path sample inside a ferry or school window a `high` level with the cause as its `basis`
 ("SeaStreak arrival 08:00 at East 35th St (window -2/+8 min assumed, estimate)"). The app's card never said why: its
 crowd line read only each stretch's level ("Busier on the esplanade around 8."). Checking the demo's routes on
-2026-11-16 (Kips Bay Library stand-in, Monday 2026-11-17, 7:00 and 8:00) found a second problem: the #1 route's
+2026-11-16 (Kips Bay Library stand-in, Tuesday 2026-11-17, 7:00 and 8:00) found a second problem: the #1 route's
 esplanade is one 3,360 m stretch, and the SeaStreak 08:00 arrival, the UNIS school arrival (twice) and the NYC Ferry
 08:24 arrival together cover about 400 m of it, so the stretch's majority level is `not_scored` and the card shows no
 crowd line at all, at either hour. The pulses were in the route's busy share (9.1%) but nowhere the runner could read.
