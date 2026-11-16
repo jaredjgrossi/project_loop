@@ -76,6 +76,7 @@ final class DemoDriver {
         model.sheet.settle(open: false, animated: false)
         model.fieldExample = ""
         model.clearSelection()
+        model.landing.slide(to: 0, animated: false)   // as runLaunch leaves it before the sheet rises
         model.logoShown = false
         model.stage = .landing
         model.landingShown = false
