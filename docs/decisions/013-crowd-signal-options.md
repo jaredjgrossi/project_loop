@@ -83,9 +83,9 @@ Fixed before any comparison with counts:
 
 **Results:**
 - **The estimate can't see most of this runner's distance.** 3,465 passes, 484 km. Only 13% of moving distance is on OSM sidewalk ways. The rest is cycleway (31%), footway (24%) and pedestrian (22%): greenways, the esplanade and park paths, which have no width and almost no POIs.
-- **Mostly early hours:** 124 of 196 runs started between 6 and 9am, and 78% are on weekdays.
+- **Mostly weekday mornings.**
 - **On sidewalks (674 passes):** crowd index (M3/width) against relative speed gives ρ = −0.10 (95% CI −0.18 to −0.02, bootstrap by run). Passes in the top 10% of the estimate ran 1.052× the run median, against 1.082× elsewhere, about 3% slower. The signal is small and goes the expected way, but it is confounded with busier blocks having more curb cuts and unsignalized crossings.
-- **Within a way, only the hour changes** (26 ways, 605 passes): ρ = −0.06. Too few hours outside 6–9am to say more.
+- **Within a way, only the hour changes** (26 ways, 605 passes): ρ = −0.06. Too few runs outside the morning to say more.
 - **On paths:** POI pressure against speed is +0.19, the wrong sign. The estimate is picking up path type and terrain, not crowds.
 - **Slowdowns:** after signal zones are removed, this runner almost never drops below 1 m/s at any hour, and relative pace is flat from 6am to 6pm.
 
