@@ -50,4 +50,5 @@ Loop turns a plain-English run request ("6 mi loop from Kips Bay, mostly waterfr
 - Secrets stay out of git and out of the app bundle: the Claude key and `LOOP_TOKEN` live in `.env`, the Mapbox token and server URL in `Secrets.xcconfig`. Never write the private server address into a committed file.
 - Starts in tests, evals, docs and screenshots are public stand-ins (`evals/routes/starts.json`, e.g. the Kips Bay Library), never a real home.
 - Personal run data (`apple_health_export/`, `data/`) is git-ignored and never committed. Trim the first and last 200 m of any real route before storing or rendering it (decision 011). The runner's own history shapes routes only for the install ids in `LOOP_PRIOR_INSTALL_IDS` (decision 046).
+- Before saying tests pass, list each failing test by name, and never summarize a failure you haven't read (read the whole failure list, not the tail of the output).
 - One branch and one PR per piece of work, targeting `main`; Jared merges.

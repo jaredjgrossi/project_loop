@@ -35,6 +35,14 @@ class Window:
     start: datetime
     end: datetime
     basis: str
+    # The cause in parts, for the route's `summary.crowds.pulses` (the app writes its crowd line from these, never from
+    # the `basis` prose): "ferry" or "school"; the operator or the school's name; the landing (ferries only); the
+    # arrival clock (ferries only); "arrival" or "dismissal" (schools only).
+    cause: str = ""
+    name: str = ""
+    place: str | None = None
+    arrival: time | None = None
+    event: str | None = None
 
 
 @dataclass(frozen=True)
@@ -73,9 +81,11 @@ def school_windows(day: date, cal: Calendar, school: str) -> list[Window]:
     at = lambda t: datetime.combine(day, t)
     fmt = lambda w: f"{w[0]:%H:%M}-{w[1]:%H:%M}"
     return [Window(at(SCHOOL_ARRIVAL[0]), at(SCHOOL_ARRIVAL[1]),
-                   f"school arrival at {school} (window {fmt(SCHOOL_ARRIVAL)} assumed, estimate)"),
+                   f"school arrival at {school} (window {fmt(SCHOOL_ARRIVAL)} assumed, estimate)",
+                   cause="school", name=school, event="arrival"),
             Window(at(SCHOOL_DISMISSAL[0]), at(SCHOOL_DISMISSAL[1]),
-                   f"school dismissal at {school} (window {fmt(SCHOOL_DISMISSAL)} assumed, estimate)")]
+                   f"school dismissal at {school} (window {fmt(SCHOOL_DISMISSAL)} assumed, estimate)",
+                   cause="school", name=school, event="dismissal")]
 
 
 def ferry_windows(day: date, arrivals: list[time], operator: str, landing: str) -> list[Window]:
@@ -84,7 +94,7 @@ def ferry_windows(day: date, arrivals: list[time], operator: str, landing: str) 
         at = datetime.combine(day, a)
         out.append(Window(at - timedelta(minutes=FERRY_BEFORE_MIN), at + timedelta(minutes=FERRY_AFTER_MIN),
                           f"{operator} arrival {a:%H:%M} at {landing} (window -{FERRY_BEFORE_MIN}/+{FERRY_AFTER_MIN} "
-                          f"min assumed, estimate)"))
+                          f"min assumed, estimate)", cause="ferry", name=operator, place=landing, arrival=a))
     return out
 
 

@@ -59,6 +59,9 @@ class ContextScores:
     crowd_band: str | None = None
     crowd_reason: str | None = None  # why nothing was scored, when no stretch had a band
     crowd_start_band: str | None = None  # the band at the start; None: crowds not scored for any route in the request
+    # The scheduled pulses the route meets (decision 022), each with its cause in parts and where the run meets it;
+    # `summary.crowds.pulses`, which the app's crowd line names. Empty when none, or when crowds aren't scored.
+    crowd_pulses: tuple = ()
 
 
 class _Frame:
@@ -390,7 +393,8 @@ def _crowd_fields(conn, coords, start) -> dict:
         c = route_crowds(conn, coords, start)
     return {"crowd_high_pct": c["high_pct"], "crowd_medium_pct": c["medium_pct"], "crowd_low_pct": c["low_pct"],
             "crowd_not_scored_pct": c["not_scored_pct"], "crowd_band": c["band"],
-            "crowd_reason": c["reason"], "crowd_start_band": c["start_band"]}
+            "crowd_reason": c["reason"], "crowd_start_band": c["start_band"],
+            "crowd_pulses": tuple(c.get("pulses", ()))}
 
 
 def _wait_fields(coords, crossings, lights, grid) -> dict:

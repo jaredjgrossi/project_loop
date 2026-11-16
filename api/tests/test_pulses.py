@@ -75,3 +75,12 @@ def test_curated_schedules_carry_sources_trust_and_review_dates(path):
     assert d["trust"] == "listed" and date.fromisoformat(d["checked_on"]) < date.fromisoformat(d["review_by"])
     srcs = [d["source"]] if "source" in d else list(d["sources"].values())
     assert srcs and all(s.startswith("https://") for s in srcs)
+
+
+def test_windows_carry_the_cause_in_parts_for_the_crowd_line():
+    f = ferry_windows(date(2026, 11, 4), [time(8, 0)], "SeaStreak", "East 35th St")[0]
+    assert (f.cause, f.name, f.place, f.arrival, f.event) == ("ferry", "SeaStreak", "East 35th St", time(8, 0), None)
+    arrival, dismissal = school_windows(date(2026, 11, 4), CAL, "United Nations International School")
+    assert (arrival.cause, arrival.name, arrival.place, arrival.arrival, arrival.event) == \
+        ("school", "United Nations International School", None, None, "arrival")
+    assert dismissal.event == "dismissal"
