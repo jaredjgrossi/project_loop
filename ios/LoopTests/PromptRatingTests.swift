@@ -7,7 +7,7 @@ import XCTest
 final class PromptRatingTests: XCTestCase {
     private func model() throws -> (MainModel, RouteIdentity) {
         let m = MainModel(data: try LoopData(file: RouteFile.loadBundled()), runs: RunStore())
-        let r = RouteIdentity(routeId: "r_a.1", archive: nil, name: "East River out-and-back", request: "3 miles",
+        let r = RouteIdentity(routeId: nil, archive: nil, name: "East River out-and-back", request: "3 miles",
                               distanceMi: 3.03, shape: [[-73.97, 40.74], [-73.96, 40.75]],
                               stretches: ["East River Esplanade"], startTime: "07:00")
         m.returnPrompt = ViewedRoute(route: r, at: Date())
@@ -56,7 +56,7 @@ final class PromptRatingTests: XCTestCase {
 
     func testARatingFromTheCardStillComesBackToTheCard() throws {
         let m = MainModel(data: try LoopData(file: RouteFile.loadBundled()), runs: RunStore())
-        let r = RouteIdentity(routeId: "r_b.1", archive: nil, name: "Route", request: "3 miles", distanceMi: 3,
+        let r = RouteIdentity(routeId: nil, archive: nil, name: "Route", request: "3 miles", distanceMi: 3,
                               shape: [], stretches: [], startTime: nil)
         m.rating = MainModel.RatingState(runId: m.runs.markRun(r).id, route: r)
         m.rateGood()
