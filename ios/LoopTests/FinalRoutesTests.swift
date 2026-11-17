@@ -130,7 +130,7 @@ final class FinalRoutesTests: XCTestCase {
         let n = model(from: full)
         n.receiveEvent(.final([1, 2, 3]), at: 0)
         XCTAssertEqual(n.routeChoices, [1, 2, 3])
-        XCTAssertEqual(n.eyebrowText, "1 OF 3 · OUT AND BACK · BEST OF 31")
+        XCTAssertEqual(n.eyebrowText, "1 OF 3 · BEST OF 31")
         XCTAssertTrue(n.showNeighbour(1))
         XCTAssertEqual(n.shownRank, 2)
         XCTAssertTrue(n.eyebrowText.hasPrefix("2 OF 3"))

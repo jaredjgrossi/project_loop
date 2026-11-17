@@ -69,14 +69,16 @@ enum CardText {
 
     // MARK: Eyebrow
 
-    /// "1 OF 3 · OUT AND BACK · BEST OF 31": the route's place among the routes, its type, and the size of the
-    /// pool it won (decision 020's "Best of N", back in the eyebrow 2026-11-17; the mode never). With one route,
-    /// or before `final`, no position; with a pool of one, or none yet, no count.
+    /// "1 OF 3 · BEST OF 31": the route's place among the routes and the size of the pool it won (decision 020's
+    /// "Best of N", back in the eyebrow 2026-11-17; the mode never). The type fills in for whichever is missing:
+    /// "1 OF 3 · OUT AND BACK" before `final`, "LOLLIPOP · BEST OF 7" for a single route, "LOLLIPOP" alone for
+    /// one route from a pool of one. All three would truncate on the card's one line.
     static func eyebrow(kind: String, position: Int?, of count: Int?, bestOf: Int? = nil) -> String {
         var parts: [String] = []
         if let position, let count, count > 1 { parts.append("\(position) OF \(count)") }
-        if !kind.isEmpty { parts.append(kind) }
-        if let bestOf, bestOf > 1 { parts.append("BEST OF \(bestOf)") }
+        let pool = (bestOf ?? 0) > 1
+        if !kind.isEmpty, parts.isEmpty || !pool { parts.append(kind) }
+        if pool, let bestOf { parts.append("BEST OF \(bestOf)") }
         return parts.joined(separator: " · ")
     }
 
