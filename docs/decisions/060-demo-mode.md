@@ -46,10 +46,11 @@ to #1, the bookmark · C tap the sentence, tap "at 7am", four taps on + (7 → 8
 sheet opens on the new crowd line (the 8:05 ferry) · D home, the location moves to 5th Ave & E 86th St, `a lap of the
 Reservoir at 7am`, the build, the card · E home, the location moves to Grand Army Plaza, `3 miles around Prospect
 Park at 7am`; the engine asks for the lap and the way there (decision 061's number) and the script taps the answer;
-the build, the card · F 9:40, back at the library: the return prompt for A's route, "I ran it" (the app draws the
-route and opens its card into the rating, its own flow), "Good", the run at the top of History · G You: hero,
-numbers, 8 weeks, hero. F runs before G so the profile's numbers and hero map include A's run. No hold has a fixed
-length for the cut's sake: each runs as long as its screen takes to read, and the edit decides.
+the build, the card · F 9:40, back at the library: the return prompt for A's route, "I ran it" (the home sheet
+turns into "How was it?" where it stands, decision 062), "Good" (the You sheet opens and the hero map draws in),
+the run at the top of History · G back to the profile: the numbers, the 8-week chart, back to the hero. F runs
+before G so the profile's numbers and hero map include A's run, and no route card appears in F or G. No hold has a
+fixed length for the cut's sake: each runs as long as its screen takes to read, and the edit decides.
 
 Dropped on 2026-11-16: Union Square and the Hudson. The eyebrow shows the pool again ("1 OF 3 · BEST OF 35", PR #52)
 so the first card proves decision 020's Best of N. The time editor writes the new time the way it was typed
