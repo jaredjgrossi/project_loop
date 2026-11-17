@@ -333,6 +333,13 @@ final class DemoDriver {
         return best
     }
 
-    private func log(_ s: String) { NSLog("Loop demo: %@", s) }
+    /// To the system log, and to stdout (flushed) so `devicectl device process launch --console` shows the script's
+    /// timing on the Mac while the phone is recorded; the line carries the phone's clock.
+    private func log(_ s: String) {
+        NSLog("Loop demo: %@", s)
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"
+        print("Loop demo \(f.string(from: Date())): \(s)")
+        fflush(stdout)
+    }
 }
 #endif
