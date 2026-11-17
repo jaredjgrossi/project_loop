@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Demo mode (decision 060): the app plays the demo video's sequence by itself on a real phone, from staged state at a
 /// public start, so the recording shows the real engine's routes with nothing personal on screen. Debug builds only:
-/// this whole folder is compiled out of Release. On with the launch argument `-LoopDemoMode [A-F]` (from the Mac:
-/// `xcrun devicectl device process launch ... -- -LoopDemoMode [A-G]`) or a two-second press on the wordmark.
+/// this whole folder is compiled out of Release. On with the launch argument `-LoopDemoMode [A-E]` (from the Mac:
+/// `xcrun devicectl device process launch ... -- -LoopDemoMode [A-E]`) or a two-second press on the wordmark.
 ///
 /// Staged, so the post can say so: the clock (a school-day Tuesday, 6:52 for segments A to D, 9:40 for E and F), the
 /// location (the Kips Bay Library stand-in), the weather reading's temperature, the sample history, the saved routes,

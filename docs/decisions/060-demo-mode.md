@@ -15,39 +15,50 @@ with the routes, numbers and copy coming from the live engine.
    demo code: checked by `strings` on the Release binary (zero matches for the demo's type names, launch arguments,
    file names and copy; the only "demo" the binary knows is Mapbox's `MapCenterAltitudeMode` and the pre-existing
    `demoTyping` field name).
-2. **The script (`DemoDriver`) plays segments A to G** (the brief's A to F with two range beats in place of Union Square), segment B in its fallback form (Look Around out,
-   decision 2026-11-14): a second mile on the strip, then routes #2 and #3. Every wait is tied to the thing it waits
-   for (the parse, the card, the final, the landing, a view's frame), never a fixed sleep. Starting at a later
-   segment plays the earlier ones first with holds skipped, then holds two seconds still. Taps are marked with a
+2. **The script (`DemoDriver`) plays segments A to E** (the 2026-11-17 cut; see the sequence below). Every wait is
+   tied to the thing it waits for (the parse, the card, the final, the landing, a view's frame), never a fixed
+   sleep; the holds run as long as a screen takes to read (`readCard`, `readSheet`, `readQuestion`), and the edit
+   decides the cut. Starting at a later segment plays the earlier ones first with holds skipped, then holds two
+   seconds still. Taps are marked with a
    soft dot (`TapDots`: a 44 pt disc in the action blue at 16%, a 1.5 pt ring at 45%, 500 ms); where a tap lands
    comes from the view itself, registered by name (`.demoTarget`), so the dot follows layout.
 3. **The clock is the app's own, pinned.** `LoopClock.now()` replaces every `Date()` that reaches the server
    (`client.now`), a date label, the weather line or the return prompt. Demo mode pins it to Tuesday 2026-11-17
-   (a school day) at 6:52 for segments A to D and 9:40 for E and F; it ticks on from there. 6:52, not the brief's
+   (a school day) at 6:52; it ticks on from there (9:40 for the return prompt, while the script had one). 6:52, not the brief's
    7:02: "at 7" after seven in the morning parses as 7 pm (decision 020; issue #32). In Release `LoopClock.now()`
    is `Date()`.
 4. **Staged, so the post can say so:** the clock; the location (the Kips Bay Library stand-in, `LocationProvider.
    simulate`, Core Location never asked); the weather reading (46°, cloud and sun, fresh on the pinned clock); the
-   sample history (`DemoSampleRuns`: 14 runs, about 53 miles, four weeks, two named saved routes, three recents, in
+   sample history (`DemoSampleRuns`: 14 runs, about 48 miles, four weeks, two named saved routes, three recents, in
    the demo's own `demo-runs.json`, never the real store), every run a real engine route built from a public start on
-   2026-11-16 and simplified to 8 m; segment E's return prompt (the route segment A built, viewed at 7:09); the
+   2026-11-16 and simplified to 8 m); the
    opening drift (3 s over the grid at zoom 15.35); the hero map's draw-in (added: the profile's hero map didn't
    animate, so in demo mode the runs appear oldest first over about two seconds). Also forced: the Paper theme, a
    hidden status bar, no "Replay build" control.
-5. **Not staged:** the requests' routes, names, distances, reason lines, crowd lines, the three routes in B, the
-   rebuild in C, the Union Square run in D, the History row in E and every number on the profile after E.
+5. **Not staged:** the requests' routes, names, distances, reason lines, crowd lines, the rebuild for 8 am in B, the
+   two laps in C and D, the engine's question in D, and every number on the profile in E.
 
-## The sequence as built
-A `3 miles by the water at 7` from the library · B strip, two miles, #2, #3, bookmark · C edit 3 → 4 (two taps on +,
-Done), rebuild, sheet open on the crowd line · D home, the location moves to 5th Ave & E 86th St, `a lap of the
-Reservoir at 7`, typed, six seconds · E home, the location moves to Grand Army Plaza, `3 miles around Prospect Park at
-7`; the engine asks for 4.3 mi and the script taps the first answer; six seconds · F back at the library, later the
-same morning: prompt → I ran it → Good → History · G You: hero, numbers, 8 weeks, hero. (Decided from the casting page
-on 2026-11-16: Union Square and the Hudson are out.)
+## The sequence as built (2026-11-17)
+Every request is typed with "7am", not "7". A `3 miles by the water at 7am` from the library: the real open, the drift,
+the bar rises and types at real speed, the build, the collapsed card, then the sheet opens on the three stats and the
+crowd line (the 7:06 ferry) · B tap the sentence, tap "at 7am", four taps on + (7 → 8 am), Done; the rebuild for 8 am;
+the sheet opens on the new crowd line (the 8:05 ferry) · C home, the location moves to 5th Ave & E 86th St, `a lap of
+the Reservoir at 7am`, the build, the card · D home, the location moves to Grand Army Plaza, `3 miles around Prospect
+Park at 7am`; the engine asks for the lap and the way there (decision 061's number) and the script taps the answer;
+the build, the card · E You: hero, numbers, 8 weeks, hero.
+
+Dropped on 2026-11-17: the route browse and the bookmark (the old B), the 3 → 4 edit (the old C), and the return prompt
+(prompt → I ran it → Good → History): it was kept only if it played as three clean screens, and on the simulator
+"I ran it" loads the run with its full card for about three seconds before "How was it?", and the card is back
+between Good and History. That is the app's own flow, not the script's. Union Square and the Hudson went on
+2026-11-16. The eyebrow shows the pool again ("1 OF 3 · OUT AND BACK · BEST OF 35", PR #52) so the first
+card proves decision 020's Best of N.
 
 Starts are a short list of named public places (`DemoMode.starts`: the library, 5th Ave & E 86th St, Grand Army
 Plaza), each with the opening drift's camera points derived from it. The sample history and the Home default stay at
-the library whatever the segment's start. A question card's first option is a tap target, so a segment can answer.
+the library whatever the segment's start. A question card's first option is a tap target, so a segment can answer;
+the time editor's + is one, so a segment can move 7 am to 8 am; a phrase of the header's sentence is found by
+measuring the words with the request type style (`phrasePoint`).
 
 ## Also in this change
 - `MainModel.outsideCoverageName` read a Debug-only property outside `#if DEBUG`, so the Release configuration did

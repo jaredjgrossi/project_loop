@@ -37,8 +37,9 @@ compiled out of Release. From the Mac, with the simulator booted or the phone pl
 ```bash
 xcrun simctl launch booted com.jaredgrossi.loop -LoopDemoMode A
 ```
-`A` to `G` picks the segment to start from (earlier ones are staged first). On the phone, a two-second press on the
-wordmark arms it for the next launch. The driver logs `Loop demo: …` lines to the system log.
+`A` to `E` picks the segment to start from (earlier ones are staged first). On the phone, a two-second press on the
+wordmark arms it for the next launch. The driver logs `Loop demo: …` lines to the system log and to stdout, so
+`xcrun devicectl device process launch --console … -- -LoopDemoMode A` shows each segment's end on the Mac.
 
 ## Fonts
 Fraunces and Instrument Sans (variable TTFs from google/fonts), each under the
