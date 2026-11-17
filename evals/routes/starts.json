@@ -1,7 +1,7 @@
 {
   "_about": "Fixed review starts (decision 009). Rendered after every change to scoring or generation: python -m evals.routes.render_review. Coordinates are the geocoder's answer on 2026-10-30, stored so reviews and evals don't depend on GeoSearch.",
   "starts": [
-    {"id": "kips-bay", "address": "446 3rd Ave, 10016", "lat": 40.74384, "lon": -73.97994, "miles": [3, 4, 6], "why": "Reviewer's home area (Kips Bay Library, a public stand-in for their address); park-poor neighborhood. 3 mi is the reviewer's typical run"},
+    {"id": "kips-bay", "address": "446 3rd Ave, 10016", "lat": 40.74384, "lon": -73.97994, "miles": [3, 4, 6], "why": "Kips Bay Library, a public stand-in; park-poor neighborhood"},
     {"id": "flatiron", "address": "11 Madison Ave, Manhattan", "lat": 40.74152, "lon": -73.98649, "miles": [3, 4], "why": "Phase 1 baseline start; 3 mi for the real-run check"},
     {"id": "astor-place", "address": "4 Astor Pl, Manhattan", "lat": 40.72971, "lon": -73.99196, "miles": [6], "why": "Runner 1: commutes to the Hudson greenway for a good run"},
     {"id": "upper-east-side", "address": "1500 York Ave, Manhattan", "lat": 40.77158, "lon": -73.94989, "miles": [3, 4, 6], "why": "Central Park and the East River path within reach; East River gaps"},

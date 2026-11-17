@@ -37,13 +37,15 @@ KIND = "a_to_b"
 
 
 def shorter_than_the_shortest_way(miles: float | None, tolerance_pct: float, shortest_m: float) -> bool:
-    """Rule 3: a requested distance that can't reach the end, even at its tolerance, is asked about, never stretched."""
-    return miles is not None and meters_to_miles(shortest_m) > miles * (1 + tolerance_pct / 100)
+    """Rule 3: a requested distance that can't reach the end, even at its tolerance, is asked about, never stretched.
+    Compared at the precision the question quotes, so an accepted answer is never asked about again (issue #50)."""
+    return miles is not None and ask_miles(shortest_m) > miles * (1 + tolerance_pct / 100)
 
 
 def ask_miles(shortest_m: float) -> float:
-    """The distance the engine offers: the shortest way, rounded up to 0.1 mi."""
-    return math.ceil(meters_to_miles(shortest_m) * 10 - 1e-9) / 10
+    """The distance the engine offers: the shortest way as the card will show it, to 0.01 mi (decision 061). Not
+    rounded up to a tenth: "takes at least 4.3 mi" came back as a 4.22 mi card (issue #50)."""
+    return round(meters_to_miles(shortest_m), 2)
 
 
 def _bearing(a: tuple[float, float], b: tuple[float, float]) -> float:

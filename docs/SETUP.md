@@ -56,7 +56,7 @@ This takes a while and downloads about 600 MB (the New York State map, then NYC'
 
 The crowd and school-pulse data need extra downloads: `make crowds` and `make pulses` say what.
 
-When it finishes you will see row counts for `parks`, `drinking_fountains` and `public_restrooms`, and a warning that the fountain dataset is old. That warning is expected (see [decision 004](docs/decisions/004-amenity-data-trust.md)).
+When it finishes you will see row counts for `parks`, `drinking_fountains` and `public_restrooms`, and a warning that the fountain dataset is old. That warning is expected (see [decision 004](decisions/004-amenity-data-trust.md)).
 
 ## 4. Make a loop
 

@@ -8,7 +8,7 @@ from shapely.geometry import Point, Polygon, shape
 from etl.export_coverage import OUT, SOURCE, outline
 
 INSIDE = {  # public places, lat/lon, one or more in every borough and at the edges of the city
-    "Kips Bay": (40.7420, -73.9780),
+    "Kips Bay, Asser Levy Playground": (40.7364, -73.9756),
     "Central Park": (40.7829, -73.9654),
     "Inwood Hill Park": (40.8690, -73.9250),
     "Prospect Park": (40.6602, -73.9690),

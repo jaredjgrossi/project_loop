@@ -18,7 +18,7 @@ moment and the settle was one ring pulse and one light tap.
 - **In the hand:** one Core Haptics pattern for the whole move (a low hum that rises, a tick at each mile, a soft knock
   at the end) in place of the single settle tap.
 
-This is the base version of signature moment D (`signature-moments-v1.md`). It is the app's behaviour, not a setting.
+This is the base version of signature moment D from the design review (kept outside the repo). It is the app's behaviour, not a setting.
 
 ## Choices worth knowing
 - **Meaning first.** Pencil means "still deciding", ink means "this is the route". The engine's provisional flag is the

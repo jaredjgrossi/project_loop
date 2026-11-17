@@ -48,7 +48,7 @@ Real-run eval at 3 mi, "matches routes you run" off:
 | flatiron (same runs) | 68 vs 77, fails | 85 vs 77, passes |
 | upper-east-side (107 runs) | 92 vs 87, passes | 95 vs 87, passes |
 
-The kips-bay start is a public stand-in 192 m from the reviewer's address. The 63 vs 77 gap quoted in the brief was measured from the address itself before the switch. From the stand-in, the before is 61.
+The kips-bay start is a public stand-in near the reviewer's address. The 63 vs 77 gap quoted in the brief was measured from the address itself before the switch. From the stand-in, the before is 61.
 
 The full before and after table for all 10 starts is in `HANDOFF.md`. The #1 route reaches a park or the water at most starts and distances. It does not at Kips Bay 4 mi or Flatiron 4 mi, where every waterfront and corridor candidate missed the ±5% distance limit.
 

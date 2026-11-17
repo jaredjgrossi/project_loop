@@ -172,8 +172,8 @@ def test_a_distance_shorter_than_the_shortest_way_asks_before_anything_streams()
     with pytest.raises(EngineQuestion) as asked:
         a_to_b_engine().build(rc(distance_mi=1.0), Start(*KIPS_POINT, "x"), sent.append, "r_1", end=EAST)
     q = asked.value.question
-    assert sent == [] and q["from"] == "engine" and q["options"][0]["text"] == "2.1 mi"
-    assert asked.value.answer_map["options"]["a"] == {"distance": 2.1}
+    assert sent == [] and q["from"] == "engine" and q["options"][0]["text"] == "2.09 mi"
+    assert asked.value.answer_map["options"]["a"] == {"distance": 2.09}  # the card's number (decision 061)
 
 
 def test_an_a_to_b_run_with_no_distance_is_the_shortest_way():
@@ -218,8 +218,8 @@ def test_a_via_too_far_for_the_distance_asks_with_its_name():
         via_engine().build(rc(distance_mi=2.0, via_places=[via_ref(FAR_NORTH)]), Start(*KIPS_POINT, "x"),
                            lambda e: None, "r_v")
     q = asked.value.question
-    assert q["text"].startswith("Going through Test Station takes at least 3.8 mi")
-    assert asked.value.answer_map["options"]["a"] == {"distance": 3.8}
+    assert q["text"].startswith("Going through Test Station takes at least 3.73 mi")
+    assert asked.value.answer_map["options"]["a"] == {"distance": 3.73}
 
 
 def test_a_loop_through_a_via_passes_it():
@@ -233,7 +233,7 @@ def test_a_loop_through_a_via_passes_it():
 
 def test_via_far_question_names_two_places():
     two = [Via(0, 0, "A", {}), Via(0, 0, "B", {})]
-    assert via_far_question(two, 6000).question["text"].startswith("Going through A and B takes at least 3.8 mi")
+    assert via_far_question(two, 6000).question["text"].startswith("Going through A and B takes at least 3.73 mi")
 
 
 # ---- around: a lap (decision 035) ----------------------------------------------------------------------------------
