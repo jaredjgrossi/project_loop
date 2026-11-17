@@ -22,6 +22,7 @@ struct LandingSheet: View {
         let anchor = model.landingAnchor
         let frameHeight = anchor ?? max(height, sheet.collapsedHeight)
         let offset = max(0, (anchor ?? sheet.collapsedHeight) - height)
+        let ratingShown = model.rating?.fromPrompt == true
         let expanded = Double(sheet.progress)
         let searching = model.searchMode
 
@@ -144,6 +145,24 @@ struct LandingSheet: View {
                 .onAppear { setFull(g.size.height) }
                 .onChange(of: g.size.height) { _, h in setFull(h) }
         })
+        // "I ran it" on the return prompt: the sheet turns into "How was it?" where it stands and fits it
+        // (decision 062); the home content is back once the rating closes.
+        .opacity(ratingShown ? 0 : 1)
+        .allowsHitTesting(!ratingShown)
+        .accessibilityHidden(ratingShown)
+        .overlay(alignment: .top) {
+            if let r = model.rating, r.fromPrompt {
+                RatingContent(model: model, state: r)
+                    .padding(.horizontal, Metrics.s24)
+                    .background(GeometryReader { g in
+                        Color.clear
+                            .onAppear { fitRating(g.size.height) }
+                            .onChange(of: g.size.height) { _, h in fitRating(h) }
+                    })
+                    .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : Motion.crossfade, value: ratingShown)
         .frame(height: frameHeight, alignment: .top)
         .frame(maxWidth: .infinity)
         // Everything stays inside the sheet's shape while it resizes.
@@ -153,7 +172,14 @@ struct LandingSheet: View {
         .contentShape(Rectangle())
         // A tap on any part of the sheet that isn't a control ends editing.
         .onTapGesture { model.endTyping() }
-        .gesture(drag)
+        .gesture(drag, including: ratingShown ? .subviews : .all)
+    }
+
+    /// The rating sizes the sheet to its content, above the home indicator (as the route sheet does).
+    private func fitRating(_ content: CGFloat) {
+        let target = (content + Self.bottomInset).rounded()
+        guard abs(sheet.height - target) > 0.5 else { return }
+        sheet.slide(to: target, animated: !reduceMotion, duration: 0.24)
     }
 
     /// Tapping the handle: collapsed opens; open (or taller) collapses. While typing it only ends editing.
@@ -644,7 +670,7 @@ struct WeatherLine: View {
 }
 
 /// The return prompt: the route's own thumbnail, "Did you run the … route this morning?", Not today
-/// and I ran it (which draws the route and opens the rating).
+/// and I ran it (which marks the run and turns this sheet into the rating).
 struct ReturnPrompt: View {
     let model: MainModel
     let viewed: ViewedRoute

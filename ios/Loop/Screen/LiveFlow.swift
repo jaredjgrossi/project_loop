@@ -390,8 +390,6 @@ extension MainModel {
         currentRoute = identityOfShown(archive: archiveKey, routeId: liveRouteId)
         cardMode = .normal
         if let r = currentRoute { runs.noteViewed(r) }
-        afterSettle?()
-        afterSettle = nil
         if let request = recordOnSettle, let shown = self.shown {
             recordOnSettle = nil
             runs.addRecent(request: request, distanceMi: shown.distanceMi, line: shown.line, serverId: liveRouteId)
