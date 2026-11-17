@@ -63,7 +63,7 @@ extension MainModel {
         runs.rate(r.runId, value)
         if let log = runs.runs.first(where: { $0.id == r.runId }) { sendFeedback(log, rating: value) }
         Haptics.success()
-        closeRating()
+        closeRating(rated: true)
     }
 
     func chooseNotForMe() {
@@ -84,13 +84,22 @@ extension MainModel {
                               note: r.reasons.contains("other") && !note.isEmpty ? note : nil)
         runs.rate(r.runId, value)
         if let log = runs.runs.first(where: { $0.id == r.runId }) { sendFeedback(log, rating: value) }
-        closeRating()
+        closeRating(rated: true)
     }
 
-    /// "Not now", or after rating: the card comes back (the run stays marked).
-    func closeRating() {
-        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : Motion.crossfade) { rating = nil }
-        sheet.settle(rest: .collapsed, animated: !UIAccessibility.isReduceMotionEnabled)
+    /// "Not now", or after rating: the card comes back (the run stays marked). From the return prompt the
+    /// home sheet comes back instead, and a rating goes on to the You sheet, where the run now is
+    /// (decision 062).
+    func closeRating(rated: Bool = false) {
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let fromPrompt = rating?.fromPrompt == true
+        withAnimation(reduceMotion ? nil : Motion.crossfade) { rating = nil }
+        if fromPrompt {
+            landing.settle(rest: .open, animated: !reduceMotion)
+            if rated { youShown = true }
+        } else {
+            sheet.settle(rest: .collapsed, animated: !reduceMotion)
+        }
     }
 
     private func sendFeedback(_ log: RunLog, rating: RunRating?) {
@@ -124,11 +133,16 @@ extension MainModel {
         if landingShown, landingAnchor == nil { landing.refreshRest() }
     }
 
-    /// "I ran it" on the prompt: the route draws and its card opens straight into the rating.
+    /// "I ran it" on the prompt: the run is marked and the home sheet turns into "How was it?" where it
+    /// stands; the route is not drawn first, the runner knows which one it was (decision 062).
     func ranItFromPrompt() {
         guard let v = returnPrompt else { return }
-        returnPrompt = nil
-        openRoute(v.route, mode: .normal) { [weak self] in self?.ranIt() }
+        let log = runs.markRun(v.route)
+        sendFeedback(log, rating: nil)
+        withAnimation(UIAccessibility.isReduceMotionEnabled ? nil : Motion.crossfade) {
+            returnPrompt = nil
+            rating = RatingState(runId: log.id, route: v.route, fromPrompt: true)
+        }
     }
 
     // MARK: Opening kept routes
@@ -140,7 +154,7 @@ extension MainModel {
 
     /// Draws a kept route (from the phone, offline) and opens its card. Without a kept copy, a live
     /// app builds the request again instead.
-    func openRoute(_ r: RouteIdentity, mode: CardMode, then: (() -> Void)? = nil) {
+    func openRoute(_ r: RouteIdentity, mode: CardMode) {
         guard stage == .landing || stage == .typing || stage == .settled else { return }
         let start = r.request
         guard let key = r.archive, let file = RouteArchive.load(key, start: start),
@@ -185,7 +199,6 @@ extension MainModel {
         stage = .building
         currentRoute = r
         cardMode = mode
-        afterSettle = then
         Haptics.prepareSettle()
         startBuild(reduceMotion: reduceMotion)
     }

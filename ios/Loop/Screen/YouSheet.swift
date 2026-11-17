@@ -185,7 +185,7 @@ struct YouSheet: View {
             .navigationDestination(isPresented: $demoHistory) {
                 HistoryList(model: model) { log in open { model.openHistory(log) } }
             }
-            .onChange(of: model.demoHistoryRequest) { _, _ in demoHistory = true }
+            .onChange(of: model.demoHistoryShown) { _, v in demoHistory = v }
             .onChange(of: model.demoScrollRequest) { _, _ in
                 // Demo mode: a scripted scroll eases like a finger, one motion per change.
                 guard let t = model.demoScrollTarget else { return }

@@ -160,7 +160,8 @@ extension MainModel {
     func keyboardChanged(height: CGFloat, duration: TimeInterval) {
         guard abs(height - keyboardHeight) > 0.5 else { return }
         keyboardHeight = height
-        guard landingShown, landingAnchor == nil else { return }
+        // The rating from the return prompt lifts itself onto the keyboard (MainScreen); the sheet stays.
+        guard landingShown, landingAnchor == nil, rating?.fromPrompt != true else { return }
         let target = searchMode ? landingSearchHeight(keyboard: height) : landing.height(for: landing.rest)
         landing.slide(to: target, animated: duration > 0, duration: duration, curve: SheetState.keyboardCurve)
     }
@@ -262,8 +263,6 @@ extension MainModel {
             }
             if self.currentRoute == nil { self.currentRoute = self.identityOfShown(archive: RouteArchive.fixture, routeId: nil) }
             if let r = self.currentRoute, self.cardMode == .normal { self.runs.noteViewed(r) }
-            self.afterSettle?()
-            self.afterSettle = nil
         }
     }
 
@@ -283,7 +282,6 @@ extension MainModel {
         rating = nil
         cardMode = .normal
         currentRoute = nil
-        afterSettle = nil
         flow?.cancel()
         playbackCancel()
         clearSelection()

@@ -81,6 +81,8 @@ final class MainModel {
         var notForMe = false
         var reasons: Set<String> = []
         var note = ""
+        /// From the return prompt: the home sheet holds the rating, and a rating opens the You sheet (decision 062).
+        var fromPrompt = false
     }
     /// "Did you run the … route?" at the top of the home sheet, once per route, within 24 h.
     var returnPrompt: ViewedRoute?
@@ -99,15 +101,13 @@ final class MainModel {
     var demoEditorDone = 0
     var demoScrollTarget: String?
     var demoScrollRequest = 0
-    var demoHistoryRequest = 0
+    var demoHistoryShown = false
     var demoClockVersion = 0
     var demoBlurRequest = 0
     var demoSubmitRequest = 0
     #endif
     /// A saved route being renamed (long-press -> Rename).
     var renaming: SavedRun?
-    /// Runs once the route has drawn and settled (opening a route to rate it from the prompt).
-    @ObservationIgnored var afterSettle: (() -> Void)?
     /// The live build's id (`final.route_id`): a chip edit sends it so shape edits answer at once.
     @ObservationIgnored var liveBuildId: String?
 

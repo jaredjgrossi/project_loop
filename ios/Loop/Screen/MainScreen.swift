@@ -120,7 +120,9 @@ struct MainScreen: View {
             Color.clear
                 .overlay(alignment: .bottom) {
                     LandingSheet(model: model)
-                        .offset(y: LandingSheet.bottomInset)
+                        // The rating's note field (from the return prompt) lifts the sheet onto the keyboard.
+                        .offset(y: LandingSheet.bottomInset - (model.rating?.fromPrompt == true ? model.keyboardHeight : 0))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: model.keyboardHeight)
                         .allowsHitTesting(model.landingShown)
                         .accessibilityHidden(!model.landingShown)
                 }
