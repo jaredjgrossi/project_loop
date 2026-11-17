@@ -187,8 +187,9 @@ final class DemoDriver {
         await hold(6.0)
     }
 
-    /// F: later the same morning, back at the library. Home with the return prompt for segment A's route and the saved
-    /// tile; "I ran it", "Good"; the run at the top of History; 1.5 s on the list.
+    /// F: later the same morning, back at the library. Home with the return prompt for segment A's route; "I ran it"
+    /// turns the sheet into "How was it?" where it stands; "Good" opens the You sheet (decision 062), the hero map
+    /// draws in; the run at the top of History.
     private func segmentF() async {
         guard let model else { return }
         LoopClock.pinned = DemoMode.laterMorning
@@ -209,20 +210,17 @@ final class DemoDriver {
         await until("the rating") { model.rating != nil }
         await hold(1.2)
         await tap("rateGood") { model.rateGood() }
-        await hold(1.2)
-        await tap("you") { model.youShown = true }
-        await hold(1.2)
-        await tap("historyLink") { model.demoHistoryRequest += 1 }
+        await until("the You sheet", timeout: 5) { DemoTargets.center("historyLink") != nil }   // its rise is not the hold
+        await hold(3.3)   // the hero map draws in
+        await tap("historyLink") { model.demoHistoryShown = true }
         await hold(1.5)
-        model.youShown = false
-        await hold(0.8)
     }
 
-    /// G: the route-L button; the hero map (draw-in), the numbers, the 8-week chart, back to the hero for 5 s.
+    /// G: back from History to the profile (the hero is drawn), the numbers, the 8-week chart, back to the hero.
     private func segmentG() async {
         guard let model else { return }
-        await tap("you") { model.youShown = true }
-        await hold(3.3)
+        model.demoHistoryShown = false
+        await hold(1.0)
         scroll("stats"); await hold(2.5)
         scroll("weeks"); await hold(2.5)
         scroll("hero"); await hold(5.0)
