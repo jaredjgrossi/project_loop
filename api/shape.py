@@ -75,6 +75,13 @@ def _project(coords: list[list[float]]) -> list[Point]:
     return [((lon - lon0) * kx, (lat - lat0) * ky) for lon, lat in (c[:2] for c in coords)]
 
 
+def measured_m(coords: list[list[float]]) -> float:
+    """A [lon, lat] line's length in meters as the card measures it: the same projection and sum as the shape
+    metrics (`distance_miles`), so a number quoted before the build is the number the card shows after it."""
+    pts = _project(coords) if coords else []
+    return sum(_dist(a, b) for a, b in zip(pts, pts[1:]))
+
+
 def _dist(a: Point, b: Point) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 

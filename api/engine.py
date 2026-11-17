@@ -32,6 +32,7 @@ from api.nogo import NoGoZone
 from api.nogo import resolve as resolve_zones
 from api.routing import RoutingError, graphhopper_url, with_instructions
 from api.scripts import make_loop as ml
+from api.shape import measured_m
 from api.summary import METERS_PER_MILE, route_summary
 
 # The engine can't build a request with these until a later step, so it builds nothing and says why (rule 3).
@@ -562,11 +563,13 @@ class Engine:
                     shortest = route_fn(tour(here, vias, end))
             except RoutingError as exc:
                 raise EngineUnavailable(f"GraphHopper: {exc}") from exc
-            if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest.distance_m):
-                raise (via_far_question(vias, shortest.distance_m) if vias
-                       else shortest_way_question(shortest.distance_m))
+            # Checked and quoted as the card measures a route (its geometry's length, decision 061), not GraphHopper's
+            # figure: the number in the question is the number on the card once the answer is built (issue #50).
+            shortest_m = measured_m(shortest.coordinates)
+            if shorter_than_the_shortest_way(miles, rc.tolerance_pct, shortest_m):
+                raise (via_far_question(vias, shortest_m) if vias else shortest_way_question(shortest_m))
             if miles is None:
-                miles = round(meters_to_miles(shortest.distance_m), 2)
+                miles = round(meters_to_miles(shortest_m), 2)
 
         keys: dict[int, str] = {}  # candidate object -> its id in this build
         keys_lock = threading.Lock()

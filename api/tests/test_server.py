@@ -405,11 +405,11 @@ def test_the_engine_asks_and_the_answer_builds_at_the_new_distance():
     assert [e["event"] for e in first] == ["parsed", "question", "done"]
     q = first[1]
     assert q["from"] == "engine" and q["about"] == "distance" and q["parse_id"] != first[0]["parse_id"]
-    assert q["text"] == "The shortest way there is 4.3 mi. Make it 4.3 mi?"
-    assert [o["text"] for o in q["options"]] == ["4.3 mi"] and "_answer" not in q
+    assert q["text"] == "The shortest way there is 4.23 mi. Make it 4.23 mi?"  # the card's number (decision 061)
+    assert [o["text"] for o in q["options"]] == ["4.23 mi"] and "_answer" not in q
     second = post(c, body("R01", answer={"parse_id": q["parse_id"], "question_id": q["id"], "option_id": "a"}))
     assert [e["event"] for e in second][0] == "parsed" and second[-1]["event"] == "done"
-    assert second[0]["constraints"]["distance_mi"] == 4.3
+    assert second[0]["constraints"]["distance_mi"] == 4.23
     assert next(x for x in second[0]["chips"] if x["field"] == "distance")["source"] == "said"
     assert len(eng.calls) == 2 and parse_fn.calls == ["3 mi to McCarren Park"]  # no second Claude call
 

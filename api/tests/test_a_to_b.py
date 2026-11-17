@@ -48,7 +48,8 @@ def test_the_engine_asks_when_the_distance_is_shorter_than_the_shortest_way():
     assert shorter_than_the_shortest_way(3.0, 5, shortest_m)
     assert not shorter_than_the_shortest_way(4.1, 5, shortest_m)  # 4.1 mi + 5% reaches 4.23
     assert not shorter_than_the_shortest_way(None, 5, shortest_m)  # no distance: the shortest way it is
-    assert ask_miles(shortest_m) == 4.3  # rounded up, so the answer is never shorter than the way there
+    assert ask_miles(shortest_m) == 4.23  # as the card will show it; an accepted answer is never asked about again
+    assert not shorter_than_the_shortest_way(4.23, 0, shortest_m)  # even with no tolerance
 
 
 def test_with_the_shortest_distance_the_direct_route_comes_back():
