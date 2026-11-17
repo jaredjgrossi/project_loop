@@ -74,6 +74,7 @@ extension MainModel {
         liveRouteId = nil
         liveParseId = nil
         liveParsedAt = nil
+        liveAnsweredField = nil
         liveSentence = sentence
         liveSentAt = CACurrentMediaTime()
         data = LoopData(request: liveRequestCard(chips: [], startHour: ""), candidates: [], bestOf: 0)
@@ -212,6 +213,14 @@ extension MainModel {
             liveParsedAt = CACurrentMediaTime()
             flow?.cancel()
             readOut = ReadOut(parsed: p, sentence: shown)
+            if let field = liveAnsweredField {
+                // The answer changed this field's words: the sentence follows, as after the editor's Done.
+                liveAnsweredField = nil
+                if let (sentence, r) = readOut?.answered(field: field, sentence: shown) {
+                    withAnimation(reduceMotion ? nil : Motion.textArrive) { requestText = sentence }
+                    readOut = r
+                }
+            }
             if let q = p.question {
                 showQuestion(q, parseId: p.parseId)
                 return
@@ -403,6 +412,7 @@ extension MainModel {
     /// (go sends it again; the wordmark goes home).
     func cancelQuestion() {
         pendingQuestion = nil
+        liveAnsweredField = nil
         liveTask?.cancel()
         flow?.cancel()
         locationPulsing = false
@@ -418,6 +428,7 @@ extension MainModel {
         guard let q = pendingQuestion, let parseId = q.parseId, let api = LoopAPI.live else { return }
         pendingQuestion = nil
         liveNotice = nil
+        liveAnsweredField = q.about
         liveSentAt = CACurrentMediaTime() - 1.2   // no push-in to wait for
         liveParsedAt = nil
         let answer = RunRequest.Answer(parseId: parseId, questionId: q.id, optionId: optionId,

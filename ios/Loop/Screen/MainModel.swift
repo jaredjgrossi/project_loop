@@ -182,6 +182,8 @@ final class MainModel {
     @ObservationIgnored var liveParsedAt: CFTimeInterval?
     @ObservationIgnored var liveSentence = ""
     @ObservationIgnored var liveParseId: String?
+    /// The field the answered question was about, until its `parsed` lands and the sentence follows (issue #48).
+    @ObservationIgnored var liveAnsweredField: String?
     @ObservationIgnored var liveExpiredRetried = false
     /// The automatic resend after `expired` is under way (it mustn't reset the once-only guard).
     @ObservationIgnored var liveResending = false
