@@ -17,6 +17,13 @@ struct EditorPanel: View {
 
     private var understood: ReadOut.Understood? { model.readOut?.understood.first { $0.field == target.field } }
     private var filled: ReadOut.Filled? { model.readOut?.filled.first { $0.field == target.field } }
+    /// The runner's own words for this value: the understood span of the sentence.
+    private var typedWords: String? {
+        guard let u = understood, let text = model.requestText else { return nil }
+        let ns = text as NSString
+        guard u.start >= 0, u.length > 0, u.start + u.length <= ns.length else { return nil }
+        return ns.substring(with: NSRange(location: u.start, length: u.length))
+    }
 
     private var title: String {
         if let u = understood, target.isUnderstood { return "\(u.title) · you said" }
@@ -159,7 +166,10 @@ struct EditorPanel: View {
                             constraint: ("distance_mi", .number(miles)))
         case "time":
             let hhmm = String(format: "%02d:%02d", minutes / 60, minutes % 60)
-            model.applyEdit(field: "time", value: clock(minutes), phrase: "at \(clock(minutes))",
+            // The new time is written the way the runner typed it ("at 7am" → "at 8am"); the app's own form only
+            // when their words had no digits.
+            let phrase = typedWords.flatMap { EditedTime.phrase(typed: $0, minutes: minutes) } ?? "at \(clock(minutes))"
+            model.applyEdit(field: "time", value: clock(minutes), phrase: phrase,
                             constraint: ("start_time", .string(hhmm)))
         case "scenery":
             let phrase = ["By the water": "by the water", "Some": "with some scenery", "Don't mind": "anywhere"][choice] ?? choice
