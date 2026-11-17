@@ -73,6 +73,38 @@ struct ReadOut: Equatable {
         }
     }
 
+    /// The words for a field's value when the sentence is rewritten: a distance chip "4.3 mi" reads "4.3 miles";
+    /// any other field keeps the chip's text.
+    static func phrase(field: String, value: String) -> String {
+        guard field == "distance" else { return value }
+        let number = value.hasSuffix(" mi") ? String(value.dropLast(3)) : value
+        return "\(number) mile\(number == "1" ? "" : "s")"
+    }
+
+    /// After an answered question the server's chips carry the new value over the old words' span ("4.3 mi" over
+    /// "3 miles"), so the sentence is rewritten here the way the editor's Done rewrites it: the field's words become
+    /// the phrase for its value and the phrases after it shift. nil when the field isn't in the sentence or its
+    /// words already say the value.
+    func answered(field: String, sentence: String) -> (sentence: String, readOut: ReadOut)? {
+        guard let i = understood.firstIndex(where: { $0.field == field }) else { return nil }
+        let u = understood[i]
+        let ns = sentence as NSString
+        guard u.start >= 0, u.length >= 0, u.start + u.length <= ns.length else { return nil }
+        let range = NSRange(location: u.start, length: u.length)
+        let phrase = Self.phrase(field: field, value: u.value)
+        guard ns.substring(with: range) != phrase else { return nil }
+        let delta = (phrase as NSString).length - u.length
+        var r = self
+        for j in r.understood.indices where r.understood[j].start > u.start {
+            let x = r.understood[j]
+            r.understood[j] = Understood(start: x.start + delta, length: x.length, field: x.field, title: x.title,
+                                         value: x.value, chipId: x.chipId)
+        }
+        r.understood[i] = Understood(start: u.start, length: (phrase as NSString).length, field: u.field, title: u.title,
+                                     value: u.value, chipId: u.chipId)
+        return (ns.replacingCharacters(in: range, with: phrase), r)
+    }
+
     /// Stand-in for the server's parse (simulation only; the real one is Claude + templates).
     static func simulated(_ sentence: String, data: LoopData, file: RouteFile.Summary?) -> ReadOut {
         var r = ReadOut()
