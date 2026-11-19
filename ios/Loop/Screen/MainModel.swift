@@ -290,9 +290,10 @@ final class MainModel {
     }
 
     var eyebrowText: String {
-        // Position and type ("1 OF 3 · OUT AND BACK"); never the mode or the size of the pool.
+        // Position, type and the pool ("1 OF 3 · OUT AND BACK · BEST OF 31"); never the mode.
         let position = shownRank.flatMap { routeChoices.firstIndex(of: $0) }.map { $0 + 1 }
-        return CardText.eyebrow(kind: shown?.kindText ?? "", position: position, of: routeChoices.count)
+        return CardText.eyebrow(kind: shown?.kindText ?? "", position: position, of: routeChoices.count,
+                                bestOf: build.final ? data.bestOf : nil)
     }
 
     // MARK: Interaction
