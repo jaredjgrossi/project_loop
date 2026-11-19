@@ -1,5 +1,9 @@
 # Loop
 
+<p align="center"><img src="docs/media/loop-build-moment.gif" width="320" alt="Loop building a 3-mile run from Kips Bay: the request, 35 candidate routes sketched, the winning route inked"></p>
+
+*A 3-mile request from the Kips Bay Library stand-in, built live. Every route and number is the engine’s.*
+
 [![unit tests](https://github.com/jaredjgrossi/project_loop/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/jaredjgrossi/project_loop/actions/workflows/unit-tests.yml)
 
 Describe a run in a sentence, like "6 mi loop from Kips Bay, mostly waterfront, I wait at lights", and get real New York City routes that fit it. Each one is scored with NYC data, and Loop says so when a limit can't be met.
