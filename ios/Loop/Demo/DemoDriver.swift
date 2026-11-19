@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 import UIKit
 
-/// Plays the demo video's sequence (segments A to G, decision 060; the brief's A to F with two new range beats) on the app itself: it types, taps,
+/// Plays the demo video's sequence (segments A to G, decision 060) on the app itself: it types, taps,
 /// scrolls and waits, with each wait tied to the thing it waits for (the parse, the card, the final, the sheet, the
 /// landing) rather than a fixed sleep, so a slow build can't break the timing. Every route and number on screen comes
 /// from the live server; the script only drives the app the way a finger would and marks each tap with a dot.
@@ -18,12 +18,19 @@ final class DemoDriver {
     private var task: Task<Void, Never>?
     /// Staging an earlier segment: no holds, instant typing, no dots.
     private var fast = false
-    /// The route segment A built, for segment E's return prompt.
+    /// The route segment A built, for segment F's return prompt.
     private var routeA: RouteIdentity?
 
-    static let requestA = "3 miles by the water at 7"
-    static let requestD = "a lap of the Reservoir at 7"
-    static let requestE = "3 miles around Prospect Park at 7"
+    static let requestA = "3 miles by the water at 7am"
+    static let requestD = "a lap of the Reservoir at 7am"
+    static let requestE = "3 miles around Prospect Park at 7am"
+    /// Holds run as long as the screen takes to read; the edit decides the cut.
+    static let readCard = 2.6       // the collapsed card: distance, name, reason
+    static let readSheet = 4.2      // the open sheet: three stats and the crowd line
+    static let readQuestion = 1.8   // the engine's question and its one answer
+    static let readChip = 1.5       // the mile chip on the route
+    static let readRoute = 1.6      // another route of the three
+
     /// The opening drift's zoom: the street grid at neighborhood zoom; its points come from the start (DemoMode.Start).
     static let driftZoom = 15.35
 
@@ -107,69 +114,67 @@ final class DemoDriver {
         model.send(Self.requestA, reduceMotion: false)
         await awaitBuild()
         routeA = model.currentRoute
-        await hold(3.0)
+        await hold(Self.readCard)
+        await tap("grabber") { model.setSheet(open: true, animated: true) }
+        await hold(Self.readSheet)
     }
 
-    /// B (the brief's fallback, Look Around out): open the sheet, tap the route at a mile on the esplanade, a second
-    /// mile so the strip's cursor moves, routes #2 and #3, then the bookmark.
+    /// B: with the sheet still open, a tap on the route at a mile on the esplanade (the mile chip), routes #2 and #3,
+    /// back to #1, then the bookmark.
     private func segmentB() async {
-        guard let model else { return }
-        await tap("grabber") { model.setSheet(open: true, animated: true) }
-        await hold(0.9)
-        guard let d = model.shownDetail else { return }
+        guard let model, let d = model.shownDetail else { return }
         let water = d.drawn.filter { $0.kind == .waterfront }.max { ($0.toM - $0.fromM) < ($1.toM - $1.fromM) }
-        let first = water.map { $0.fromM + ($0.toM - $0.fromM) * 0.35 } ?? d.line.length * 0.35
-        let second = water.map { min($0.toM - 30, first + 600) } ?? d.line.length * 0.55
-        await tap(at: model.screenPoint(d.line.point(at: first))) { model.selectPoint(alongM: first) }
-        await hold(1.5)
-        await tap(at: model.screenPoint(d.line.point(at: second))) { model.selectPoint(alongM: second) }
-        await hold(1.5)
+        let mile = water.map { $0.fromM + ($0.toM - $0.fromM) * 0.35 } ?? d.line.length * 0.35
+        await tap(at: model.screenPoint(d.line.point(at: mile))) { model.selectPoint(alongM: mile) }
+        await hold(Self.readChip)
         let lead = model.shownRank
         for rank in model.otherRanks.sorted() {
             guard let other = model.data.candidate(rank: rank)?.line else { continue }
             let p = Self.farthest(on: other, from: d.line)
             await tap(at: model.screenPoint(p)) { model.showRoute(rank: rank) }
-            await hold(1.6)
+            await hold(Self.readRoute)
         }
-        if let lead { model.showRoute(rank: lead) }
-        await hold(0.9)
+        if let lead, let shown = model.shownDetail?.line {
+            await tap(at: model.screenPoint(Self.farthest(on: d.line, from: shown))) { model.showRoute(rank: lead) }
+            await hold(0.9)
+        }
         await tap("bookmark") { model.toggleSave() }
         await hold(1.5)
     }
 
-    /// C: tap the sentence, tap the distance, two taps on + (3 → 4), Done; the route rebuilds; 3 s on the new route
-    /// with the sheet open on its crowd line.
+    /// C: tap the sentence, tap "at 7am", four taps on + (7:00 → 8:00), Done; the route rebuilds for 8 am; the sheet
+    /// opens on the new crowd line (the 8:05 ferry) and holds.
     private func segmentC() async {
         guard let model else { return }
         model.setSheet(open: false, animated: true)
-        await hold(0.5)
+        await hold(0.6)
         await tap("sentence") { model.enterEditMode() }
         await hold(1.0)
-        let f = DemoTargets.frames["sentence"]
-        await tap(at: f.map { CGPoint(x: $0.minX + 12, y: $0.minY + 20) }) { model.openEditor(.understood("distance")) }
+        await tap(at: Self.phrasePoint("at 7am", in: model.requestText ?? Self.requestA)) { model.openEditor(.understood("time")) }
         await hold(1.0)
-        await tap("editorPlus") { model.demoEditorPlus += 1 }
+        for _ in 0..<4 {
+            await tap("editorPlus") { model.demoEditorPlus += 1 }
+            await hold(0.45)
+        }
         await hold(0.5)
-        await tap("editorPlus") { model.demoEditorPlus += 1 }
-        await hold(0.7)
         await tap("editorDone") { model.demoEditorDone += 1 }
         guard await until("the rebuild to start", timeout: 10, { !model.build.final }) else { return }
         await awaitBuild()
-        await hold(0.6)
-        model.setSheet(open: true, animated: true)
-        await hold(3.0)
+        await hold(Self.readCard)
+        await tap("grabber") { model.setSheet(open: true, animated: true) }
+        await hold(Self.readSheet)
     }
 
-    /// D: home, the location moves to 5th Ave & E 86th St, the Reservoir lap is typed and sent, the build, 6 s held.
+    /// D: home, the location moves to 5th Ave & E 86th St, the Reservoir lap is typed and sent, the build, held.
     private func segmentD() async {
         await goHomeAt("fifth-ave-86th")
         await typeAndSend(Self.requestD)
         await awaitBuild()
-        await hold(6.0)
+        await hold(Self.readCard)
     }
 
     /// E: home, the location moves to Grand Army Plaza, the Prospect Park request is typed and sent; the engine asks
-    /// (the lap and the way there need more than 3 mi) and the script taps the first answer; the build, 6 s held.
+    /// (the lap and the way there need more than 3 mi) and the script taps the first answer; the build, held.
     private func segmentE() async {
         guard let model else { return }
         await goHomeAt("grand-army-plaza")
@@ -178,13 +183,13 @@ final class DemoDriver {
         // if none comes.
         await until("the question card", timeout: 40) { model.pendingQuestion != nil || model.cardRevealed || model.liveNotice != nil }
         if let q = model.pendingQuestion, let first = q.options.first {
-            await hold(1.5)   // the card is read
+            await hold(Self.readQuestion)
             await tap("questionOption1") { model.answerQuestion(optionId: first.id, text: nil) }
         } else {
             log("no question came for the Prospect Park lap")
         }
         await awaitBuild()
-        await hold(6.0)
+        await hold(Self.readCard)
     }
 
     /// F: later the same morning, back at the library. Home with the return prompt for segment A's route; "I ran it"
@@ -320,6 +325,34 @@ final class DemoDriver {
         }
     }
 
+    /// Where a phrase of the header's sentence sits on screen: measured with the request type style from the
+    /// sentence's registered frame, so the dot lands on the words (one line, or the wrap the frame's height implies).
+    static func phrasePoint(_ phrase: String, in sentence: String) -> CGPoint? {
+        guard let frame = DemoTargets.frames["sentence"], let range = sentence.range(of: phrase) else { return nil }
+        let font = TypeStyle.request.uiFont
+        let lineHeight = font.lineHeight + TypeStyle.request.lineSpacing
+        let width = frame.width
+        // Lay the words out the way the label wraps them: word by word, a new line when one won't fit.
+        var x: CGFloat = 0, line = 0
+        var hit: CGPoint? = nil
+        var index = sentence.startIndex
+        for word in sentence.split(separator: " ", omittingEmptySubsequences: false) {
+            let w = (String(word) as NSString).size(withAttributes: [.font: font]).width
+            let space = (" " as NSString).size(withAttributes: [.font: font]).width
+            if x > 0, x + w > width { x = 0; line += 1 }
+            let wordEnd = sentence.index(index, offsetBy: word.count)
+            if hit == nil, index >= range.lowerBound, index < range.upperBound {
+                // The first word of the phrase: aim a little into the phrase, on its line.
+                let phraseWidth = (phrase as NSString).size(withAttributes: [.font: font]).width
+                hit = CGPoint(x: frame.minX + x + min(phraseWidth, width - x) / 2,
+                              y: frame.minY + CGFloat(line) * lineHeight + lineHeight / 2)
+            }
+            x += w + space
+            index = wordEnd < sentence.endIndex ? sentence.index(after: wordEnd) : wordEnd
+        }
+        return hit
+    }
+
     /// The point of `other` farthest from `line`: where a tap picks the other route, not this one.
     private static func farthest(on other: Polyline, from line: Polyline) -> GeoPoint {
         let ref = stride(from: 0, to: line.points.count, by: 4).map { line.points[$0] }
@@ -331,6 +364,13 @@ final class DemoDriver {
         return best
     }
 
-    private func log(_ s: String) { NSLog("Loop demo: %@", s) }
+    /// To the system log, and to stdout (flushed) so `devicectl device process launch --console` shows the script's
+    /// timing on the Mac while the phone is recorded; the line carries the phone's clock.
+    private func log(_ s: String) {
+        NSLog("Loop demo: %@", s)
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"
+        print("Loop demo \(f.string(from: Date())): \(s)")
+        fflush(stdout)
+    }
 }
 #endif

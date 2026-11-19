@@ -76,7 +76,10 @@ struct EditorPanel: View {
         .padding(.horizontal, Metrics.s24)
         .onAppear(perform: load)
         #if DEBUG
-        .onChange(of: model.demoEditorPlus) { _, _ in if target.field == "distance" { miles = min(30, miles + 0.5) } }
+        .onChange(of: model.demoEditorPlus) { _, _ in
+            if target.field == "distance" { miles = min(30, miles + 0.5) }
+            if target.field == "time" { minutes = (minutes + 15) % 1440 }
+        }
         .onChange(of: model.demoEditorDone) { _, _ in done() }
         #endif
     }
