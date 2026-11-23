@@ -36,7 +36,7 @@ Loop turns a plain-English run request ("6 mi loop from Kips Bay, mostly waterfr
 - `make serve` runs the API on 127.0.0.1:8000 (needs `make up` and `LOOP_TOKEN` in `.env`).
 - `uv run pytest` runs the unit tests; `uv run pytest -p ci.no_network` runs them as CI does.
 - `uv run pytest evals/` runs the live evals (needs the stack up and the data loaded; parse evals need `ANTHROPIC_API_KEY`).
-- `make eval-parse PARSER=api.parse:parse` runs the 63 parse cases against live Claude and prints a table.
+- `make eval-parse PARSER=api.parse:parse` runs the 67 parse cases against live Claude and prints a table.
 - `uv run python -m api.scripts.ask "6 mi loop, mostly waterfront" --at kips-bay` sends a request to the running API and prints the stream.
 - `cd ios && xcodegen` regenerates `Loop.xcodeproj` (git-ignored) after editing `project.yml`; the test command is in `ios/README.md`.
 

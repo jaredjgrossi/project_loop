@@ -1,0 +1,37 @@
+{
+  "id": "P64",
+  "seq": 65,
+  "category": "C",
+  "origin": "synthetic",
+  "context": "C4",
+  "text": "3 miles by the water at 7 pm",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_time=19:00 (said) · start_date=2026-11-03 · distance_mi=3 (said) · scenery=park_or_water (said). Said pm stays pm (decision 064 touches only bare hours)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_time": {
+        "value": "19:00",
+        "source": "said"
+      },
+      "start_date": {
+        "value": "2026-11-03"
+      },
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "no_question",
+      "why": "Must not: ask about the time. It was said."
+    }
+  ]
+}

@@ -21,7 +21,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time as dtime, timedelta
 from pathlib import Path
 from collections.abc import Callable
 from typing import Protocol
@@ -521,9 +521,67 @@ def _resolve_time(b: _Build, t: dict | None, day: date | None) -> tuple[str, str
     return _clock(ctx.now), "default"
 
 
+# A bare hour (issue #32, decision 064): "at 7" with no am, pm or time-of-day word anywhere in the request.
+_HOUR_WORDS = {w: i for i, w in enumerate(("one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+                                          "ten", "eleven", "twelve"), 1)}
+_NOT_A_TIME = r"(?!\s*(?:a\.?m\b|p\.?m\b|[ap]\b|mi\b|miles?\b|k\b|km\b|min\b|mins\b|minutes?\b|hours?\b|hrs?\b|%|:))"
+_HOUR = r"(\d{1,2}|" + "|".join(_HOUR_WORDS) + r")(?::(\d{2}))?"
+BARE_HOUR_RE = re.compile(
+    r"\b(?:at|around|about|by|before|after|till|until|@|~)\s*" + _HOUR + r"(?:\s*-?ish|\s*o'?clock)?\b" + _NOT_A_TIME
+    + r"|\b" + _HOUR + r"\s*-?ish\b" + _NOT_A_TIME               # "7ish"
+    + r"|\b(\d{1,2}):(\d{2})\b" + _NOT_A_TIME, re.IGNORECASE)   # "7:30" on its own
+TIME_OF_DAY_RE = re.compile(r"\b(?:a\.?m|p\.?m|mornin'?g?|tonight|evening|night|afternoon|noon|midnight|after work|"
+                            r"lunch|dawn|sunrise|sunset|dusk)\b", re.IGNORECASE)
+MORNING_HOURS = range(4, 12)  # a bare 4 to 11 is the morning; 12 and 1 to 3 stay the next time they come round
+BARE_HOUR_GRACE = timedelta(minutes=60)  # "at 7" typed a little after seven still means this morning
+
+
+def bare_hour(text: str) -> tuple[int, int] | None:
+    """(hour 1-12, minute) when the request gives a clock hour with no am, pm or time-of-day word, else None."""
+    if TIME_OF_DAY_RE.search(text):
+        return None
+    m = BARE_HOUR_RE.search(text)
+    if not m:
+        return None
+    hour, minute = next((h, mm) for h, mm in zip(m.groups()[0::2], m.groups()[1::2]) if h)
+    hour = _HOUR_WORDS.get(hour.lower()) or int(hour)
+    if not 1 <= hour <= 12 or int(minute or 0) > 59:
+        return None
+    return hour, int(minute or 0)
+
+
+def _bare_morning(b: _Build, hhmm: str, day: date | None) -> tuple[str, date | None] | None:
+    """Issue #32 (decision 064): a bare 4-11 that matches the extracted clock is the morning, and before noon it is
+    this morning even if the hour passed in the last BARE_HOUR_GRACE. From noon on, and once it is further past,
+    it is the next time the clock reads it. Returns (HH:MM, day or None for "next time it comes round")."""
+    bare = bare_hour(b.ctx.text)
+    if not bare:
+        return None
+    at = datetime.strptime(hhmm, "%H:%M").time()
+    hour, minute = bare
+    if hour % 12 != at.hour % 12 or minute != at.minute or hour not in MORNING_HOURS:
+        return None
+    morning = f"{hour:02d}:{minute:02d}"
+    if day is not None:
+        return morning, day
+    now = b.ctx.now
+    if now.hour < 12 and now - datetime.combine(now.date(), dtime(hour, minute)) <= BARE_HOUR_GRACE:
+        return morning, now.date()
+    evening = f"{hour + 12:02d}:{minute:02d}"
+    if now.hour < 12:  # the morning is well past: tonight
+        return evening, now.date()
+    # From noon on, the next time the clock reads it: tonight if that is still ahead, else tomorrow morning.
+    if dtime(hour + 12, minute) >= now.time().replace(second=0, microsecond=0):
+        return evening, now.date()
+    return morning, now.date() + timedelta(days=1)
+
+
 def _time_and_day(b: _Build, t: dict | None, d: dict | None, prefix: str = "") -> None:
     day = _resolve_day(d, b.ctx.now.date())
     hhmm, tsrc = _resolve_time(b, t, day)
+    if tsrc == "said" and t and t.get("kind") == "clock":
+        if (fixed := _bare_morning(b, hhmm, day)) is not None:
+            hhmm, day = fixed
     b.set("start_time", hhmm, tsrc, prefix)
     if day is None:  # the next time that clock time comes round (decision 020)
         at = datetime.strptime(hhmm, "%H:%M").time()
@@ -531,7 +589,7 @@ def _time_and_day(b: _Build, t: dict | None, d: dict | None, prefix: str = "") -
             else b.ctx.now.date() + timedelta(days=1)
         b.set("start_date", day.isoformat(), "default", prefix)
     else:
-        b.set("start_date", day.isoformat(), "said", prefix)
+        b.set("start_date", day.isoformat(), "said" if d else "default", prefix)
 
 
 # ---- places -----------------------------------------------------------------------------------------------------

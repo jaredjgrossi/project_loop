@@ -1,5 +1,5 @@
 # Parse evals — v1
-*Status: **v1, decisions applied** (2026-11-05); cases P50–P62 added since, 63 in all (updated 2026-11-16). The first 50 cases: 11 real phrasings, 5 past-route phrasings Jared endorsed, 34 synthetic. Diary phrasings (Jared, R1, R2 typing real requests before runs) replace synthetic cases as they arrive; the cap stays 50. Contract: `phase3/parse-contract-v1.md`. Build: `phase3/build-brief-v1.md`.*
+*Status: **v1, decisions applied** (2026-11-05); cases P50–P66 added since, 67 in all (updated 2026-11-23). The first 50 cases: 11 real phrasings, 5 past-route phrasings Jared endorsed, 34 synthetic. Diary phrasings (Jared, R1, R2 typing real requests before runs) replace synthetic cases as they arrive; the cap stays 50. Contract: `phase3/parse-contract-v1.md`. Build: `phase3/build-brief-v1.md`.*
 
 ## What this is
 The test set for Phase 3's parser: a plain-English request goes in. What comes out is `RunConstraints` plus request chips, "can't do yet" lines and notes, or exactly one clarifying question. Each case states what must come out and what must not happen. Phase 3 step 1 turns each case into a repo fixture.
@@ -14,6 +14,8 @@ Every case names its context, so defaults are deterministic. Places are public s
 | | C1 · Runner 0 at home | C2 · Runner 0 somewhere new | C3 · New runner |
 |---|---|---|---|
 | Now | Tue 2026-11-03 06:40 ET (school day) | same | same |
+
+C4 (added 2026-11-23, decision 064) is C1 at 07:02, a little after seven, for the bare-hour cases P63–P66.
 | Current location | Kips Bay Library (446 3rd Ave) | Grand Army Plaza, Brooklyn | Union Square (14th St & Broadway) |
 | Saved places | home = Kips Bay Library | home = Kips Bay Library | none |
 | Usual distance | 3.1 mi | 3.1 mi | none |
@@ -129,6 +131,19 @@ Must not: describe a route as well lit or safe.
 PARSE · `start_time=07:45 (said)` · `crowds=avoid (said)`
 note: school drop-off crowds are estimated (crowd pulses, decision 022).
 Must not: add a can't-do line. This is covered now.
+
+**P63** · C4 · `3 miles by the water at 7`
+PARSE · `start_time=07:00 (said)` · `start_date=2026-11-03` · `distance_mi=3 (said)` · `scenery=park_or_water (said)`. Issue #32: typed at 07:02, a bare 7 is this morning, not 19:00 (decision 064: a bare 4–11 is the morning, and before noon it is this morning even an hour after it passed).
+Must not: ask am or pm.
+
+**P64** · C4 · `3 miles by the water at 7 pm`
+PARSE · `start_time=19:00 (said)` · `start_date=2026-11-03` · `distance_mi=3 (said)` · `scenery=park_or_water (said)`. Said pm stays pm: decision 064 touches only bare hours.
+
+**P65** · C4 · `3 mi at 7 tomorrow`
+PARSE · `start_time=07:00 (said)` · `start_date=2026-11-04 (said)` · `distance_mi=3 (said)`. A bare 7 on a said day is the morning.
+
+**P66** · C4 · `5k at 3`
+PARSE · `start_time=15:00 (said)` · `start_date=2026-11-03` · `distance_mi=3.11 (said)`. A bare 12 or 1–3 is the next time the clock reads it (decision 020 as before): 15:00 today. No question.
 
 ### D. Start, end and places
 **R01** · C1 · `Today, we're doing 8 miles on the water, ending at McCarren Park` *(R2)* · [lookup] [engine]
@@ -317,7 +332,7 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 |---|---|---|---|---|
 | A. Bare and vague | 4 | 1 | 0 | 2 |
 | B. Distance and units | 4 | 1 | 0 | 0 |
-| C. Time | 3 | 0 | 0 | 1 |
+| C. Time | 7 | 0 | 0 | 1 |
 | D. Start, end and places | 24 | 3 | 4 | 6 |
 | E. Avoid | 4 | 0 | 0 | 1 |
 | F. Preferences | 7 | 0 | 0 | 0 |
@@ -325,11 +340,11 @@ PARSE + CANT · `distance_mi=15 (said)` · `surface=paths (said)` · `via_places
 | H. Past routes | 5 | 2 | 0 | 5 |
 | I. Multi-part and contradictory | 3 | 0 | 0 | 0 |
 | J. Impossible and feasibility | 3 | 2 | 0 | 0 |
-| **Total** | **63** | **11** | **4** | **18** |
+| **Total** | **67** | **11** | **4** | **18** |
 
-Counted from `evals/parse/cases/` (2026-11-16). P19 moved from Asks to Errors with decision 056.
+Counted from `evals/parse/cases/` (2026-11-23). P19 moved from Asks to Errors with decision 056.
 
-The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). P60–P62 (a named place, a place with a chain's name, and an address, each with a city outside New York: from a phone test outside New York, 2026-11-14) are the 61st to 63rd (decision 057). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
+The set was capped at 50; P50 joined as the 51st at Jared's request (2026-11-09, decision 035), and P51–P53 (street names on their own, from the phone test) as the 52nd to 54th (decision 043). P54–P59 (named parks, and a landmark: "5 miles in Central Park", "10k past the Met then home"; the full review's Q1, Q2 and Q4) are the 55th to 60th (decision 047). P60–P62 (a named place, a place with a chain's name, and an address, each with a city outside New York: from a phone test outside New York, 2026-11-14) are the 61st to 63rd (decision 057). P63–P66 (a bare hour typed a little after it: issue #32, found in milestone 2) are the 64th to 67th (decision 064). The app's request fields (`shape`, favorites in `recent_routes`) are checked live in `evals/parse/test_app_requests.py`. Each diary phrasing replaces the synthetic case closest to it.
 
 Cut from the draft: P02, P03, P06, P07, P08, P12, P13, P21, P22, P26, P30, P37, P40, P41 and P43. Each was covered by a real phrasing or another case, or was changed by a decision.
 

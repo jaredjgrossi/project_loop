@@ -1,6 +1,6 @@
 # Parse evals
 
-The 63 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
+The 67 cases from `docs/phase3/parse-evals-v1.md`, one file each in `cases/`, graded by `grader.py`.
 
 ```
 make eval-parse                          # the stub parser: every case fails
@@ -9,7 +9,7 @@ uv run python -m evals.parse.run --case R02 -v
 ```
 
 ## Files
-- `contexts.json`: C1, C2 and C3 (now, location, profile). Places are public stand-ins: Kips Bay Library, Grand Army
+- `contexts.json`: C1, C2, C3 and C4 (now, location, profile); C4 is C1 a little after seven (07:02), for the bare-hour cases. Places are public stand-ins: Kips Bay Library, Grand Army
   Plaza, Union Square. `label` and `stand_in` are for people and are dropped from the request.
 - `recent_routes.json`: the list the phone sends in C1 and C2.
 - `cases/<id>.json`: `context`, `text`, `doc` (the line from the evals doc), `expect`, optional `alternatives`, and

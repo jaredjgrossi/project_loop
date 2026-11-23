@@ -1,0 +1,33 @@
+{
+  "id": "P66",
+  "seq": 67,
+  "category": "C",
+  "origin": "synthetic",
+  "context": "C4",
+  "text": "5k at 3",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_time=15:00 (said) · start_date=2026-11-03 · distance_mi=3.11 (said, 5 km). A bare 1-3 is the next time the clock reads it: 15:00 today (decision 064)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_time": {
+        "value": "15:00",
+        "source": "said"
+      },
+      "start_date": {
+        "value": "2026-11-03"
+      },
+      "distance_mi": {
+        "value": 3.11,
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "no_question",
+      "why": "Must not: ask am or pm. 3 in the morning is not a run time."
+    }
+  ]
+}

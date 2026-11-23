@@ -1,0 +1,37 @@
+{
+  "id": "P63",
+  "seq": 64,
+  "category": "C",
+  "origin": "synthetic",
+  "context": "C4",
+  "text": "3 miles by the water at 7",
+  "tags": [],
+  "needs": [],
+  "doc": "PARSE · start_time=07:00 (said) · start_date=2026-11-03 · distance_mi=3 (said) · scenery=park_or_water (said). Issue #32: a bare 7 typed at 07:02 is this morning, not tonight (decision 064)",
+  "expect": {
+    "outcome": "PARSE",
+    "fields": {
+      "start_time": {
+        "value": "07:00",
+        "source": "said"
+      },
+      "start_date": {
+        "value": "2026-11-03"
+      },
+      "distance_mi": {
+        "value": 3,
+        "source": "said"
+      },
+      "scenery": {
+        "value": "park_or_water",
+        "source": "said"
+      }
+    }
+  },
+  "must_not": [
+    {
+      "check": "no_question",
+      "why": "Must not: ask am or pm. A bare 4-11 is the morning."
+    }
+  ]
+}

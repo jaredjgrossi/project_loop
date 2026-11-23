@@ -187,6 +187,12 @@ IDEAL = {  # the extraction a correct model returns, per case
                second_run={"distance": mi(10), "day": {"kind": "weekday", "weekday": "sat", "date": None},
                            "time": None, "start": None}),
     "P47": ext(distance=mi(100), shape="loop_word"),
+    # a bare hour (decision 064): the model may read "7" at 07:02 as 19:00; code makes it the morning
+    "P63": ext(distance=mi(3), scenery="park_or_water", time={"kind": "clock", "clock": "19:00", "minutes": None}),
+    "P64": ext(distance=mi(3), scenery="park_or_water", time={"kind": "clock", "clock": "19:00", "minutes": None}),
+    "P65": ext(distance=mi(3), time={"kind": "clock", "clock": "19:00", "minutes": None},
+               day={"kind": "tomorrow", "weekday": None, "date": None}),
+    "P66": ext(distance=mi(5, "km"), time={"kind": "clock", "clock": "15:00", "minutes": None}),
     "P48": ext(distance=mi(0.3), shape="loop_word"),
     "P49": ext(distance=mi(15), surface="paths",
                via=[{"name": "East River Path", "kind": "place", "whole_way": True}], cant=["whole_way"]),
@@ -265,6 +271,10 @@ QUOTES = {  # the runner's words behind each chip, per case (spans, 2026-11-09)
     "P44": said(("lights", "no lights"), ("via", "2nd ave the whole way", 1)),
     "P45": said(("distance", "5k"), ("time", "tonight")),
     "P47": said(("distance", "100 mile"), ("shape", "loop")),
+    "P63": said(("distance", "3 miles"), ("scenery", "by the water"), ("time", "at 7")),
+    "P64": said(("distance", "3 miles"), ("scenery", "by the water"), ("time", "at 7 pm")),
+    "P65": said(("distance", "3 mi"), ("time", "at 7 tomorrow")),
+    "P66": said(("distance", "5k"), ("time", "at 3")),
     "P48": said(("distance", "0.3 mi"), ("shape", "loop")),
     "P49": said(("distance", "15 miles"), ("via", "the east river path", 1), ("surface", "staying on the east river path")),
     "P50": said(("via", "Loop of Prospect Park", 1), ("start", "from Grand Army Plaza")),
@@ -692,3 +702,70 @@ def test_the_grader_passes_an_out_of_area_error_where_the_case_expects_one():
     assert grade(case, built(IDEAL["P19"])).reasons == []
     assert grade(case, built(outside(name="Tampa"))).reasons != []  # the wrong place
     assert grade(case, {"error": "parse_failed", "text": "x"}).reasons != []  # the wrong error
+
+
+# ---- a bare hour is the morning (issue #32, decision 064) ---------------------------------------------------------
+
+def _at(now: str, text: str, clock: str, day: dict | None = None, **kw) -> dict:
+    """build() for `text` typed at `now` (ET), with the model's clock reading `clock`."""
+    req = build_request(CASES["P01"], CONTEXTS) | {"text": text}
+    req["client"] = req["client"] | {"now": now}
+    extraction = ext(time={"kind": "clock", "clock": clock, "minutes": None}, day=day, **kw)
+    out = build(extraction, Context.from_request(req), FakePlaces())
+    c = out["parsed"]["constraints"]
+    return {"time": c["start_time"], "date": str(c["start_date"]), "sources": out["trace"]["sources"],
+            "question": out["parsed"].get("question")}
+
+
+@pytest.mark.parametrize("text, found", [
+    ("3 miles by the water at 7", (7, 0)), ("at seven", (7, 0)), ("3 miles 7ish", (7, 0)), ("leaving 7:45", (7, 45)),
+    ("by 10:15", (10, 15)), ("run at 7 o'clock", (7, 0)), ("at 6 tomorrow", (6, 0)), ("5k at 3", (3, 0)),
+    ("at 12", (12, 0)), ("7:30 3 miles", (7, 30)),
+    ("3 miles at 7am", None), ("at 7a", None), ("3 mi, 7 pm", None), ("at 7 tonight", None), ("at 7 this morning", None),
+    ("7 in the evening", None), ("around 5 miles", None), ("about 3 mi", None), ("in 30", None),
+    ("6 from penn station", None), ("5 mi from 11 madison ave", None), ("at 25", None),
+])
+def test_bare_hour_finds_a_clock_hour_with_no_am_pm_or_time_of_day_word(text, found):
+    from api.parse import bare_hour
+    assert bare_hour(text) == found
+
+
+@pytest.mark.parametrize("model_clock", ["07:00", "19:00"])  # whichever the model read "7" as
+def test_a_bare_7_just_after_seven_is_this_morning(model_clock):  # issue #32
+    out = _at("2026-11-17T07:02:00-05:00", "3 miles by the water at 7", model_clock, distance=mi(3), scenery="park_or_water")
+    assert (out["time"], out["date"]) == ("07:00", "2026-11-17")
+    assert out["sources"]["start_time"] == "said" and out["sources"]["start_date"] == "default"
+    assert out["question"] is None
+
+
+@pytest.mark.parametrize("now, text, model_clock, want", [
+    ("2026-11-17T06:52:00-05:00", "3 miles at 7", "07:00", ("07:00", "2026-11-17")),  # ahead: as before
+    ("2026-11-17T07:40:00-05:00", "3 miles at 7", "19:00", ("07:00", "2026-11-17")),  # within the hour's grace
+    ("2026-11-17T08:30:00-05:00", "3 miles at 7", "19:00", ("19:00", "2026-11-17")),  # well past: tonight
+    ("2026-11-17T11:30:00-05:00", "3 miles at 7", "19:00", ("19:00", "2026-11-17")),
+    ("2026-11-17T14:00:00-05:00", "3 miles at 7", "19:00", ("19:00", "2026-11-17")),  # afternoon: next time it reads 7
+    ("2026-11-17T20:00:00-05:00", "3 miles at 7", "07:00", ("07:00", "2026-11-18")),  # evening: tomorrow morning
+    ("2026-11-17T07:02:00-05:00", "3 miles at 7:30", "19:30", ("07:30", "2026-11-17")),
+    ("2026-11-17T10:05:00-05:00", "3 miles at ten", "22:00", ("10:00", "2026-11-17")),
+    ("2026-11-17T07:02:00-05:00", "5k at 3", "15:00", ("15:00", "2026-11-17")),  # a bare 1-3: unchanged
+    ("2026-11-17T07:02:00-05:00", "5k at 12", "12:00", ("12:00", "2026-11-17")),
+    ("2026-11-17T07:02:00-05:00", "3 miles at 7 pm", "19:00", ("19:00", "2026-11-17")),  # said pm: untouched
+    ("2026-11-17T07:02:00-05:00", "3 miles at 7 tonight", "19:00", ("19:00", "2026-11-17")),
+    ("2026-11-17T07:02:00-05:00", "3 miles at 7am", "07:00", ("07:00", "2026-11-18")),  # said am, passed: tomorrow
+])
+def test_bare_hours_by_the_clock(now, text, model_clock, want):
+    out = _at(now, text, model_clock, distance=mi(3))
+    assert (out["time"], out["date"]) == want
+
+
+def test_a_bare_7_on_a_said_day_is_that_morning():
+    out = _at("2026-11-17T07:02:00-05:00", "3 mi at 7 tomorrow", "19:00",
+              day={"kind": "tomorrow", "weekday": None, "date": None}, distance=mi(3))
+    assert (out["time"], out["date"]) == ("07:00", "2026-11-18")
+    assert out["sources"]["start_date"] == "said"
+
+
+def test_a_bare_hour_the_model_read_differently_is_left_alone():
+    # The model's clock is used only to confirm it read the same hour: if it didn't, code keeps what it returned.
+    out = _at("2026-11-17T07:02:00-05:00", "3 miles at 7", "08:00", distance=mi(3))
+    assert out["time"] == "08:00"
