@@ -173,6 +173,7 @@ struct YouSheet: View {
                             .padding(.top, 14)
                             .demoTarget("historyLink")
                         }
+                        AboutSection(runs: runs).id("about")
                     }
                     .padding(.horizontal, Metrics.s24)
                     .padding(.bottom, 32)
